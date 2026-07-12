@@ -1,0 +1,686 @@
+/* 第一页搜索 — 固定于 body 层（与 Dock 同级），backdrop-filter 可稳定采样壁纸 */
+.search-form {
+  position: fixed;
+  top: var(--search-form-top);
+  left: 50%;
+  width: min(460px, 86vw);
+  margin-left: calc(-0.5 * min(460px, 86vw));
+  z-index: 15;
+  transform-origin: center center;
+  /* 跨页不用 opacity 过渡：backdrop-filter 在 opacity 动画时每帧重算，严重掉帧 */
+  transition: none;
+}
+
+.search-form-spacer {
+  width: min(460px, 86vw);
+  height: 44px;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 44px;
+  border-radius: 22px;
+  background: var(--glass-search-bg);
+  backdrop-filter: var(--glass-search-blur);
+  -webkit-backdrop-filter: var(--glass-search-blur);
+  border: 1px solid var(--glass-search-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 6px 20px rgba(0, 0, 0, 0.08);
+  transition:
+    background 0.62s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.62s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.72s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.62s cubic-bezier(0.16, 1, 0.3, 1),
+    backdrop-filter 0.82s cubic-bezier(0.16, 1, 0.3, 1),
+    -webkit-backdrop-filter 0.82s cubic-bezier(0.16, 1, 0.3, 1),
+    border-radius 0.44s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.search-box[data-glass-refresh='1'] {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.search-box:hover {
+  background: var(--glass-search-bg-hover);
+  border-color: var(--glass-search-border-hover);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 10px 28px rgba(0, 0, 0, 0.12);
+  transform: translate3d(0, -1px, 0);
+}
+
+.search-box.focused {
+  background: var(--glass-search-bg-focus);
+  border-color: var(--glass-search-border-focus);
+  backdrop-filter: var(--glass-search-blur-focus);
+  -webkit-backdrop-filter: var(--glass-search-blur-focus);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    0 0 0 4px rgba(255, 255, 255, 0.06),
+    0 16px 44px rgba(0, 0, 0, 0.24);
+  transform: translate3d(0, -2px, 0);
+}
+
+.search-engine-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 0;
+  overflow: hidden;
+  padding-left: 0;
+  border: none;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--meta-color) 62%, transparent);
+  white-space: nowrap;
+  opacity: 0;
+  cursor: pointer;
+  transition:
+    width 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+    padding 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.34s ease,
+    color 0.12s ease;
+}
+
+.search-engine-badge .search-badge-icon {
+  transition: opacity 0.28s ease, filter 0.28s ease, transform 0.28s ease;
+}
+
+.search-badge-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  object-fit: contain;
+  flex-shrink: 0;
+  display: block;
+  background: none;
+  box-shadow: none;
+}
+
+/* 简约：图标直接落在毛玻璃上，无白底/厚阴影；轻描边保对比度 */
+.search-engine-badge.has-icon .search-badge-icon {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 3px;
+  background: none;
+  box-shadow: none;
+  opacity: 1;
+  filter:
+    drop-shadow(0 0 0.55px rgba(255, 255, 255, 0.5))
+    drop-shadow(0 0.5px 1px rgba(0, 0, 0, 0.22));
+}
+
+body[data-text-theme='on-light'] .search-engine-badge.has-icon .search-badge-icon {
+  filter:
+    drop-shadow(0 0 0.45px rgba(0, 0, 0, 0.22))
+    drop-shadow(0 0.5px 1px rgba(0, 0, 0, 0.12));
+}
+
+.search-engine-badge.has-icon {
+  min-width: 18px;
+}
+
+.search-engine-badge.has-icon:not(.has-icon-label) .search-badge-label {
+  display: none;
+}
+
+.search-engine-badge.has-icon-label {
+  min-width: auto;
+}
+
+.search-badge-label {
+  line-height: 1;
+}
+
+.search-engine-badge:hover {
+  color: var(--meta-color);
+}
+
+.search-engine-badge.has-icon:hover .search-badge-icon {
+  opacity: 1;
+  filter:
+    drop-shadow(0 0 0.65px rgba(255, 255, 255, 0.62))
+    drop-shadow(0 0.5px 1.2px rgba(0, 0, 0, 0.26));
+  transform: scale(1.04);
+}
+
+body[data-text-theme='on-light'] .search-engine-badge.has-icon:hover .search-badge-icon {
+  filter:
+    drop-shadow(0 0 0.5px rgba(0, 0, 0, 0.28))
+    drop-shadow(0 0.5px 1.2px rgba(0, 0, 0, 0.14));
+}
+
+.search-box:focus-within .search-engine-badge {
+  width: auto;
+  padding-left: 14px;
+  opacity: 1;
+  color: color-mix(in srgb, var(--meta-color) 72%, transparent);
+}
+
+.search-box:focus-within .search-engine-badge.has-icon:not(.has-icon-label) {
+  padding-left: 14px;
+  padding-right: 0;
+}
+
+.search-box[data-search-mode='ai']:focus-within .search-engine-badge,
+.search-box[data-search-mode='map']:focus-within .search-engine-badge,
+.search-box[data-search-mode='gh']:focus-within .search-engine-badge,
+.search-box[data-search-mode='zh']:focus-within .search-engine-badge,
+.search-box[data-search-mode='xhs']:focus-within .search-engine-badge {
+  padding-left: 14px;
+}
+
+.search-mode-label {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--meta-color) 58%, transparent);
+  white-space: nowrap;
+  padding: 3px 7px;
+  margin-left: 2px;
+  border-radius: var(--radius-chip);
+  background: color-mix(in srgb, var(--meta-color) 10%, transparent);
+  border: 0.5px solid color-mix(in srgb, var(--meta-color) 16%, transparent);
+  line-height: 1;
+}
+
+.search-mode-label[hidden] {
+  display: none !important;
+}
+
+.search-box[data-search-mode='ai']:focus-within .search-input,
+.search-box[data-search-mode='map']:focus-within .search-input,
+.search-box[data-search-mode='gh']:focus-within .search-input,
+.search-box[data-search-mode='zh']:focus-within .search-input,
+.search-box[data-search-mode='xhs']:focus-within .search-input {
+  padding-left: 8px;
+}
+
+.search-box[data-search-mode='xhs']:focus-within .search-mode-label {
+  color: rgba(255, 120, 140, 0.92);
+  border-color: rgba(255, 80, 110, 0.28);
+  background: rgba(255, 60, 90, 0.12);
+}
+
+.search-box[data-search-mode='xhs']:focus-within .search-engine-badge {
+  color: rgba(255, 130, 150, 0.88);
+}
+
+.search-box.has-mode-label:focus-within .search-input {
+  padding-left: 6px;
+}
+
+/* 搜索引擎菜单 & 联想下拉 — 与 Dock 共用 --glass-panel-* */
+.search-engine-menu,
+.search-suggestions {
+  background: var(--glass-panel-bg);
+  backdrop-filter: var(--glass-panel-blur);
+  -webkit-backdrop-filter: var(--glass-panel-blur);
+  border: 1px solid var(--glass-panel-border);
+  box-shadow: var(--glass-panel-inner), var(--glass-panel-shadow);
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+.search-engine-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  z-index: 6;
+  min-width: 168px;
+  margin: 0;
+  padding: 8px 0 10px;
+  list-style: none;
+}
+
+.search-engine-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--glass-panel-text);
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease;
+}
+
+.search-engine-menu-item-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
+.search-engine-menu-item > span:first-of-type {
+  flex: 1;
+  min-width: 0;
+}
+
+.search-engine-menu-item:hover {
+  background: var(--glass-panel-hover-bg);
+}
+
+.search-engine-menu-item.active {
+  color: var(--glass-panel-text);
+  background: var(--glass-panel-active-bg);
+  font-weight: 500;
+}
+
+.search-engine-kbd {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--glass-panel-text-muted);
+}
+
+.search-engine-menu--map-detail {
+  min-width: 196px;
+}
+
+.search-engine-menu-header {
+  padding: 8px 18px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--glass-panel-text-muted);
+  text-transform: uppercase;
+}
+
+.search-engine-menu-current {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 18px 10px;
+}
+
+.search-engine-menu-current-icon {
+  width: 22px;
+  height: 22px;
+  padding: 3px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.search-engine-menu-current-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--glass-panel-text);
+}
+
+.search-engine-menu-divider {
+  height: 1px;
+  margin: 2px 12px 6px;
+  background: var(--glass-panel-divider);
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 16px;
+  border: none;
+  border-radius: 22px;
+  background: transparent;
+  color: var(--stage-color);
+  -webkit-text-fill-color: currentColor;
+  caret-color: var(--stage-color);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-align: center;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  transition:
+    color 0.24s ease,
+    text-align 0.24s ease,
+    padding 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.search-box:focus-within .search-input {
+  text-align: left;
+  padding-left: 8px;
+  padding-right: 6px;
+}
+
+.search-submit {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0;
+  height: 30px;
+  margin-right: 0;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--meta-color) 12%, transparent);
+  color: var(--meta-color);
+  cursor: pointer;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    width 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+    margin 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.34s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.search-box:focus-within .search-submit {
+  width: 30px;
+  margin-right: 8px;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.search-submit:hover {
+  background: color-mix(in srgb, var(--meta-color) 20%, transparent);
+  color: var(--stage-color);
+}
+
+.search-submit:active {
+  background: color-mix(in srgb, var(--meta-color) 26%, transparent);
+  transform: scale(0.94);
+}
+
+.search-input::placeholder {
+  color: color-mix(in srgb, var(--meta-color) 42%, transparent);
+  font-weight: 400;
+  opacity: 1;
+}
+
+.search-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.search-input:-webkit-autofill,
+.search-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--stage-color);
+  caret-color: var(--stage-color);
+  transition: background-color 9999s ease-out 0s;
+}
+
+.search-quote {
+  margin: 10px auto 0;
+  max-width: 480px;
+  padding: 0 12px;
+  font-size: 14px;
+  line-height: 1.55;
+  text-align: center;
+  color: color-mix(in srgb, var(--meta-color) 65%, transparent);
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity 0.56s ease 0.12s,
+    transform 0.56s cubic-bezier(0.16, 1, 0.3, 1) 0.12s,
+    color 0.24s ease;
+}
+
+.search-quote::before {
+  content: '\201C';
+  margin-right: 0.15em;
+  opacity: 0.45;
+}
+
+.search-quote::after {
+  content: '\201D';
+  margin-left: 0.1em;
+  opacity: 0.45;
+}
+
+.search-quote--greeting-only::before,
+.search-quote--greeting-only::after {
+  content: none;
+}
+
+.search-quote.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.search-quote[hidden] {
+  display: none !important;
+}
+
+/* 搜索引擎/AI/地图选择器展开时隐藏语录，避免与下拉层重叠 */
+.search-form:has(#search-engine-menu:not([hidden])) .search-quote {
+  opacity: 0 !important;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.search-suggestions {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  right: 0;
+  list-style: none;
+  margin: 0;
+  padding: 8px 0 12px;
+  z-index: 5;
+}
+
+.search-suggestions[hidden] {
+  display: none !important;
+}
+
+.search-form:has(.search-suggestions:not([hidden])) .search-box.focused {
+  border-bottom-left-radius: 24px;
+  border-bottom-right-radius: 24px;
+}
+
+.search-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  font-size: 14px;
+  color: var(--glass-panel-text);
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.search-suggestion:hover,
+.search-suggestion.is-active {
+  background: var(--glass-panel-hover-bg);
+}
+
+.search-suggestion--action {
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--glass-panel-divider);
+}
+
+.search-suggestion--action:hover,
+.search-suggestion--action.is-active {
+  background: var(--glass-panel-hover-bg);
+}
+
+.search-suggestion-leading {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.search-suggestion-leading svg {
+  flex-shrink: 0;
+  opacity: 0.55;
+  stroke: var(--glass-panel-text);
+}
+
+.search-suggestion-kbd {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--glass-panel-text-muted);
+  white-space: nowrap;
+}
+
+.search-suggestion-kbd kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--glass-panel-kbd-bg);
+  border: 1px solid var(--glass-panel-kbd-border);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--glass-panel-text-muted);
+}
+
+.search-suggestion--completion {
+  padding: 11px 20px;
+  font-size: 14px;
+}
+
+.search-suggestion-type {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--glass-panel-text-muted);
+}
+
+.search-suggestion--currency .search-suggestion-type {
+  font-size: 12px;
+}
+
+.search-suggestion--currency .search-suggestion-text {
+  font-variant-numeric: tabular-nums;
+}
+
+.search-suggestion--calc .search-suggestion-text {
+  font-variant-numeric: tabular-nums;
+}
+
+.search-suggestion-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 搜索 Toast */
+.search-toast {
+  position: fixed;
+  bottom: calc(var(--dock-height) + 36px);
+  left: 50%;
+  z-index: 30;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 12px 18px;
+  border-radius: var(--radius-shell);
+  background: rgba(28, 28, 36, 0.92);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
+  color: rgba(255, 255, 255, 0.94);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-50%) translateY(8px);
+  transition: opacity 0.28s ease, transform 0.28s ease;
+}
+
+.search-toast.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* AI 首次使用提示 */
+.search-ai-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-tile);
+  background: rgba(255, 255, 255, 0.1);
+  border: 0.5px solid rgba(255, 255, 255, 0.18);
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.82);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.search-ai-hint.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.search-ai-hint p {
+  flex: 1;
+  min-width: 0;
+}
+
+.search-ai-hint-dismiss {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: none;
+  border-radius: var(--radius-chip);
+  background: rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.search-ai-hint-dismiss:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+body[data-text-tone='dark'] .search-ai-hint {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: rgba(0, 0, 0, 0.72);
+}
+
+body[data-text-tone='dark'] .search-ai-hint-dismiss {
+  background: rgba(0, 0, 0, 0.06);
+  color: rgba(0, 0, 0, 0.78);
+}
+
+body[data-text-tone='dark'] .search-ai-hint-dismiss:hover {
+  background: rgba(0, 0, 0, 0.1);
+}

@@ -1,0 +1,711 @@
+:root {
+  /* 统一毛玻璃材质 — 深色紫褐（搜索栏 / Dock / 下拉层共用） */
+  --glass-bg: rgba(58, 48, 62, 0.44);
+  --glass-bg-hover: rgba(58, 48, 62, 0.54);
+  --glass-bg-focus: rgba(58, 48, 62, 0.58);
+  --glass-blur: blur(26px) saturate(165%);
+  --glass-border: rgba(255, 255, 255, 0.14);
+  --glass-border-hover: rgba(255, 255, 255, 0.22);
+  --glass-inner: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --glass-shadow: 0 12px 40px rgba(0, 0, 0, 0.32), 0 4px 12px rgba(0, 0, 0, 0.18);
+  --glass-shadow-hover: 0 16px 48px rgba(0, 0, 0, 0.38), 0 6px 16px rgba(0, 0, 0, 0.22);
+  --glass-focus-ring: 0 0 0 4px rgba(255, 255, 255, 0.08);
+
+  /* 搜索栏亮毛玻璃 — idle 更透、贴壁纸；聚焦时再抬起对比 */
+  --glass-search-bg: rgba(255, 255, 255, 0.1);
+  --glass-search-bg-hover: rgba(255, 255, 255, 0.16);
+  --glass-search-bg-focus: rgba(255, 255, 255, 0.3);
+  --glass-search-blur: blur(22px) saturate(150%);
+  --glass-search-blur-focus: blur(32px) saturate(185%);
+  --glass-search-border: rgba(255, 255, 255, 0.1);
+  --glass-search-border-hover: rgba(255, 255, 255, 0.18);
+  --glass-search-border-focus: rgba(255, 255, 255, 0.3);
+
+  /* 统一面板毛玻璃 — Dock / 联想下拉 / 引擎菜单（保持可读，不跟搜索栏 idle 变淡） */
+  --glass-panel-bg: rgba(255, 255, 255, 0.2);
+  --glass-panel-bg-hover: rgba(255, 255, 255, 0.26);
+  --glass-panel-blur: blur(32px) saturate(185%);
+  --glass-panel-border: rgba(255, 255, 255, 0.22);
+  --glass-panel-border-hover: rgba(255, 255, 255, 0.3);
+  --glass-panel-inner: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  --glass-panel-shadow: 0 16px 48px rgba(0, 0, 0, 0.22);
+  --glass-panel-shadow-hover: 0 20px 52px rgba(0, 0, 0, 0.26);
+  --glass-panel-text: var(--stage-color);
+  --glass-panel-text-muted: color-mix(in srgb, var(--meta-color) 48%, transparent);
+  --glass-panel-hover-bg: color-mix(in srgb, var(--meta-color) 8%, transparent);
+  --glass-panel-active-bg: color-mix(in srgb, var(--meta-color) 12%, transparent);
+  --glass-panel-divider: color-mix(in srgb, var(--meta-color) 10%, transparent);
+  --glass-panel-kbd-bg: color-mix(in srgb, var(--meta-color) 10%, transparent);
+  --glass-panel-kbd-border: color-mix(in srgb, var(--meta-color) 14%, transparent);
+
+  /* 旧别名 — 下拉层已并入 --glass-panel-* */
+  --glass-search-panel: var(--glass-panel-bg);
+  --glass-search-panel-border: var(--glass-panel-border);
+  --glass-search-panel-text: var(--glass-panel-text);
+  --glass-search-panel-text-muted: var(--glass-panel-text-muted);
+
+  /* 语义别名（搜索 / 资讯按钮等复用） */
+  --glass-surface: var(--glass-bg);
+  --glass-surface-hover: var(--glass-bg-hover);
+  --glass-surface-focus: var(--glass-bg-focus);
+  --glass-stroke: var(--glass-border);
+  --glass-stroke-hover: var(--glass-border-hover);
+  --glass-inner-light: var(--glass-inner);
+  --glass-elevation: var(--glass-shadow);
+  --glass-elevation-hover: var(--glass-shadow-hover);
+  --vibrancy: var(--glass-blur);
+
+  --text-primary: #fff;
+  --text-secondary: rgba(255, 255, 255, 0.75);
+  --shadow: var(--glass-shadow);
+  --radius-shell: 20px;
+  --radius-control: 14px;
+  --radius-tile: 12px;
+  --radius-lg: var(--radius-shell);
+  --radius-md: var(--radius-tile);
+  --radius-sm: var(--radius-chip, 10px);
+  --radius-chip: 10px;
+  /* 统一动画时长与缓动 — 第一原理：低资源 + 圆滑 */
+  --transition: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-theme: 0.28s cubic-bezier(0.4, 0, 0.2, 1); /* 文字主题颜色渐变 */
+  --transition-wallpaper: 0.45s cubic-bezier(0.4, 0, 0.2, 1); /* 壁纸滤镜/缩放 */
+  --transition-page: 0.32s cubic-bezier(0.4, 0, 0.2, 1); /* 页面/毛玻璃切换 — 更平滑的跨页过渡 */
+  --transition-search-focus: 0.96s cubic-bezier(0.16, 1, 0.3, 1);
+  --dock-height: 68px;
+  --dock-bottom: 24px;
+  --dock-clearance: calc(var(--dock-height) + var(--dock-bottom) + 28px);
+  --icon-squircle-radius: 22%;
+  --icon-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  --icon-shadow-hover: 0 6px 20px rgba(0, 0, 0, 0.15);
+  --dock-icon-radius: var(--icon-squircle-radius);
+  --stage-top: 13vh;
+  --boot-wallpaper-duration: 1.25s;
+  --boot-ui-duration: 0.88s;
+  --boot-vignette-duration: 1.5s;
+  --boot-ui-delay-stage: 0.12s;
+  --boot-ui-delay-search: 0s;
+  --boot-ui-delay-dock: 0.1s;
+  --boot-vignette-delay: 0.12s;
+  --boot-reveal-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --search-form-top: calc(
+    var(--stage-top) + clamp(52px, 7.2vw, 68px) + 6px + clamp(12px, 1.6vw, 14px) * 1.5 + 18px
+  );
+  --stage-color: rgba(255, 255, 255, 0.94);
+  --stage-shadow: 0 1px 18px rgba(0, 0, 0, 0.12);
+  --meta-color: rgba(255, 255, 255, 0.78);
+  --meta-shadow: 0 1px 10px rgba(0, 0, 0, 0.1);
+  --meta-sep-opacity: 0.42;
+  --label-shadow: none;
+}
+
+body[data-text-theme='on-light'],
+body[data-text-tone='dark']:not([data-text-theme='on-mixed']) {
+  --text-primary: #2d3748;
+  --stage-color: rgba(45, 55, 72, 0.92);
+  --stage-shadow: 0 1px 14px rgba(255, 255, 255, 0.55);
+  --meta-color: rgba(45, 55, 72, 0.76);
+  --meta-shadow: 0 1px 8px rgba(255, 255, 255, 0.45);
+  --meta-sep-opacity: 0.34;
+}
+
+body[data-text-theme='on-dark'] {
+  --text-primary: #fff;
+  --stage-color: rgba(255, 255, 255, 0.94);
+  --stage-shadow: 0 1px 18px rgba(0, 0, 0, 0.12);
+  --meta-color: rgba(255, 255, 255, 0.78);
+  --meta-shadow: 0 1px 10px rgba(0, 0, 0, 0.1);
+  --meta-sep-opacity: 0.42;
+}
+
+body[data-text-theme='on-mixed'] {
+  --text-primary: rgba(255, 255, 255, 0.98);
+  --stage-color: rgba(255, 255, 255, 0.94);
+  --stage-shadow: 0 1px 18px rgba(0, 0, 0, 0.12);
+  --meta-color: rgba(255, 255, 255, 0.78);
+  --meta-shadow: 0 1px 10px rgba(0, 0, 0, 0.1);
+  --meta-sep-opacity: 0.42;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+html {
+  background: #323232; /* 对齐青柠：壁纸淡入前的中性底，避免纯黑→图硬切 */
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+    "PingFang SC", "Helvetica Neue", sans-serif;
+  color: var(--text-primary);
+  background: #323232;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* 文字主题切换时整体颜色平滑过渡 */
+  transition: color var(--transition-theme);
+}
+
+/* 壁纸层 — 青柠方案：<img> opacity 0→1 淡入，避免 background-image 换 URL 闪烁 */
+.wallpaper,
+.wallpaper-blur {
+  position: fixed;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.wallpaper {
+  z-index: 0;
+  overflow: hidden;
+  background: transparent;
+  pointer-events: none;
+}
+
+.wallpaper.is-gradient {
+  background-color: #323232;
+}
+
+.wallpaper-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  opacity: 0;
+  backface-visibility: hidden;
+  transition:
+    filter var(--transition-search-focus),
+    opacity var(--boot-wallpaper-duration) var(--boot-reveal-ease),
+    transform var(--transition-search-focus);
+}
+
+.wallpaper-img.wallpaper-show {
+  opacity: 1;
+}
+
+.wallpaper-img.wallpaper-instant {
+  transition: none !important;
+}
+
+.wallpaper-blur {
+  z-index: 1;
+  opacity: 0;
+  filter: blur(28px) saturate(1.1);
+  transform: scale(1.05);
+  transition: none;
+  pointer-events: none;
+  background-color: #323232;
+}
+
+body.page-blur-active .wallpaper-blur,
+body.page-apps-active .wallpaper-blur {
+  opacity: 1;
+  transition: opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 回主页：模糊层瞬时撤掉，避免搜索栏毛玻璃采到模糊壁纸那一帧 */
+body:not(.page-apps-active):not(.page-blur-active) .wallpaper-blur {
+  opacity: 0;
+  transition: none;
+}
+
+/* 首屏图片壁纸淡入辅助类（现主要用于历史/兜底路径）。
+   真正的首帧黑→壁纸已改用 #boot-cover 作为全局黑纱：在图片 preload+decode+set bg 全部在封面下完成后，才淡出封面。
+   因此首次显示时不再依赖此类的 opacity 过渡来“揭开”壁纸，避免扫描线可见。 */
+.wallpaper.wallpaper-reveal {
+  opacity: 0;
+}
+
+/* 启动遮罩已废弃：首帧由 index.html 内联脚本同步恢复壁纸并显示 UI */
+
+body.wallpaper-boot .search-suggestions,
+body.wallpaper-boot .search-quote {
+  display: none !important;
+}
+
+body.page-apps-active .search-form,
+body.page-blur-active .search-form {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: none !important;
+  animation: none !important;
+}
+
+body.page-apps-active .search-box,
+body.page-blur-active .search-box {
+  transform: none !important;
+  transition: none !important;
+}
+
+body.page-apps-active .search-suggestions,
+body.page-apps-active .search-quote,
+body.page-blur-active .search-suggestions,
+body.page-blur-active .search-quote {
+  display: none !important;
+}
+
+/* 应用页回主页：等模糊层撤掉后再显示搜索栏，消除单帧毛玻璃异常 */
+body.search-reveal-pending .search-form {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.scene-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 90% 75% at 50% 38%, transparent 35%, rgba(6, 8, 16, 0.42) 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.08) 0%, transparent 28%, transparent 72%, rgba(0, 0, 0, 0.18) 100%);
+  opacity: 0.88;
+  transition: opacity var(--transition-search-focus);
+}
+
+body.boot-awakening .scene-vignette {
+  opacity: 0;
+  transition:
+    opacity var(--boot-vignette-duration) var(--boot-reveal-ease) var(--boot-vignette-delay);
+}
+
+body.boot-awakening.boot-vignette-visible .scene-vignette {
+  opacity: 0.88;
+}
+
+body.page-blur-active .scene-vignette,
+body.page-apps-active .scene-vignette {
+  opacity: 0.55;
+}
+
+body.search-focused:not(.page-blur-active) .scene-vignette {
+  opacity: 0.95;
+}
+
+.search-focus-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background: rgba(8, 10, 18, 0.08);
+  backdrop-filter: blur(0) saturate(100%);
+  -webkit-backdrop-filter: blur(0) saturate(100%);
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--transition-search-focus),
+    backdrop-filter var(--transition-search-focus),
+    -webkit-backdrop-filter var(--transition-search-focus),
+    visibility var(--transition-search-focus);
+  pointer-events: none;
+}
+
+body.search-focused .search-focus-overlay {
+  backdrop-filter: blur(5px) saturate(108%);
+  -webkit-backdrop-filter: blur(5px) saturate(108%);
+  opacity: 1;
+  visibility: visible;
+}
+
+/* 苏醒动画：壁纸先亮，时钟淡入；搜索/Dock 仅位移（不用 opacity，避免毛玻璃变色与「先弹出再动」） */
+body.boot-awakening:not(.boot-ui-settled) .stage {
+  opacity: 0;
+  transform: translate3d(0, 12px, 0);
+}
+
+body.boot-awakening:not(.boot-ui-settled) .search-form,
+body.boot-awakening:not(.boot-ui-settled) .dock {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+body.boot-awakening:not(.boot-ui-settled) .search-form {
+  transform: translate3d(0, 10px, 0);
+}
+
+body.boot-awakening:not(.boot-ui-settled) .dock {
+  transform: translateX(-50%) translate3d(0, 10px, 0);
+}
+
+body.boot-awakening.boot-ui-settled .search-form,
+body.boot-awakening.boot-ui-settled .dock {
+  visibility: visible;
+  pointer-events: auto;
+}
+
+body.boot-awakening .search-form,
+body.boot-awakening .dock,
+body.boot-awakening .search-box {
+  transition: none !important;
+}
+
+body.boot-awakening .search-box:focus-within .search-engine-badge,
+body.boot-awakening .search-box:focus-within .search-input,
+body.boot-awakening .search-box:focus-within .search-submit {
+  transition: none !important;
+}
+
+body.boot-awakening:not(.boot-glass-stable) .search-box.focused {
+  background: var(--glass-search-bg);
+  border-color: var(--glass-search-border);
+  backdrop-filter: var(--glass-search-blur);
+  -webkit-backdrop-filter: var(--glass-search-blur);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 6px 20px rgba(0, 0, 0, 0.08);
+  transform: none;
+}
+
+body.boot-awakening.boot-ui-settled .stage {
+  animation: boot-awaken-stage var(--boot-ui-duration) var(--boot-reveal-ease) var(--boot-ui-delay-stage) both;
+}
+
+body.boot-awakening.boot-ui-settled .search-form {
+  animation: boot-awaken-ui-move var(--boot-ui-duration) var(--boot-reveal-ease) var(--boot-ui-delay-search) both;
+}
+
+body.boot-awakening.boot-ui-settled .dock {
+  animation: boot-awaken-dock var(--boot-ui-duration) var(--boot-reveal-ease) var(--boot-ui-delay-dock) both;
+}
+
+@keyframes boot-awaken-stage {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes boot-awaken-ui-move {
+  0%,
+  12% {
+    transform: translate3d(0, 10px, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes boot-awaken-dock {
+  0%,
+  12% {
+    transform: translateX(-50%) translate3d(0, 10px, 0);
+  }
+  100% {
+    transform: translateX(-50%) translate3d(0, 0, 0);
+  }
+}
+
+body.layout-sidebar.boot-awakening:not(.boot-ui-settled) .dock {
+  transform: translateY(-50%) translate3d(0, 10px, 0);
+}
+
+body.layout-sidebar.boot-awakening.boot-ui-settled .dock {
+  animation-name: boot-awaken-dock-sidebar;
+}
+
+@keyframes boot-awaken-dock-sidebar {
+  0%,
+  12% {
+    transform: translateY(-50%) translate3d(0, 10px, 0);
+  }
+  100% {
+    transform: translateY(-50%) translate3d(0, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.boot-awakening:not(.boot-ui-settled) .stage,
+  body.boot-awakening:not(.boot-ui-settled) .search-form,
+  body.boot-awakening:not(.boot-ui-settled) .dock {
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+  }
+
+  body.boot-awakening.boot-ui-settled .stage,
+  body.boot-awakening.boot-ui-settled .search-form,
+  body.boot-awakening.boot-ui-settled .dock {
+    animation: none;
+  }
+
+  .wallpaper-img {
+    transition: none;
+  }
+}
+
+body.search-focused:not(.page-blur-active) .wallpaper-img {
+  filter: blur(3px) brightness(0.96);
+  transform: scale(1.032);
+}
+
+body.search-focused .clock-trigger,
+body.search-focused .meta-line,
+body.search-focused .dock {
+  opacity: 0.55;
+  transition: opacity var(--transition-search-focus);
+}
+
+body.search-focused .search-form {
+  z-index: 16;
+}
+
+body.search-focused .search-box {
+  background: var(--glass-search-bg-focus);
+  border-color: var(--glass-search-border-focus);
+  backdrop-filter: var(--glass-search-blur-focus);
+  -webkit-backdrop-filter: var(--glass-search-blur-focus);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    0 0 0 4px rgba(255, 255, 255, 0.06),
+    0 16px 44px rgba(0, 0, 0, 0.24);
+  transform: translate3d(0, -2px, 0);
+}
+
+/* 应用页：清晰壁纸垫底，模糊层淡入/淡出 */
+body.page-blur-active .wallpaper-blur,
+body.page-apps-active .wallpaper-blur {
+  opacity: 1;
+}
+
+/* 应用页背景模糊后，暗色壁纸仍用亮色文字；亮/混合壁纸沿用 data-text-theme */
+body.page-blur-active[data-text-theme='on-dark'],
+body.page-apps-active[data-text-theme='on-dark'] {
+  --stage-color: #fff;
+  --stage-shadow: none;
+  --meta-color: rgba(255, 255, 255, 0.92);
+  --meta-shadow: none;
+  --meta-sep-opacity: 0.5;
+}
+
+/* 主容器 */
+.app {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  /* 不可 hidden：会截断 fixed 子树的 backdrop-filter，搜索栏毛玻璃会失效 */
+  overflow: visible;
+}
+
+/* 统一舞台：时钟 + 页面内容，整体上偏（不用 transform 居中，避免截断搜索栏 backdrop-filter） */
+.stage {
+  position: absolute;
+  top: var(--stage-top);
+  left: 0;
+  right: 0;
+  margin-left: auto;
+  margin-right: auto;
+  width: min(720px, 92vw);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.clock-trigger {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 6px;
+  transition: transform 0.2s, opacity 0.4s ease, color 0.28s ease;
+}
+
+.clock-trigger:hover {
+  transform: scale(1.01);
+  opacity: 0.9;
+}
+
+.clock {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Helvetica Neue", sans-serif;
+  font-size: clamp(52px, 7.2vw, 68px);
+  font-weight: 300;
+  letter-spacing: -0.025em;
+  line-height: 1;
+  color: var(--stage-color);
+  text-shadow: var(--stage-shadow);
+  font-feature-settings: "tnum", "ss01";
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  transition: color 0.28s ease, text-shadow 0.28s ease;
+}
+
+.meta-line {
+  margin-bottom: 18px;
+  text-align: center;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+  font-size: clamp(12px, 1.6vw, 14px);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  color: var(--meta-color);
+  text-shadow: var(--meta-shadow);
+  line-height: 1.5;
+  transition: color 0.28s ease, text-shadow 0.28s ease, opacity 0.4s ease;
+}
+
+.meta-part {
+  display: inline;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-shadow: inherit;
+  cursor: pointer;
+  vertical-align: baseline;
+  transition: color 0.28s ease, text-shadow 0.28s ease, opacity 0.2s;
+}
+
+.meta-part:hover {
+  opacity: 0.82;
+}
+
+.meta-sep {
+  opacity: var(--meta-sep-opacity);
+  user-select: none;
+  pointer-events: none;
+}
+
+body[data-text-tone='dark'] .weather-icon {
+  filter: none;
+}
+
+.weather-icon {
+  display: inline-flex;
+  vertical-align: -0.2em;
+  margin-right: 3px;
+  color: inherit;
+  filter: none;
+}
+
+.panel-stack {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* 页面面板切换 */
+.page-panel {
+  width: 100%;
+  opacity: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translateY(10px);
+  transition: opacity var(--transition-page), transform var(--transition-page);
+  pointer-events: none;
+}
+
+.page-panel.active {
+  opacity: 1;
+  position: relative;
+  transform: translateY(0);
+  pointer-events: auto;
+  z-index: 1;
+}
+
+/* 回主页：搜索栏不做 opacity 淡入（祖先 opacity<1 会让 backdrop-filter 失效） */
+.page-panel.page-home.active {
+  visibility: visible;
+  transform: none;
+  transition: transform var(--transition-page);
+}
+
+.page-panel.page-home:not(.active) {
+  z-index: 0;
+  transition: opacity var(--transition-page), transform var(--transition-page);
+}
+
+/* 离开应用页后立即隐藏离屏面板，避免透明层叠在搜索栏上方干扰 backdrop */
+.page-panel.page-apps:not(.active) {
+  z-index: 0;
+  visibility: hidden;
+  transition: none;
+}
+
+/* 响应式 */
+
+@media (max-width: 600px) {
+  :root {
+    --stage-top: 10vh;
+  }
+
+  .clock {
+    font-size: clamp(48px, 14vw, 58px);
+  }
+
+  .meta-line {
+    font-size: 12px;
+    letter-spacing: 0.01em;
+  }
+
+  .weather-day {
+    grid-template-columns: 60px 32px 1fr auto;
+  }
+
+  .weather-day-rain {
+    grid-column: 2 / -1;
+  }
+
+  .shortcuts-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px 10px;
+  }
+
+
+  .shortcut-icon {
+    width: 64px;
+    height: 64px;
+  }
+
+  .shortcut-icon-letter {
+    font-size: 26px;
+  }
+
+  .shortcut-icon--letter[data-len="2"] .shortcut-icon-letter {
+    font-size: 20px;
+  }
+
+  .shortcut-icon--letter[data-len="3"] .shortcut-icon-letter {
+    font-size: 16px;
+  }
+
+  .dock {
+    gap: 8px;
+    padding: 8px 10px 8px 8px;
+    max-width: calc(100vw - 20px);
+  }
+
+  .dock-tab {
+    width: 38px;
+    height: 38px;
+  }
+
+  .dock-item {
+    width: 42px;
+    height: 42px;
+  }
+}
+
+@media (max-width: 400px) {
+  .shortcuts-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}

@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GavinHub</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="icons/icon-48.png">
+  <link rel="apple-touch-icon" href="icons/icon-128.png">
+  <!-- 新标签页：清除旧版跨标签共享的页码，确保始终从主页打开 -->
+  <script>(function(){try{var k='startpage-settings',raw=localStorage.getItem(k);if(!raw)return;var s=JSON.parse(raw);if(!s.currentPage)return;delete s.currentPage;localStorage.setItem(k,JSON.stringify(s));}catch(e){}})();</script>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/home.css">
+  <link rel="stylesheet" href="css/apps.css">
+  <link rel="stylesheet" href="css/dialogs.css">
+  <style id="boot-critical-hide">
+    .search-suggestions, .search-quote { display: none !important; }
+  </style>
+  <!-- 壁纸关键样式必须在 CSS 文件到达前生效，否则首帧会闪 -->
+  <style id="boot-wallpaper-critical">
+    html, body { background: #323232 !important; }
+    #wallpaper { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+    #wallpaper-img {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: cover; object-position: center;
+      opacity: 0; backface-visibility: hidden;
+      transition: opacity 1.25s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    #wallpaper-img.wallpaper-show { opacity: 1; }
+    body.boot-awakening .scene-vignette { opacity: 0; }
+    body.boot-awakening.boot-vignette-visible .scene-vignette {
+      opacity: 0.88;
+      transition: opacity 1.5s cubic-bezier(0.22, 1, 0.36, 1) 0.12s;
+    }
+  </style>
+  <script>
+  (function () {
+    var theme = 'on-dark';
+    var tone = 'light';
+    var preloadUrl = '';
+    try {
+      var raw = localStorage.getItem('startpage-wallpaper-last');
+      if (raw) {
+        var meta = JSON.parse(raw);
+        if (meta && meta.textTheme) {
+          theme = meta.textTheme;
+          tone = (meta.textTheme === 'on-light' || meta.textTheme === 'on-mixed') ? 'dark' : 'light';
+        }
+        if (meta && meta.type !== 'gradient' && meta.url && !/^blob:/i.test(meta.url)) {
+          preloadUrl = meta.url;
+        }
+      }
+      window.__BOOT_WALLPAPER_READY = !!raw;
+    } catch (e) { window.__BOOT_WALLPAPER_READY = false; }
+    if (preloadUrl) {
+      try {
+        window.__BOOT_WALLPAPER_URL = preloadUrl;
+        var link = document.createElement('link');
+        link.rel = 'preload';
+        link.as = 'image';
+        link.href = preloadUrl;
+        document.head.appendChild(link);
+      } catch (e2) { /* ignore */ }
+    }
+    try {
+      document.documentElement.setAttribute('data-text-theme', theme);
+      document.documentElement.setAttribute('data-text-tone', tone);
+    } catch (e3) { /* ignore */ }
+  })();
+  </script>
+</head>
+<body data-text-theme="on-dark" data-text-tone="light" class="boot-awakening">
+  <div id="wallpaper" class="wallpaper" aria-hidden="true">
+    <img id="wallpaper-img" class="wallpaper-img" alt="" decoding="sync" fetchpriority="high" />
+  </div>
+  <script>
+  (function () {
+    var DEFAULT = 'assets/default-wallpaper.jpg';
+    var url = DEFAULT;
+    var isGradient = false;
+    var gradientCss = '';
+    var wpKey = 'default';
+    try {
+      var raw = localStorage.getItem('startpage-wallpaper-last');
+      if (raw) {
+        var meta = JSON.parse(raw);
+        wpKey = meta.id || meta.dateKey || meta.cacheKey || (meta.url || '').slice(-48) || 'cached';
+        if (meta && meta.type === 'gradient' && meta.css) {
+          isGradient = true;
+          gradientCss = meta.css;
+        } else if (meta && meta.url && !/^blob:/i.test(meta.url)) {
+          url = meta.url;
+        }
+      }
+    } catch (e) { /* 默认壁纸 */ }
+    try {
+      window.__BOOT_WALLPAPER_URL = url;
+      window.__BOOT_WALLPAPER_KEY = wpKey;
+      var wp = document.getElementById('wallpaper');
+      var img = document.getElementById('wallpaper-img');
+      if (isGradient && wp) {
+        wp.classList.add('is-gradient');
+        wp.style.backgroundImage = gradientCss;
+        if (img) img.hidden = true;
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            window.setTimeout(function () {
+              document.body.classList.add('boot-vignette-visible', 'boot-ui-settled', 'boot-done');
+              document.dispatchEvent(new CustomEvent('boot-ui-settled'));
+            }, 120);
+          });
+        });
+        return;
+      }
+      if (!img) return;
+      function settleBootUi() {
+        document.body.classList.add('boot-vignette-visible', 'boot-ui-settled', 'boot-done');
+        document.dispatchEvent(new CustomEvent('boot-ui-settled'));
+      }
+      function scheduleBootUiReveal() {
+        window.setTimeout(settleBootUi, 120);
+      }
+      function awaken() {
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            img.classList.add('wallpaper-show');
+            scheduleBootUiReveal();
+          });
+        });
+      }
+      img.addEventListener('load', awaken, { once: true });
+      img.src = url;
+      if (img.complete && img.naturalWidth > 0) awaken();
+    } catch (e2) { /* ignore */ }
+  })();
+  </script>
+  <script>(function(){try{document.body.setAttribute('data-text-theme',document.documentElement.getAttribute('data-text-theme')||'on-dark');document.body.setAttribute('data-text-tone',document.documentElement.getAttribute('data-text-tone')||'light');document.getElementById('boot-critical-hide')?.remove();}catch(e){}})();</script>
+  <div id="wallpaper-blur" class="wallpaper-blur" aria-hidden="true"></div>
+  <div class="scene-vignette" aria-hidden="true"></div>
+  <div id="search-focus-overlay" class="search-focus-overlay" aria-hidden="true"></div>
+
+  <main class="app">
+    <div id="header-actions" class="header-actions" hidden>
+      <div class="wallpaper-info-zone">
+        <button id="wallpaper-info-btn" class="icon-btn" type="button" title="壁纸库" aria-label="壁纸库">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <path d="M21 15l-5-5L5 21"/>
+          </svg>
+        </button>
+        <aside id="wallpaper-info" class="wallpaper-info" hidden>
+          <div class="wallpaper-info-header">
+            <h2 id="wallpaper-title" class="wallpaper-info-title"></h2>
+            <button id="wallpaper-next-btn" class="wallpaper-next-btn" type="button" hidden>下一张</button>
+          </div>
+          <p id="wallpaper-desc" class="wallpaper-info-desc"></p>
+          <p id="wallpaper-credit" class="wallpaper-info-credit"></p>
+        </aside>
+      </div>
+      <button id="wallpaper-like" class="icon-btn" type="button" title="收藏壁纸" aria-label="收藏壁纸">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+        </svg>
+      </button>
+      <button class="icon-btn" type="button" title="个人" aria-label="个人" disabled>
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+          <circle cx="12" cy="7" r="4"/>
+        </svg>
+      </button>
+      <button id="settings-btn" class="icon-btn" type="button" title="设置" aria-label="设置">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="stage">
+      <button id="clock-trigger" class="clock-trigger" type="button" aria-label="打开日历">
+        <time id="clock" class="clock" datetime=""></time>
+      </button>
+      <!-- 同步写入当前时间，避免模块加载前看到 00:00 -->
+      <script>(function(){try{var n=new Date(),h=String(n.getHours()).padStart(2,'0'),m=String(n.getMinutes()).padStart(2,'0'),t=document.getElementById('clock');if(t){t.textContent=h+':'+m;t.setAttribute('datetime',n.toISOString());}}catch(e){}})();</script>
+
+      <p class="meta-line">
+        <button id="date-trigger" class="meta-part" type="button" aria-label="打开日历">
+          <span id="date-text"></span>
+        </button><span class="meta-sep"> · </span><button id="weather-trigger" class="meta-part" type="button" aria-label="查看天气">
+          <span id="weather-icon" class="weather-icon"></span><span id="weather-summary">加载中…</span>
+        </button>
+      </p>
+
+      <div class="panel-stack">
+        <section class="page-panel page-home active" data-page="home">
+          <div class="search-form-spacer" aria-hidden="true"></div>
+        </section>
+
+        <section class="page-panel page-apps" data-page="apps">
+          <div id="shortcuts-grid" class="shortcuts-grid" role="list"></div>
+        </section>
+      </div>
+      <!-- 极早强制：新标签页必须从主页开始 -->
+      <script>(function(){try{var home=document.querySelector('.page-panel.page-home');var apps=document.querySelector('.page-panel.page-apps');if(home)home.classList.add('active');if(apps)apps.classList.remove('active');document.body.classList.remove('page-apps-active','page-blur-active');}catch(e){}})();</script>
+    </div>
+  </main>
+
+  <form id="search-form" class="search-form" role="search">
+    <div id="search-box" class="search-box">
+      <button
+        id="search-engine-badge"
+        class="search-engine-badge"
+        type="button"
+        aria-label="选择搜索引擎"
+        aria-haspopup="menu"
+        aria-expanded="false"
+        aria-controls="search-engine-menu"
+      >
+        <img class="search-badge-icon" alt="" hidden>
+        <span class="search-badge-label"></span>
+      </button>
+      <menu id="search-engine-menu" class="search-engine-menu" hidden aria-label="搜索引擎"></menu>
+      <span id="search-mode-label" class="search-mode-label" hidden aria-hidden="true"></span>
+      <input
+        id="search-input"
+        class="search-input"
+        type="search"
+        placeholder="搜索、问 AI，或输入网址"
+        autocomplete="off"
+        spellcheck="false"
+      >
+      <button type="submit" class="search-submit" aria-label="搜索" tabindex="-1">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M5 12h12"/>
+          <path d="m13 8 4 4-4 4"/>
+        </svg>
+      </button>
+    </div>
+    <p id="search-quote" class="search-quote" hidden aria-live="polite"></p>
+    <ul id="search-suggestions" class="search-suggestions" hidden></ul>
+  </form>
+
+  <nav id="dock" class="dock" aria-label="快捷导航"></nav>
+
+  <dialog id="settings-dialog" class="modal-dialog settings-dialog">
+    <form method="dialog" class="settings-form">
+      <h2>设置</h2>
+      <label class="settings-field">
+        <span>默认搜索引擎</span>
+        <select id="search-engine">
+          <option value="google">Google</option>
+          <option value="bing">Bing</option>
+        </select>
+      </label>
+      <label class="settings-field">
+        <span>壁纸来源</span>
+        <select id="wallpaper-source"></select>
+      </label>
+      <label class="settings-field">
+        <span>壁纸切换频率</span>
+        <select id="wallpaper-rotation"></select>
+      </label>
+      <p id="wallpaper-rotation-hint" class="settings-hint" hidden>每周自动更换 Bing 每日壁纸</p>
+      <label class="settings-field settings-field--checkbox">
+        <span>偶尔显示问候</span>
+        <input id="show-greeting" type="checkbox">
+      </label>
+      <div class="settings-sync-block">
+        <p class="settings-sync-block-title">多端同步</p>
+        <div class="settings-sync-tabs" role="tablist" aria-label="同步方式">
+          <button type="button" class="settings-sync-tab" role="tab" data-sync-tab="edge" aria-selected="false">Edge</button>
+          <button type="button" class="settings-sync-tab active" role="tab" data-sync-tab="file" aria-selected="true">文件</button>
+          <button type="button" class="settings-sync-tab" role="tab" data-sync-tab="github" aria-selected="false">GitHub</button>
+        </div>
+
+        <div id="sync-panel-edge" class="settings-sync-panel" role="tabpanel" hidden>
+          <p id="sync-status" class="settings-hint settings-sync-panel-hint">正在检查同步状态…</p>
+        </div>
+
+        <div id="sync-panel-file" class="settings-sync-panel active" role="tabpanel">
+          <div class="settings-sync-subtabs" role="tablist" aria-label="文件同步">
+            <button type="button" class="settings-sync-subtab active" data-file-tab="export" aria-selected="true">导出</button>
+            <button type="button" class="settings-sync-subtab" data-file-tab="import" aria-selected="false">导入</button>
+          </div>
+          <p id="sync-file-hint" class="settings-hint settings-sync-panel-hint">下载 json 配置文件，拷到其他电脑</p>
+          <button type="button" id="sync-file-action-btn" class="settings-sync-btn settings-sync-btn--primary settings-sync-file-action">导出配置</button>
+          <input type="file" id="sync-import-file" accept="application/json,.json" hidden>
+        </div>
+
+        <div id="sync-panel-github" class="settings-sync-panel" role="tabpanel" hidden>
+          <ol class="settings-github-steps">
+            <li><button type="button" id="github-open-token-btn" class="settings-link-btn">打开 GitHub 创建 Token</button>（自动勾选 gist）</li>
+            <li>复制 <code>ghp_</code> 开头 Token 粘贴下方</li>
+          </ol>
+          <label class="settings-field">
+            <span>GitHub Token</span>
+            <input type="password" id="github-sync-token" placeholder="粘贴 ghp_…" autocomplete="off" spellcheck="false">
+          </label>
+          <label class="settings-field settings-field--gist" id="github-gist-field" hidden>
+            <span>Gist ID</span>
+            <input type="text" id="github-sync-gist-id" readonly spellcheck="false" autocapitalize="off">
+          </label>
+          <button type="button" id="github-sync-merge-btn" class="settings-sync-btn settings-sync-btn--primary settings-sync-file-action">保存并同步</button>
+          <p id="github-sync-status" class="settings-hint settings-sync-manual-hint" hidden></p>
+        </div>
+        <p class="settings-hint settings-sync-scope-hint">同步：搜索引擎、快捷方式、Dock、待办、倒计时等（不含壁纸）</p>
+      </div>
+      <menu class="settings-actions">
+        <button type="submit" value="close">关闭</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <dialog id="wallpaper-library-dialog" class="modal-dialog wallpaper-library-dialog">
+    <div class="modal-header wallpaper-library-header">
+      <h2 class="modal-title">壁纸库</h2>
+      <button class="modal-close" type="button" aria-label="关闭">×</button>
+    </div>
+    <div class="wallpaper-library-toolbar">
+      <div class="wallpaper-library-tabs" role="tablist" aria-label="壁纸分类">
+        <button type="button" class="wallpaper-library-tab active" data-wallpaper-tab="favorites">收藏</button>
+        <button type="button" class="wallpaper-library-tab" data-wallpaper-tab="library">已下载</button>
+      </div>
+      <button id="wallpaper-library-save" class="wallpaper-library-save" type="button">保存当前壁纸</button>
+    </div>
+    <p id="wallpaper-library-status" class="wallpaper-library-status" hidden></p>
+    <p id="wallpaper-library-empty" class="wallpaper-library-empty" hidden></p>
+    <div id="wallpaper-library-grid" class="wallpaper-library-grid"></div>
+  </dialog>
+
+  <dialog id="calendar-dialog" class="modal-dialog calendar-dialog">
+    <div class="cal-toolbar">
+      <div class="cal-toolbar-left">
+        <h2 id="cal-title" class="cal-month-title"></h2>
+        <p id="cal-lunar-info" class="cal-lunar-info"></p>
+      </div>
+      <div class="cal-toolbar-right">
+        <button id="cal-today" class="cal-today-btn" type="button">今天</button>
+        <button id="cal-view-toggle" class="cal-view-toggle" type="button" title="切换到月视图" aria-label="切换到月视图">月</button>
+        <button id="cal-prev-week" class="modal-nav" type="button" aria-label="上一周">‹</button>
+        <button id="cal-next-week" class="modal-nav" type="button" aria-label="下一周">›</button>
+        <button class="modal-close" type="button" aria-label="关闭">×</button>
+      </div>
+    </div>
+    <div class="calendar-body">
+      <div class="calendar-main">
+        <div id="week-calendar" class="week-calendar"></div>
+      </div>
+      <aside id="cal-side-panel" class="cal-side-panel" aria-label="倒计时与纪念日"></aside>
+    </div>
+  </dialog>
+
+  <dialog id="todo-detail-dialog" class="todo-detail-dialog">
+    <form id="todo-detail-form" class="todo-detail-form">
+      <div class="todo-detail-header">
+        <button type="button" class="modal-close todo-detail-close" aria-label="关闭">×</button>
+      </div>
+      <input type="hidden" id="todo-detail-id">
+      <input type="hidden" id="todo-detail-instance">
+      <input
+        type="text"
+        id="todo-detail-title"
+        class="todo-detail-title"
+        placeholder="无标题"
+        maxlength="120"
+        autocomplete="off"
+      >
+      <p id="todo-detail-recurrence" class="todo-detail-recurrence" hidden></p>
+      <div class="todo-detail-props">
+        <div class="todo-detail-prop">
+          <span class="todo-detail-prop-label">日期</span>
+          <div class="todo-detail-dates">
+            <input type="date" id="todo-detail-start" aria-label="开始日期">
+            <span class="todo-detail-date-sep">—</span>
+            <input type="date" id="todo-detail-end" aria-label="结束日期">
+          </div>
+        </div>
+        <label class="todo-detail-prop todo-detail-prop--row">
+          <span class="todo-detail-prop-label">完成</span>
+          <input type="checkbox" id="todo-detail-done">
+        </label>
+        <div class="todo-detail-prop">
+          <span class="todo-detail-prop-label">分类</span>
+          <div class="todo-detail-categories" id="todo-detail-categories" role="radiogroup" aria-label="分类">
+            <label class="todo-category-option todo-category-option--work">
+              <input type="radio" name="todo-detail-category" value="work">
+              <span class="todo-category-dot"></span>
+              <span class="todo-category-label">工作</span>
+            </label>
+            <label class="todo-category-option todo-category-option--fitness">
+              <input type="radio" name="todo-detail-category" value="fitness">
+              <span class="todo-category-dot"></span>
+              <span class="todo-category-label">健身</span>
+            </label>
+            <label class="todo-category-option todo-category-option--life">
+              <input type="radio" name="todo-detail-category" value="life">
+              <span class="todo-category-dot"></span>
+              <span class="todo-category-label">生活</span>
+            </label>
+            <label class="todo-category-option todo-category-option--study">
+              <input type="radio" name="todo-detail-category" value="study">
+              <span class="todo-category-dot"></span>
+              <span class="todo-category-label">学习</span>
+            </label>
+          </div>
+        </div>
+        <label class="todo-detail-prop todo-detail-prop--notes">
+          <span class="todo-detail-prop-label">备注</span>
+          <textarea id="todo-detail-notes" rows="4" placeholder="添加备注…"></textarea>
+        </label>
+      </div>
+      <div class="todo-detail-actions">
+        <button type="button" id="todo-detail-delete" class="todo-detail-delete">删除</button>
+        <button type="submit" class="todo-detail-save">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="weather-dialog" class="modal-dialog weather-dialog">
+    <div class="modal-header weather-modal-header">
+      <span class="modal-header-side" aria-hidden="true"></span>
+      <h2 class="modal-title">天气详情</h2>
+      <div class="weather-header-actions">
+        <p id="weather-source-label" class="weather-source-label"></p>
+        <button class="modal-close" type="button" aria-label="关闭">×</button>
+      </div>
+    </div>
+    <div id="weather-body" class="weather-body"></div>
+    <div class="weather-footer">
+      <button type="button" id="weather-refresh" class="weather-refresh-btn">重新定位</button>
+    </div>
+  </dialog>
+
+  <dialog id="shortcut-dialog" class="modal-dialog shortcut-dialog">
+    <div class="shortcut-dialog-header">
+      <h2 id="shortcut-dialog-title">编辑网站途径</h2>
+      <button class="modal-close" type="button" aria-label="关闭">×</button>
+    </div>
+    <form id="shortcut-form" class="shortcut-form">
+      <input type="hidden" id="shortcut-id">
+      <label class="shortcut-field">
+        <span class="shortcut-field-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        </span>
+        <input type="url" id="shortcut-url" placeholder="https://example.com" required>
+      </label>
+      <label class="shortcut-field">
+        <span class="shortcut-field-icon" aria-hidden="true">H</span>
+        <input type="text" id="shortcut-name" placeholder="名称" required maxlength="40">
+      </label>
+      <div class="shortcut-icon-row">
+        <div id="shortcut-icon-preview" class="shortcut-icon-preview">?</div>
+        <div class="shortcut-icon-meta">
+          <span class="shortcut-icon-label">图标</span>
+          <span id="shortcut-icon-source" class="shortcut-icon-source">网络获取</span>
+        </div>
+        <button type="button" id="shortcut-fetch-icon" class="shortcut-fetch-btn">重新获取</button>
+      </div>
+      <label class="shortcut-field shortcut-field-optional">
+        <span class="shortcut-field-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        </span>
+        <input type="url" id="shortcut-icon-url" placeholder="自定义图标 URL（可选）">
+      </label>
+      <button type="submit" class="shortcut-save-btn">保存</button>
+    </form>
+  </dialog>
+
+  <menu id="cal-day-menu" class="cal-day-menu" hidden>
+    <button type="button" class="cal-day-menu-item" data-action="important-toggle">标记为重要</button>
+    <button type="button" class="cal-day-menu-item" data-action="goto-week">查看该周</button>
+  </menu>
+
+  <menu id="dock-menu" class="dock-menu" hidden>
+    <button type="button" class="dock-menu-item" data-action="open">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      打开
+    </button>
+    <button type="button" class="dock-menu-item" data-action="remove">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>
+      从捷径坞移除
+    </button>
+  </menu>
+
+  <menu id="shortcut-menu" class="shortcut-menu" hidden>
+    <button type="button" class="shortcut-menu-item" data-action="edit">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      编辑
+    </button>
+    <button type="button" class="shortcut-menu-item" data-action="dock">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
+      添加到捷径坞
+    </button>
+    <button type="button" class="shortcut-menu-item" data-action="delete">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>
+      删除
+    </button>
+  </menu>
+
+  <dialog id="rss-settings-dialog" class="modal-dialog rss-settings-dialog">
+    <div class="modal-header">
+      <span class="modal-header-side" aria-hidden="true"></span>
+      <h2 class="modal-title">资讯源设置</h2>
+      <button class="modal-close" type="button" aria-label="关闭">×</button>
+    </div>
+    <div class="rss-settings-body">
+      <section class="rss-settings-section">
+        <h3 class="rss-settings-heading">内置源</h3>
+        <div id="rss-builtin-list" class="rss-builtin-list"></div>
+      </section>
+      <section class="rss-settings-section">
+        <h3 class="rss-settings-heading">添加自定义 RSS</h3>
+        <form id="rss-custom-form" class="rss-custom-form">
+          <label class="rss-custom-field">
+            <span>名称</span>
+            <input id="rss-custom-name" type="text" placeholder="例如：Solidot" autocomplete="off" required>
+          </label>
+          <label class="rss-custom-field">
+            <span>地址</span>
+            <input id="rss-custom-url" type="url" placeholder="https://example.com/feed.xml" autocomplete="off" required>
+          </label>
+          <button type="submit" class="rss-custom-add-btn">添加</button>
+        </form>
+        <ul id="rss-custom-list" class="rss-custom-list"></ul>
+      </section>
+    </div>
+  </dialog>
+
+  <dialog id="shortcuts-dialog" class="shortcuts-dialog">
+    <div class="shortcuts-dialog-header">
+      <h2 class="shortcuts-dialog-title">键盘快捷键</h2>
+      <button class="modal-close" type="button" aria-label="关闭">×</button>
+    </div>
+    <div class="shortcuts-dialog-body">
+      <dl class="shortcuts-list">
+        <div class="shortcuts-item">
+          <dt><kbd>/</kbd></dt>
+          <dd>聚焦搜索框</dd>
+        </div>
+        <div class="shortcuts-item">
+          <dt><kbd>1</kbd></dt>
+          <dd>主页</dd>
+        </div>
+        <div class="shortcuts-item">
+          <dt><kbd>2</kbd></dt>
+          <dd>应用页</dd>
+        </div>
+        <div class="shortcuts-item">
+          <dt><kbd>?</kbd></dt>
+          <dd>显示此帮助</dd>
+        </div>
+        <div class="shortcuts-item">
+          <dt><kbd>Esc</kbd></dt>
+          <dd>关闭弹窗 / 退出搜索模式</dd>
+        </div>
+        <div class="shortcuts-item">
+          <dt><kbd>Alt</kbd><span class="kbd-plus">+</span><kbd>1</kbd> <kbd>2</kbd></dt>
+          <dd>切换搜索引擎 / 地图 / AI 提供商</dd>
+        </div>
+        <div class="shortcuts-item">
+          <dt><kbd>map</kbd> + <kbd>Tab</kbd></dt>
+          <dd>进入地图搜索模式</dd>
+        </div>
+      </dl>
+    </div>
+  </dialog>
+
+  <script type="module" src="js/boot.js"></script>
+</body>
+</html>

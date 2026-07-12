@@ -1,0 +1,1041 @@
+/* 第二页右上角工具栏 */
+.header-actions {
+  position: fixed;
+  top: 20px;
+  right: 22px;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--glass-panel-bg);
+  backdrop-filter: var(--glass-panel-blur);
+  -webkit-backdrop-filter: var(--glass-panel-blur);
+  border: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 10px 32px rgba(0, 0, 0, 0.14);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--transition-page), visibility var(--transition-page);
+}
+
+body.page-blur-active .header-actions,
+body.page-apps-active .header-actions {
+  opacity: 1;
+  visibility: visible;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.icon-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+  transform: scale(1.04);
+}
+
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.icon-btn.liked svg {
+  fill: #ff6b8a;
+  stroke: #ff6b8a;
+}
+
+/* 壁纸库弹窗 */
+.wallpaper-library-dialog {
+  width: min(720px, calc(100vw - 32px));
+}
+
+.wallpaper-library-header {
+  padding: 20px 24px 12px;
+}
+
+.wallpaper-library-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 24px 12px;
+}
+
+.wallpaper-library-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--glass-panel-border);
+}
+
+.wallpaper-library-tab {
+  border: none;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  background: transparent;
+  color: var(--glass-panel-text-muted);
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.wallpaper-library-tab.active {
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--glass-panel-text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.wallpaper-library-save {
+  border: 1px solid var(--glass-panel-border);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 13px;
+  background: rgba(102, 126, 234, 0.72);
+  color: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.wallpaper-library-save:hover:not(:disabled) {
+  background: rgba(102, 126, 234, 0.88);
+}
+
+.wallpaper-library-save:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.wallpaper-library-status {
+  margin: 0 24px 8px;
+  font-size: 13px;
+  color: #a8b8ff;
+}
+
+.wallpaper-library-status.is-error {
+  color: #ff9a9a;
+}
+
+.wallpaper-library-empty {
+  margin: 0 24px 12px;
+  font-size: 13px;
+  color: var(--glass-panel-text-muted);
+}
+
+.wallpaper-library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  padding: 8px 24px 24px;
+  max-height: min(420px, calc(100vh - 220px));
+  overflow-y: auto;
+}
+
+.wallpaper-thumb {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  border: none;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  background: #ddd center / cover no-repeat;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.wallpaper-thumb:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+}
+
+.wallpaper-thumb-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 18px 8px 8px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: #fff;
+  text-align: left;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.65));
+  pointer-events: none;
+}
+
+/* 壁纸信息按钮与卡片 */
+.wallpaper-info-zone {
+  position: relative;
+  display: inline-flex;
+}
+
+.wallpaper-info {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  width: min(300px, calc(100vw - 48px));
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  background: var(--glass-panel-bg);
+  backdrop-filter: var(--glass-panel-blur);
+  -webkit-backdrop-filter: var(--glass-panel-blur);
+  border: 1px solid var(--glass-panel-border);
+  box-shadow: var(--glass-panel-inner), var(--glass-panel-shadow);
+  color: var(--glass-panel-text);
+  z-index: 13;
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 0.25s, transform 0.25s, background 0.2s ease, border-color 0.2s ease;
+  pointer-events: none;
+}
+
+.wallpaper-info::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -12px;
+  height: 12px;
+}
+
+.wallpaper-info.visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.wallpaper-info.is-linkable {
+  cursor: pointer;
+}
+
+.wallpaper-info.is-linkable:hover {
+  background: var(--glass-panel-bg-hover);
+  border-color: var(--glass-panel-border-hover);
+}
+
+.wallpaper-info-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.wallpaper-info-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.wallpaper-next-btn {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border: 1px solid var(--glass-panel-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--glass-panel-text);
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.wallpaper-next-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: var(--glass-panel-border-hover);
+}
+
+.wallpaper-next-btn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.wallpaper-next-btn.is-loading {
+  min-width: 4.5em;
+}
+
+.wallpaper-info-title a {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.wallpaper-info-title a:hover {
+  text-decoration: underline;
+}
+
+.wallpaper-info-desc {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--glass-panel-text-muted);
+  margin-bottom: 12px;
+}
+
+.wallpaper-info-credit {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--glass-panel-text-muted) 85%, transparent);
+}
+
+/* 快捷方式网格 */
+.shortcuts-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 18px 14px;
+  width: 100%;
+  max-height: calc(100vh - var(--stage-top) - clamp(72px, 12vw, 120px) - var(--dock-height) - 140px);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.shortcuts-grid::-webkit-scrollbar {
+  display: none;
+}
+
+.shortcut-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  font: inherit;
+  padding: 0;
+  -webkit-user-drag: none;
+  touch-action: manipulation;
+  transition: transform 0.25s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.shortcut-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--icon-squircle-radius);
+  background: #fff;
+  border: none;
+  box-shadow: var(--icon-shadow);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s, box-shadow 0.2s;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.shortcut-icon--image {
+  background: #fff;
+}
+
+.shortcut-icon--image.shortcut-icon--square {
+  background: transparent;
+}
+
+.shortcut-icon--image.shortcut-icon--transparent {
+  background: transparent;
+  box-shadow: none;
+}
+
+.shortcut-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  border-radius: inherit;
+  display: block;
+}
+
+.shortcut-icon--round img {
+  object-fit: contain;
+  padding: 0;
+}
+
+.shortcut-icon--transparent img {
+  object-fit: contain;
+  padding: 7px;
+}
+
+.shortcut-icon--lowres img {
+  transform: scale(1.12);
+  image-rendering: -webkit-optimize-contrast;
+}
+
+.shortcut-icon--letter {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  background:
+    linear-gradient(135deg, var(--shortcut-letter-tint, rgba(255, 255, 255, 0.1)), transparent 68%),
+    rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(18px) saturate(155%);
+  -webkit-backdrop-filter: blur(18px) saturate(155%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 10px 28px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--shortcut-letter-stroke, rgba(255, 255, 255, 0.14));
+}
+
+.shortcut-icon-letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  line-height: 1;
+  font-size: 30px;
+  font-weight: inherit;
+  user-select: none;
+}
+
+.shortcut-icon--letter[data-len="2"] .shortcut-icon-letter {
+  font-size: 23px;
+  letter-spacing: -0.03em;
+}
+
+.shortcut-icon--letter[data-len="3"] .shortcut-icon-letter {
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+
+.shortcut-item:hover .shortcut-icon {
+  transform: scale(1.06);
+  box-shadow: var(--icon-shadow-hover);
+}
+
+.shortcut-label {
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  text-align: center;
+  max-width: 84px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: none;
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition: color 0.4s;
+}
+
+body[data-text-theme='on-dark'] .shortcut-label {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+body[data-text-theme='on-light'] .shortcut-label {
+  font-weight: 500;
+  color: rgba(45, 55, 72, 0.92);
+}
+
+body[data-text-theme='on-mixed'] .shortcut-label {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.shortcut-add .shortcut-icon {
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(18px) saturate(155%);
+  -webkit-backdrop-filter: blur(18px) saturate(155%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: none;
+  color: var(--text-primary);
+  font-size: 32px;
+  font-weight: 300;
+}
+
+.shortcuts-grid.is-reordering {
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.shortcuts-grid.is-reordering .shortcut-item:not(.is-dragging) {
+  transition: transform 0.25s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.shortcuts-grid.is-reordering .shortcut-item:hover .shortcut-icon {
+  transform: none;
+  box-shadow: var(--icon-shadow);
+}
+
+.shortcut-item.is-dragging {
+  opacity: 1;
+  z-index: 100;
+  cursor: grabbing;
+  transition: none;
+}
+
+.shortcut-item.is-dragging .shortcut-icon {
+  transform: scale(1.08);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+}
+
+.shortcut-placeholder {
+  pointer-events: none;
+}
+
+.shortcut-placeholder .shortcut-icon {
+  background: rgba(74, 144, 217, 0.06);
+  border: 2px dashed rgba(74, 144, 217, 0.4);
+  box-shadow: none;
+  transform: none;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.shortcut-placeholder .shortcut-label {
+  visibility: hidden;
+}
+
+/* 快捷方式 / 捷径坞右键菜单 */
+.shortcut-menu,
+.dock-menu {
+  position: fixed;
+  z-index: 100;
+  min-width: 168px;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: #fff;
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.shortcut-menu[hidden],
+.dock-menu[hidden] {
+  display: none !important;
+}
+
+.shortcut-menu:not([hidden]),
+.dock-menu:not([hidden]) {
+  display: block;
+  pointer-events: auto;
+}
+
+.shortcut-menu-item,
+.dock-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #333;
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.shortcut-menu-item:hover,
+.dock-menu-item:hover {
+  background: #f0f0f0;
+}
+
+.shortcut-menu-item svg,
+.dock-menu-item svg {
+  flex-shrink: 0;
+  color: #666;
+}
+
+.dock-menu-item[data-action="remove"]:hover {
+  color: #c0392b;
+}
+
+.dock-menu-item[data-action="remove"]:hover svg {
+  color: #c0392b;
+}
+
+.dock-menu {
+  min-width: 180px;
+}
+
+/* 快捷方式编辑弹窗 — 继承 modal-dialog 毛玻璃 */
+.shortcut-dialog {
+  width: min(420px, calc(100vw - 32px));
+  padding: 0;
+  color: var(--glass-panel-text);
+}
+
+.shortcut-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid var(--glass-panel-divider);
+}
+
+.shortcut-dialog-header h2 {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--glass-panel-text);
+}
+
+.shortcut-form {
+  padding: 16px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.shortcut-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  height: 44px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--glass-panel-border);
+  border-radius: 10px;
+}
+
+.shortcut-field input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  color: var(--glass-panel-text);
+  outline: none;
+  min-width: 0;
+}
+
+.shortcut-field input::placeholder {
+  color: var(--glass-panel-text-muted);
+}
+
+.shortcut-field-icon {
+  flex-shrink: 0;
+  width: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--glass-panel-text-muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.shortcut-icon-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--glass-panel-border);
+  border-radius: 10px;
+}
+
+.shortcut-icon-preview {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--icon-squircle-radius);
+  background: rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: var(--icon-shadow);
+}
+
+.shortcut-icon-preview.shortcut-icon--letter .shortcut-icon-letter {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.shortcut-icon-preview.shortcut-icon--letter[data-len="2"] .shortcut-icon-letter {
+  font-size: 15px;
+}
+
+.shortcut-icon-preview.shortcut-icon--letter[data-len="3"] .shortcut-icon-letter {
+  font-size: 12px;
+}
+
+.shortcut-icon-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  display: block;
+}
+
+.shortcut-icon-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.shortcut-icon-label {
+  display: block;
+  font-size: 14px;
+  color: var(--glass-panel-text);
+}
+
+.shortcut-icon-source {
+  display: block;
+  font-size: 12px;
+  color: var(--glass-panel-text-muted);
+}
+
+.shortcut-fetch-btn {
+  border: 1px solid var(--glass-panel-border);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--glass-panel-text);
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.shortcut-fetch-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.shortcut-save-btn {
+  margin-top: 6px;
+  height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.22);
+  color: var(--glass-panel-text);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.shortcut-save-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+
+/* Dock — 页面分段标签 + 快捷链接 */
+.dock {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 10px 10px;
+  border-radius: 999px;
+  background: var(--glass-panel-bg);
+  backdrop-filter: var(--glass-panel-blur);
+  -webkit-backdrop-filter: var(--glass-panel-blur);
+  border: 1px solid var(--glass-panel-border);
+  box-shadow: var(--glass-panel-inner), var(--glass-panel-shadow);
+  transition:
+    background 0.22s ease,
+    border-color 0.22s ease,
+    box-shadow 0.22s ease,
+    transform 0.22s ease,
+    opacity 0.4s ease;
+}
+
+.dock:hover {
+  background: var(--glass-panel-bg-hover);
+  border-color: var(--glass-panel-border-hover);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    var(--glass-panel-shadow-hover);
+  transform: translateX(-50%) translateY(-2px);
+}
+
+.dock-page-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.dock-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: color-mix(in srgb, var(--meta-color) 58%, transparent);
+  cursor: pointer;
+  opacity: 0.72;
+  transition:
+    background 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dock-tab-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dock-tab-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.dock-tab:hover:not(.active) {
+  color: var(--meta-color);
+  background: rgba(255, 255, 255, 0.06);
+  opacity: 0.92;
+}
+
+.dock-tab.active {
+  background: transparent;
+  color: var(--meta-color);
+  box-shadow: none;
+  opacity: 1;
+  transform: none;
+}
+
+.dock-tab.active .dock-tab-icon {
+  transform: scale(1.08);
+}
+
+body[data-text-theme='on-light'] .dock-tab.active {
+  background: transparent;
+  color: var(--meta-color);
+  box-shadow: none;
+}
+
+.dock-divider {
+  width: 1px;
+  align-self: stretch;
+  min-height: 28px;
+  margin: 4px 2px;
+  background: color-mix(in srgb, var(--meta-color) 18%, transparent);
+  flex-shrink: 0;
+}
+
+.dock-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border: none;
+  border-radius: var(--dock-icon-radius);
+  background: #fff;
+  box-shadow: var(--icon-shadow);
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.dock-item.dock-link {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.dock-item .shortcut-icon--dock {
+  width: 100%;
+  height: 100%;
+}
+
+.dock-item .shortcut-icon--dock.shortcut-icon--letter .shortcut-icon-letter {
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.dock-item .shortcut-icon--dock.shortcut-icon--letter[data-len="2"] .shortcut-icon-letter {
+  font-size: 15px;
+}
+
+.dock-item .shortcut-icon--dock.shortcut-icon--letter[data-len="3"] .shortcut-icon-letter {
+  font-size: 12px;
+}
+
+.dock-item img,
+.dock-item .shortcut-icon--dock img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  border-radius: inherit;
+  display: block;
+}
+
+.dock-item .shortcut-icon--round img {
+  object-fit: contain;
+}
+
+.dock-item:hover {
+  transform: scale(1.08) translateY(-2px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+
+.dock-item.dock-link:hover {
+  box-shadow: none;
+}
+
+.dock-item.dock-link:hover .shortcut-icon--dock {
+  box-shadow: var(--icon-shadow-hover);
+}
+
+/* Edge 侧边栏 / 窄面板 — 左侧竖向 Dock */
+body.layout-sidebar {
+  --dock-rail-width: 64px;
+  --dock-clearance: 20px;
+  --stage-top: 6vh;
+}
+
+body.layout-sidebar .dock {
+  top: 50%;
+  bottom: auto;
+  left: 10px;
+  right: auto;
+  transform: translateY(-50%);
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 8px;
+  max-width: none;
+  max-height: min(560px, calc(100vh - 32px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+body.layout-sidebar .dock::-webkit-scrollbar {
+  display: none;
+}
+
+body.layout-sidebar .dock:hover {
+  transform: translateY(-50%);
+}
+
+body.layout-sidebar .dock-page-switch {
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--glass-panel-border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+body.layout-sidebar .dock-tab {
+  width: 44px;
+  height: 44px;
+}
+
+body.layout-sidebar .dock-tab.active {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+body.layout-sidebar .dock-tab.active::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  width: 3px;
+  height: 20px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--meta-color) 92%, transparent);
+  transform: translateY(-50%);
+  opacity: 0.95;
+}
+
+body.layout-sidebar .dock-item.dock-link {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--dock-icon-radius);
+}
+
+body.layout-sidebar .dock-tab {
+  position: relative;
+}
+
+body.layout-sidebar .dock-divider {
+  width: 28px;
+  height: 1px;
+  min-height: 1px;
+  align-self: center;
+  margin: 2px 0;
+}
+
+body.layout-sidebar .dock-item {
+  width: 40px;
+  height: 40px;
+}
+
+body.layout-sidebar .stage {
+  left: calc(var(--dock-rail-width) + 8px);
+  right: 10px;
+  transform: none;
+  width: auto;
+  max-width: none;
+}
+
+body.layout-sidebar .clock {
+  font-size: clamp(40px, 12vw, 56px);
+}
+
+body.layout-sidebar .meta-line {
+  font-size: 12px;
+}
+
+body.layout-sidebar .search-form {
+  width: 100%;
+}
+
+body.layout-sidebar .shortcuts-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 12px;
+}
+
+body.layout-sidebar .shortcut-icon {
+  width: 56px;
+  height: 56px;
+}
+
+body.layout-sidebar .header-actions {
+  top: 12px;
+  right: 10px;
+}
+
+body.layout-sidebar .search-focus-overlay,
+body.layout-sidebar .scene-vignette {
+  left: var(--dock-rail-width);
+}
