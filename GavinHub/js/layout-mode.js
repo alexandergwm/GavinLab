@@ -4,6 +4,7 @@ export function initLayoutMode() {
     const w = window.innerWidth;
     const h = window.innerHeight;
     const sidebar = w <= 520 && h > w * 1.12;
+    document.documentElement.classList.toggle('layout-sidebar', sidebar);
     document.body.classList.toggle('layout-sidebar', sidebar);
   };
 

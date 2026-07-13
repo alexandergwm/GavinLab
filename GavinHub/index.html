@@ -65,6 +65,10 @@
     try {
       document.documentElement.setAttribute('data-text-theme', theme);
       document.documentElement.setAttribute('data-text-tone', tone);
+      document.documentElement.classList.toggle(
+        'layout-sidebar',
+        window.innerWidth <= 520 && window.innerHeight > window.innerWidth * 1.12,
+      );
     } catch (e3) { /* ignore */ }
   })();
   </script>

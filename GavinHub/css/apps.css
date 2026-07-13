@@ -912,13 +912,13 @@ body[data-text-theme='on-light'] .dock-tab.active {
 }
 
 /* Edge 侧边栏 / 窄面板 — 左侧竖向 Dock */
-body.layout-sidebar {
+:is(body.layout-sidebar, html.layout-sidebar body) {
   --dock-rail-width: 64px;
   --dock-clearance: 20px;
   --stage-top: 6vh;
 }
 
-body.layout-sidebar .dock {
+:is(body.layout-sidebar, html.layout-sidebar body) .dock {
   top: 50%;
   bottom: auto;
   left: 10px;
@@ -935,15 +935,15 @@ body.layout-sidebar .dock {
   scrollbar-width: none;
 }
 
-body.layout-sidebar .dock::-webkit-scrollbar {
+:is(body.layout-sidebar, html.layout-sidebar body) .dock::-webkit-scrollbar {
   display: none;
 }
 
-body.layout-sidebar .dock:hover {
+:is(body.layout-sidebar, html.layout-sidebar body) .dock:hover {
   transform: translateY(-50%);
 }
 
-body.layout-sidebar .dock-page-switch {
+:is(body.layout-sidebar, html.layout-sidebar body) .dock-page-switch {
   flex-direction: column;
   gap: 4px;
   padding: 4px;
@@ -953,18 +953,18 @@ body.layout-sidebar .dock-page-switch {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
-body.layout-sidebar .dock-tab {
+:is(body.layout-sidebar, html.layout-sidebar body) .dock-tab {
   width: 44px;
   height: 44px;
 }
 
-body.layout-sidebar .dock-tab.active {
+:is(body.layout-sidebar, html.layout-sidebar body) .dock-tab.active {
   background: rgba(255, 255, 255, 0.18);
   border-radius: 12px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 
-body.layout-sidebar .dock-tab.active::before {
+:is(body.layout-sidebar, html.layout-sidebar body) .dock-tab.active::before {
   content: '';
   position: absolute;
   left: 2px;
@@ -977,17 +977,17 @@ body.layout-sidebar .dock-tab.active::before {
   opacity: 0.95;
 }
 
-body.layout-sidebar .dock-item.dock-link {
+:is(body.layout-sidebar, html.layout-sidebar body) .dock-item.dock-link {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--dock-icon-radius);
 }
 
-body.layout-sidebar .dock-tab {
+:is(body.layout-sidebar, html.layout-sidebar body) .dock-tab {
   position: relative;
 }
 
-body.layout-sidebar .dock-divider {
+:is(body.layout-sidebar, html.layout-sidebar body) .dock-divider {
   width: 28px;
   height: 1px;
   min-height: 1px;
@@ -995,12 +995,12 @@ body.layout-sidebar .dock-divider {
   margin: 2px 0;
 }
 
-body.layout-sidebar .dock-item {
+:is(body.layout-sidebar, html.layout-sidebar body) .dock-item {
   width: 40px;
   height: 40px;
 }
 
-body.layout-sidebar .stage {
+:is(body.layout-sidebar, html.layout-sidebar body) .stage {
   left: calc(var(--dock-rail-width) + 8px);
   right: 10px;
   transform: none;
@@ -1008,34 +1008,34 @@ body.layout-sidebar .stage {
   max-width: none;
 }
 
-body.layout-sidebar .clock {
+:is(body.layout-sidebar, html.layout-sidebar body) .clock {
   font-size: clamp(40px, 12vw, 56px);
 }
 
-body.layout-sidebar .meta-line {
+:is(body.layout-sidebar, html.layout-sidebar body) .meta-line {
   font-size: 12px;
 }
 
-body.layout-sidebar .search-form {
+:is(body.layout-sidebar, html.layout-sidebar body) .search-form {
   width: 100%;
 }
 
-body.layout-sidebar .shortcuts-grid {
+:is(body.layout-sidebar, html.layout-sidebar body) .shortcuts-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px 12px;
 }
 
-body.layout-sidebar .shortcut-icon {
+:is(body.layout-sidebar, html.layout-sidebar body) .shortcut-icon {
   width: 56px;
   height: 56px;
 }
 
-body.layout-sidebar .header-actions {
+:is(body.layout-sidebar, html.layout-sidebar body) .header-actions {
   top: 12px;
   right: 10px;
 }
 
-body.layout-sidebar .search-focus-overlay,
-body.layout-sidebar .scene-vignette {
+:is(body.layout-sidebar, html.layout-sidebar body) .search-focus-overlay,
+:is(body.layout-sidebar, html.layout-sidebar body) .scene-vignette {
   left: var(--dock-rail-width);
 }

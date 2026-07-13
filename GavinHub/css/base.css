@@ -412,11 +412,11 @@ body.boot-awakening.boot-ui-settled .dock {
   }
 }
 
-body.layout-sidebar.boot-awakening:not(.boot-ui-settled) .dock {
+:is(body.layout-sidebar, html.layout-sidebar body).boot-awakening:not(.boot-ui-settled) .dock {
   transform: translateY(-50%) translate3d(0, 10px, 0);
 }
 
-body.layout-sidebar.boot-awakening.boot-ui-settled .dock {
+:is(body.layout-sidebar, html.layout-sidebar body).boot-awakening.boot-ui-settled .dock {
   animation-name: boot-awaken-dock-sidebar;
 }
 
