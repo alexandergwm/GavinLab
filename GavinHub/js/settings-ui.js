@@ -113,10 +113,11 @@ async function refreshSyncStatus() {
   }
 }
 
-function readGithubFormConfig() {
+function readGithubFormConfig(saved = {}) {
+  const token = document.getElementById('github-sync-token')?.value?.trim() || saved.token || '';
   return {
-    token: document.getElementById('github-sync-token')?.value || '',
-    gistId: document.getElementById('github-sync-gist-id')?.value || '',
+    token,
+    gistId: document.getElementById('github-sync-gist-id')?.value || saved.gistId || '',
   };
 }
 
@@ -127,7 +128,10 @@ function syncGithubFormFromStorage() {
   if (!github || !gistId) return;
   import('./github-sync.js').then((mod) => {
     const cfg = mod.loadGithubSyncConfig();
-    github.value = cfg.token;
+    github.value = '';
+    github.placeholder = cfg.token
+      ? '已保存 GitHub Token，留空沿用；粘贴新 Token 可替换'
+      : '粘贴 ghp_…';
     gistId.value = cfg.gistId;
     if (gistField) gistField.hidden = !cfg.gistId;
   }).catch(() => {});
@@ -156,7 +160,7 @@ function setGithubSyncStatus(text, isError = false) {
 
 async function runGithubSync(api) {
   const githubSync = await import('./github-sync.js');
-  const config = readGithubFormConfig();
+  const config = readGithubFormConfig(githubSync.loadGithubSyncConfig());
   githubSync.saveGithubSyncConfig(config);
 
   try {

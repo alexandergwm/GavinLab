@@ -904,6 +904,8 @@ function renderWeekCalendar() {
   const eventRows = Math.max(maxRow + 1, 1);
 
   container.style.setProperty('--event-rows', String(eventRows));
+  container.classList.toggle('is-dense', eventRows > 4);
+  container.classList.toggle('is-very-dense', eventRows > 8);
 
   const headerCells = days.map((d) => {
     const key = toDateKey(d);

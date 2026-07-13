@@ -337,7 +337,7 @@ body.boot-awakening:not(.boot-ui-settled) .search-form {
 }
 
 body.boot-awakening:not(.boot-ui-settled) .dock {
-  transform: translateX(-50%) translate3d(0, 10px, 0);
+  transform: var(--dock-transform, translateX(-50%)) translate3d(0, 10px, 0);
 }
 
 body.boot-awakening.boot-ui-settled .search-form,
@@ -405,29 +405,19 @@ body.boot-awakening.boot-ui-settled .dock {
 @keyframes boot-awaken-dock {
   0%,
   12% {
-    transform: translateX(-50%) translate3d(0, 10px, 0);
+    transform: var(--dock-transform, translateX(-50%)) translate3d(0, 10px, 0);
   }
   100% {
-    transform: translateX(-50%) translate3d(0, 0, 0);
+    transform: var(--dock-transform, translateX(-50%)) translate3d(0, 0, 0);
   }
 }
 
 :is(body.layout-sidebar, html.layout-sidebar body).boot-awakening:not(.boot-ui-settled) .dock {
-  transform: translateY(-50%) translate3d(0, 10px, 0);
+  transform: var(--dock-transform, translateY(-50%)) translate3d(0, 10px, 0);
 }
 
 :is(body.layout-sidebar, html.layout-sidebar body).boot-awakening.boot-ui-settled .dock {
-  animation-name: boot-awaken-dock-sidebar;
-}
-
-@keyframes boot-awaken-dock-sidebar {
-  0%,
-  12% {
-    transform: translateY(-50%) translate3d(0, 10px, 0);
-  }
-  100% {
-    transform: translateY(-50%) translate3d(0, 0, 0);
-  }
+  animation-name: boot-awaken-dock;
 }
 
 @media (prefers-reduced-motion: reduce) {

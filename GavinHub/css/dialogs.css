@@ -693,6 +693,14 @@ dialog:modal {
   min-height: calc(var(--event-area-rows) * var(--event-row-height) + 120px);
 }
 
+.week-calendar.is-dense {
+  --event-row-height: 52px;
+}
+
+.week-calendar.is-very-dense {
+  --event-row-height: 40px;
+}
+
 .week-cal-grid {
   position: relative;
   display: grid;
@@ -993,7 +1001,7 @@ dialog:modal {
   padding: 0 var(--cal-edge-inset) 12px;
   pointer-events: none;
   z-index: 2;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .week-cal-events .cal-event {
@@ -1005,6 +1013,26 @@ dialog:modal {
   box-sizing: border-box;
   margin-inline: var(--cal-event-inset);
   border-left: 3px solid var(--cal-accent, #666);
+}
+
+.week-calendar.is-dense .cal-event {
+  padding-block: 4px;
+}
+
+.week-calendar.is-dense .cal-event-title {
+  font-size: 12px;
+}
+
+.week-calendar.is-dense .cal-event-done-label {
+  display: none;
+}
+
+.week-calendar.is-very-dense .cal-event {
+  padding: 3px 10px 3px 7px;
+}
+
+.week-calendar.is-very-dense .cal-event-actions {
+  gap: 4px;
 }
 
 .week-cal-events .cal-event-badge {
