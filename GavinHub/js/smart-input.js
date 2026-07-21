@@ -48,9 +48,13 @@ export function evaluateCalc(raw) {
   const expr = raw.trim().replace(/,/g, '');
   if (!expr || !CALC_CHARS_RE.test(expr)) return null;
   if (!/[\d)]/.test(expr)) return null;
+  /* 纯数字应走搜索，不要当成「42 = 42」复制 */
+  if (/^[+-]?\d+(\.\d*)?$/.test(expr)) return null;
 
   try {
-    const normalized = expr.replace(/(\d+(?:\.\d+)?)\s*%/g, '($1/100)');
+    const normalized = expr
+      .replace(/(\d+(?:\.\d+)?)\s*%/g, '($1/100)')
+      .replace(/\^/g, '**'); /* ^ 在 JS 是异或，这里按幂运算 */
     // eslint-disable-next-line no-new-func
     const fn = new Function(`"use strict"; return (${normalized});`);
     const result = fn();

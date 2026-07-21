@@ -17,6 +17,12 @@ import {
 let activeShortcutId = null;
 let iconManuallySet = false;
 let fetchTimer = null;
+/** @type {(() => void) | null} */
+let shortcutsUiRefresh = null;
+
+export function refreshShortcutsUI() {
+  shortcutsUiRefresh?.();
+}
 
 function getEls() {
   return {
@@ -614,6 +620,7 @@ export function initShortcutsUI({ onDockChange } = {}) {
       onContextMenu: (item, e) => showMenu(item, e),
     });
   };
+  shortcutsUiRefresh = refresh;
 
   const updateShortcutIcon = (item) => {
     const iconEl = grid.querySelector(`.shortcut-item[data-id="${item.id}"] .shortcut-icon`);

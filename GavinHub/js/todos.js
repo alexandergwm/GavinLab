@@ -3,6 +3,14 @@ import { readJson, writeJson } from './storage.js';
 
 const TODOS_KEY = KEYS.todos;
 
+let todoIdSeq = 0;
+
+/** 数值 ID，避免同毫秒连续创建撞车 */
+export function createTodoId() {
+  todoIdSeq = (todoIdSeq + 1) % 1000;
+  return Date.now() * 1000 + todoIdSeq;
+}
+
 export const TODO_CATEGORIES = [
   { id: 'work', label: '工作', color: 'green', bg: '#dff6e6', text: '#1a5c32' },
   { id: 'fitness', label: '健身', color: 'pink', bg: '#fde8ef', text: '#9b3d5c' },
@@ -16,6 +24,10 @@ const COLOR_TO_CATEGORY = {
   blue: 'life',
   yellow: 'study',
 };
+
+function matchTodoId(a, b) {
+  return String(a) === String(b);
+}
 
 export function getCategoryById(id) {
   return TODO_CATEGORIES.find((c) => c.id === id) || TODO_CATEGORIES[0];
@@ -51,7 +63,7 @@ function migrate(raw) {
     if (!Array.isArray(list)) continue;
     for (const item of list) {
       items.push(normalizeItem({
-        id: item.id || Date.now() + Math.random(),
+        id: item.id || createTodoId(),
         text: item.text,
         done: !!item.done,
         startDate: dateKey,
@@ -169,7 +181,7 @@ export function addTodo({ text, startDate, endDate, category, recurrence, weekda
   const items = loadTodos();
   const end = endDate || startDate;
   const todo = {
-    id: Date.now(),
+    id: createTodoId(),
     text: trimmed,
     done: false,
     startDate,
@@ -196,7 +208,7 @@ export function addTodo({ text, startDate, endDate, category, recurrence, weekda
 }
 
 export function moveTodo(id, newStartDate, weekStartKey) {
-  const item = loadTodos().find((t) => t.id === id);
+  const item = loadTodos().find((t) => matchTodoId(t.id, id));
   if (!item) return loadTodos();
   const span = daySpan(item.startDate, item.endDate);
   let endDate = addDays(newStartDate, span - 1);
@@ -210,7 +222,7 @@ export function moveTodo(id, newStartDate, weekStartKey) {
 }
 
 export function resizeTodoEnd(id, newEndDate) {
-  const item = loadTodos().find((t) => t.id === id);
+  const item = loadTodos().find((t) => matchTodoId(t.id, id));
   if (!item) return loadTodos();
   const end = parseDateKey(newEndDate) >= parseDateKey(item.startDate) ? newEndDate : item.startDate;
   return updateTodo(id, { endDate: end });
@@ -218,7 +230,7 @@ export function resizeTodoEnd(id, newEndDate) {
 
 export function toggleTodo(id, instanceDate = null) {
   const items = loadTodos();
-  const item = items.find((t) => t.id === id);
+  const item = items.find((t) => matchTodoId(t.id, id));
   if (!item) return items;
 
   if (item.recurrence && instanceDate) {
@@ -232,7 +244,7 @@ export function toggleTodo(id, instanceDate = null) {
 
 export function removeTodo(id, scope = 'all', instanceDate = null) {
   const items = loadTodos();
-  const item = items.find((t) => t.id === id);
+  const item = items.find((t) => matchTodoId(t.id, id));
   if (!item) return items;
 
   if (item.recurrence && scope === 'once' && instanceDate) {
@@ -241,14 +253,14 @@ export function removeTodo(id, scope = 'all', instanceDate = null) {
     return updateTodo(id, { skippedDates }, 'all');
   }
 
-  const filtered = items.filter((t) => t.id !== id);
+  const filtered = items.filter((t) => !matchTodoId(t.id, id));
   saveTodos(filtered);
   return filtered;
 }
 
 export function updateTodo(id, patch, scope = 'all', instanceDate = null) {
   const items = loadTodos().map((item) => {
-    if (item.id !== id) return item;
+    if (!matchTodoId(item.id, id)) return item;
 
     if (item.recurrence && scope === 'once' && instanceDate) {
       const { done, ...rest } = patch;
@@ -277,7 +289,7 @@ export function updateTodo(id, patch, scope = 'all', instanceDate = null) {
 }
 
 export function getTodoById(id, instanceDate = null) {
-  const item = loadTodos().find((t) => t.id === id);
+  const item = loadTodos().find((t) => matchTodoId(t.id, id));
   if (!item) return null;
   if (item.recurrence && instanceDate) {
     const expanded = expandTodoInstance(item, instanceDate);

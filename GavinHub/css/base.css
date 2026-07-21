@@ -80,14 +80,14 @@
   --icon-shadow-hover: 0 6px 20px rgba(0, 0, 0, 0.15);
   --dock-icon-radius: var(--icon-squircle-radius);
   --stage-top: 13vh;
-  --boot-wallpaper-duration: 1.25s;
-  --boot-ui-duration: 0.88s;
-  --boot-vignette-duration: 1.5s;
-  --boot-ui-delay-stage: 0.12s;
+  --boot-wallpaper-duration: 1s;
+  --boot-ui-duration: 0.55s;
+  --boot-vignette-duration: 0.9s;
+  --boot-ui-delay-stage: 0s;
   --boot-ui-delay-search: 0s;
-  --boot-ui-delay-dock: 0.1s;
-  --boot-vignette-delay: 0.12s;
-  --boot-reveal-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --boot-ui-delay-dock: 0s;
+  --boot-vignette-delay: 0s;
+  --boot-reveal-ease: cubic-bezier(0.25, 0.8, 0.25, 1);
   --search-form-top: calc(
     var(--stage-top) + clamp(52px, 7.2vw, 68px) + 6px + clamp(12px, 1.6vw, 14px) * 1.5 + 18px
   );
@@ -320,10 +320,10 @@ body.search-focused .search-focus-overlay {
   visibility: visible;
 }
 
-/* 苏醒动画：壁纸先亮，时钟淡入；搜索/Dock 仅位移（不用 opacity，避免毛玻璃变色与「先弹出再动」） */
+/* 苏醒动画：同帧一起浮现，位移尽量小，避免错落造成「一顿一顿」 */
 body.boot-awakening:not(.boot-ui-settled) .stage {
   opacity: 0;
-  transform: translate3d(0, 12px, 0);
+  transform: translate3d(0, 6px, 0);
 }
 
 body.boot-awakening:not(.boot-ui-settled) .search-form,
@@ -333,11 +333,12 @@ body.boot-awakening:not(.boot-ui-settled) .dock {
 }
 
 body.boot-awakening:not(.boot-ui-settled) .search-form {
-  transform: translate3d(0, 10px, 0);
+  transform: translate3d(0, 5px, 0);
 }
 
 body.boot-awakening:not(.boot-ui-settled) .dock {
-  transform: var(--dock-transform, translateX(-50%)) translate3d(0, 10px, 0);
+  /* 禁止在 keyframes 里用 CSS 变量：部分浏览器会丢掉 translateX(-50%)，Dock 从右侧飞入 */
+  transform: translateX(-50%) translate3d(0, 5px, 0);
 }
 
 body.boot-awakening.boot-ui-settled .search-form,
@@ -358,11 +359,18 @@ body.boot-awakening .search-box:focus-within .search-submit {
   transition: none !important;
 }
 
+/* 启动动画期间减弱毛玻璃算力，减少掉帧；稳定后再用完整 blur */
+body.boot-awakening:not(.boot-glass-stable) .dock {
+  backdrop-filter: blur(12px) saturate(130%) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(130%) !important;
+}
+
+body.boot-awakening:not(.boot-glass-stable) .search-box,
 body.boot-awakening:not(.boot-glass-stable) .search-box.focused {
   background: var(--glass-search-bg);
   border-color: var(--glass-search-border);
-  backdrop-filter: var(--glass-search-blur);
-  -webkit-backdrop-filter: var(--glass-search-blur);
+  backdrop-filter: blur(10px) saturate(130%) !important;
+  -webkit-backdrop-filter: blur(10px) saturate(130%) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.14),
     0 6px 20px rgba(0, 0, 0, 0.08);
@@ -384,7 +392,7 @@ body.boot-awakening.boot-ui-settled .dock {
 @keyframes boot-awaken-stage {
   from {
     opacity: 0;
-    transform: translate3d(0, 12px, 0);
+    transform: translate3d(0, 6px, 0);
   }
   to {
     opacity: 1;
@@ -393,40 +401,56 @@ body.boot-awakening.boot-ui-settled .dock {
 }
 
 @keyframes boot-awaken-ui-move {
-  0%,
-  12% {
-    transform: translate3d(0, 10px, 0);
+  from {
+    transform: translate3d(0, 5px, 0);
   }
-  100% {
+  to {
     transform: translate3d(0, 0, 0);
   }
 }
 
 @keyframes boot-awaken-dock {
-  0%,
-  12% {
-    transform: var(--dock-transform, translateX(-50%)) translate3d(0, 10px, 0);
+  from {
+    transform: translateX(-50%) translate3d(0, 5px, 0);
   }
-  100% {
-    transform: var(--dock-transform, translateX(-50%)) translate3d(0, 0, 0);
+  to {
+    transform: translateX(-50%) translate3d(0, 0, 0);
+  }
+}
+
+@keyframes boot-awaken-dock-sidebar {
+  from {
+    transform: translateY(-50%) translate3d(0, 5px, 0);
+  }
+  to {
+    transform: translateY(-50%) translate3d(0, 0, 0);
   }
 }
 
 :is(body.layout-sidebar, html.layout-sidebar body).boot-awakening:not(.boot-ui-settled) .dock {
-  transform: var(--dock-transform, translateY(-50%)) translate3d(0, 10px, 0);
+  transform: translateY(-50%) translate3d(0, 5px, 0);
 }
 
 :is(body.layout-sidebar, html.layout-sidebar body).boot-awakening.boot-ui-settled .dock {
-  animation-name: boot-awaken-dock;
+  animation-name: boot-awaken-dock-sidebar;
 }
 
 @media (prefers-reduced-motion: reduce) {
   body.boot-awakening:not(.boot-ui-settled) .stage,
-  body.boot-awakening:not(.boot-ui-settled) .search-form,
-  body.boot-awakening:not(.boot-ui-settled) .dock {
+  body.boot-awakening:not(.boot-ui-settled) .search-form {
     opacity: 1;
     visibility: visible;
     transform: none;
+  }
+
+  body.boot-awakening:not(.boot-ui-settled) .dock {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%);
+  }
+
+  :is(body.layout-sidebar, html.layout-sidebar body).boot-awakening:not(.boot-ui-settled) .dock {
+    transform: translateY(-50%);
   }
 
   body.boot-awakening.boot-ui-settled .stage,

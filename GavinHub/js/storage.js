@@ -6,7 +6,7 @@ const SYNCED_STORAGE_KEYS = new Set([
   KEYS.shortcuts,
   KEYS.dock,
   KEYS.todos,
-  KEYS.countdowns,
+  KEYS.goals,
   KEYS.importantDates,
 ]);
 
@@ -338,11 +338,16 @@ export function loadWallpaperRotation() {
   } catch {
     /* fall through */
   }
-  return {
+  /* 首次无记录时写入，否则每次读到的 lastChange=now，日更/小时轮换永远不会到期 */
+  const initial = {
     interval: settings.wallpaperRotation || 'daily',
     lastChange: Date.now(),
     weekSourceIndex: settings.wallpaperRotationIndex || 0,
   };
+  try {
+    localStorage.setItem(ROTATION_KEY, JSON.stringify(initial));
+  } catch { /* ignore quota */ }
+  return initial;
 }
 
 export function saveWallpaperRotation(partial) {

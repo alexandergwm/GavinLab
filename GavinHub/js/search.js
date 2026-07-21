@@ -68,7 +68,18 @@ let modeLabelEl = null;
 let menuEl = null;
 let engineMenuOpen = false;
 let badgeIconGen = 0;
+let composingInput = false;
+/** compositionend 常早于确认键的 keydown；短窗内仍视为组字，避免 zh+Tab 误进知乎 */
+let compositionGuardUntil = 0;
 let searchQuote = { show: () => {}, hide: () => {}, hideImmediate: () => {} };
+
+/** 中文等 IME 组字中：Tab/Enter 不能当模式快捷键，否则拼音 zh/ai/gh 会被误切到知乎等。 */
+function isImeComposing(e) {
+  return composingInput
+    || e?.isComposing === true
+    || e?.keyCode === 229
+    || Date.now() < compositionGuardUntil;
+}
 
 const MODE_LABELS = {
   ai: 'AI搜索',
@@ -674,7 +685,7 @@ async function submitSearchFromInput({ altKey = false } = {}) {
 
   if (areSuggestionsVisible() && activeSuggestionIndex >= 0) {
     const item = suggestionItems[activeSuggestionIndex];
-    if (item && item.id !== 'translate') {
+    if (item) {
       hideSuggestions();
       await activateSuggestionItem(item, getSuggestionHandlers());
       return;
@@ -962,6 +973,15 @@ export function initSearch({ getSettings: settingsGetter, onSettingsChange: sett
     }, 120);
   });
 
+  inputEl.addEventListener('compositionstart', () => {
+    composingInput = true;
+    compositionGuardUntil = 0;
+  });
+  inputEl.addEventListener('compositionend', () => {
+    composingInput = false;
+    compositionGuardUntil = Date.now() + 80;
+  });
+
   inputEl.addEventListener('input', () => {
     updateModeLabel();
     if (inputEl.value.trim()) {
@@ -973,6 +993,8 @@ export function initSearch({ getSettings: settingsGetter, onSettingsChange: sett
   });
 
   inputEl.addEventListener('keydown', (e) => {
+    if (isImeComposing(e)) return;
+
     if (e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (tryModeCommandFromInput()) {
         e.preventDefault();
@@ -980,7 +1002,9 @@ export function initSearch({ getSettings: settingsGetter, onSettingsChange: sett
         return;
       }
       if (getSettings().searchMode !== 'normal' && !inputEl.value.trim()) {
+        e.preventDefault();
         setSearchMode('normal');
+        updateModeLabel();
         return;
       }
       return;
@@ -1053,6 +1077,7 @@ export function initSearch({ getSettings: settingsGetter, onSettingsChange: sett
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
+    if (composingInput) return;
     const query = inputEl.value.trim();
     if (!query) return;
     if (tryModeCommandFromInput()) {

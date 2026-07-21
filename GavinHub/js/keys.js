@@ -11,6 +11,7 @@ export const KEYS = {
   dock: 'startpage-dock',
   todos: 'startpage-todos',
   countdowns: 'startpage-countdowns',
+  goals: 'startpage-goals',
   importantDates: 'startpage-important-dates',
   rssSources: 'startpage-rss-sources',
   rssStats: 'startpage-rss-stats',

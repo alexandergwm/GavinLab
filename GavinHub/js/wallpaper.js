@@ -1128,29 +1128,36 @@ export async function applyWallpaperRotation(onSourceChange) {
     return null;
   }
 
-  let nextIndex = rotation.weekSourceIndex;
-  let source = normalizeSelectableWallpaperSource(loadSettings().wallpaperSource);
-
   if (rotation.interval === 'weekly') {
-    nextIndex = (rotation.weekSourceIndex + 1) % WEEKLY_ROTATION_SOURCES.length;
-    source = WEEKLY_ROTATION_SOURCES[nextIndex];
+    const nextIndex = (rotation.weekSourceIndex + 1) % WEEKLY_ROTATION_SOURCES.length;
+    const source = WEEKLY_ROTATION_SOURCES[nextIndex];
     saveSettings({ wallpaperSource: source, wallpaperRotationIndex: nextIndex });
+    saveWallpaperRotation({ lastChange: Date.now(), weekSourceIndex: nextIndex });
     if (typeof onSourceChange === 'function') onSourceChange(source);
+    return { type: 'source', source };
   }
 
-  saveWallpaperRotation({ lastChange: Date.now(), weekSourceIndex: nextIndex });
-  return source;
+  /* hourly / daily：同来源内换下一张（Bing 走历史索引），不要反复加载同一张今日图 */
+  saveWallpaperRotation({ lastChange: Date.now() });
+  const source = normalizeSelectableWallpaperSource(loadSettings().wallpaperSource);
+  return { type: 'next', source };
 }
 
 export function initWallpaperRotation(onRotate, { runImmediately = false } = {}) {
   const rotation = loadWallpaperRotation();
   if (!runImmediately && (!rotation.interval || rotation.interval === 'manual')) return null;
   const tick = async () => {
-    const source = await applyWallpaperRotation((nextSource) => {
+    const result = await applyWallpaperRotation((nextSource) => {
       const select = document.getElementById('wallpaper-source');
       if (select) select.value = nextSource;
     });
-    if (source) await onRotate(source);
+    if (!result) return;
+    if (result.type === 'next' && result.source === 'bing') {
+      await loadNextWallpaper();
+      await onRotate(result.source, { advanced: true });
+      return;
+    }
+    await onRotate(result.source, { advanced: false });
   };
 
   if (runImmediately) tick();

@@ -24,7 +24,11 @@ export function createSettingsStore() {
       return state;
     },
     reload() {
-      state = loadSettings();
+      const session = {};
+      for (const key of TAB_SESSION_KEYS) {
+        if (key in state) session[key] = state[key];
+      }
+      state = { ...loadSettings(), ...session };
       notify();
       return state;
     },

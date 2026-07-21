@@ -164,6 +164,13 @@ function openWeatherDialog() {
     renderWeatherModal(data);
   }
   dialog.showModal();
+  /* 打开时按 TTL 刷新，过期则拉新数据 */
+  void loadWeather().then((fresh) => {
+    if (!dialog?.open || !fresh) return;
+    renderWeatherBar(fresh);
+    renderWeatherSourceAttribution(fresh.location);
+    renderWeatherModal(fresh);
+  }).catch(() => {});
 }
 
 export async function initWeather() {

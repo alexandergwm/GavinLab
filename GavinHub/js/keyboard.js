@@ -30,6 +30,8 @@ export function initKeyboard({ getCurrentPage, onSwitchPage, focusSearch, handle
   });
 
   document.addEventListener('keydown', (e) => {
+    if (e.isComposing || e.keyCode === 229) return;
+
     if (e.key === 'Escape') {
       if (helpDialog?.open) {
         e.preventDefault();
@@ -45,13 +47,14 @@ export function initKeyboard({ getCurrentPage, onSwitchPage, focusSearch, handle
 
     if (e.ctrlKey || e.metaKey || e.altKey) return;
 
+    /* 输入框内不要劫持 ? /，否则搜不到问号 */
+    if (isTypingContext() || isBlockingDialogOpen()) return;
+
     if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
       e.preventDefault();
       showHelp();
       return;
     }
-
-    if (isTypingContext() || isBlockingDialogOpen()) return;
 
     if (e.key === '/' && !e.shiftKey) {
       e.preventDefault();

@@ -168,7 +168,7 @@ function getCurrentPosition() {
       return;
     }
     navigator.geolocation.getCurrentPosition(resolve, reject, {
-      enableHighAccuracy: true,
+      enableHighAccuracy: false,
       timeout: 6000,
       maximumAge: 300000,
     });
@@ -246,9 +246,14 @@ async function fetchForecast(location) {
 
 export async function loadWeather({ forceLocation = false } = {}) {
   if (!forceLocation) {
-    cachedWeather ||= readWeatherCache();
-    if (cachedWeather) return cachedWeather;
+    /* 每次按 TTL 读盘，避免内存缓存撑过期后整晚不更新 */
+    const fresh = readWeatherCache();
+    if (fresh) {
+      cachedWeather = fresh;
+      return fresh;
+    }
   }
+  cachedWeather = null;
   const location = await resolveLocation({ fresh: forceLocation });
   const data = await fetchForecast(location);
   cachedWeather = data;
@@ -257,7 +262,11 @@ export async function loadWeather({ forceLocation = false } = {}) {
 }
 
 export function getCachedWeather() {
-  cachedWeather ||= readWeatherCache();
+  const fresh = readWeatherCache();
+  if (fresh) {
+    cachedWeather = fresh;
+    return fresh;
+  }
   return cachedWeather;
 }
 

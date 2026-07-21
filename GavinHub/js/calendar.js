@@ -4,14 +4,14 @@ import { escapeHtml } from './util.js';
 import { KEYS } from './keys.js';
 import { readJson, writeJson } from './storage.js';
 import {
-  loadCountdowns,
-  addCountdown,
-  removeCountdown,
-  getCountdownLabel,
-  getAnniversaryLabel,
-  formatEventDate,
-  defaultDateInputValue,
-} from './countdowns.js';
+  loadGoals,
+  addGoal,
+  removeGoal,
+  updateGoal,
+  toggleGoalDone,
+  getGoalDeadlineLabel,
+  formatGoalDate,
+} from './goals.js';
 import {
   loadTodos,
   addTodo,
@@ -194,7 +194,7 @@ function bindMonthCells(container) {
           longPressTriggered = false;
           return;
         }
-        openTodoDetail(Number(todoEl.dataset.todoId), todoEl.dataset.todoInstance || null);
+        openTodoDetail(todoEl.dataset.todoId, todoEl.dataset.todoInstance || null);
         return;
       }
       if (longPressTriggered) {
@@ -312,62 +312,59 @@ function renderCalendar() {
   renderSidePanel();
 }
 
-function renderSidePanelList(items, kind, labelFn) {
-  if (!items.length) {
-    return `<p class="cal-side-empty">暂无${kind === 'countdown' ? '倒计时' : '纪念日'}</p>`;
-  }
-  return `<ul class="cal-side-list">
-    ${items.map((item) => `
-      <li class="cal-side-item cal-side-item--${kind}">
-        <div class="cal-side-item-main">
-          <span class="cal-side-item-name">${escapeHtml(item.name)}</span>
-          <span class="cal-side-item-date">${formatEventDate(item.date, kind)}</span>
-        </div>
-        <span class="cal-side-item-badge">${labelFn(item.date)}</span>
-        <button type="button" class="cal-side-item-delete" data-id="${item.id}" aria-label="删除">×</button>
-      </li>
-    `).join('')}
-  </ul>`;
-}
-
 function renderSidePanel() {
   const panel = document.getElementById('cal-side-panel');
   if (!panel) return;
 
-  const items = loadCountdowns();
-  const countdowns = items.filter((item) => item.kind === 'countdown');
-  const anniversaries = items.filter((item) => item.kind === 'anniversary');
+  const goals = loadGoals();
+  const active = goals.filter((g) => g.status !== 'done');
+  const done = goals.filter((g) => g.status === 'done');
+
+  const renderGoalItem = (goal) => `
+    <li class="cal-side-item cal-side-item--goal${goal.status === 'done' ? ' is-done' : ''}" data-id="${goal.id}">
+      <button type="button" class="cal-side-goal-check" data-id="${goal.id}" aria-label="${goal.status === 'done' ? '标为进行中' : '标为完成'}">
+        ${goal.status === 'done' ? '✓' : ''}
+      </button>
+      <div class="cal-side-item-main">
+        <span class="cal-side-item-name">${escapeHtml(goal.title)}</span>
+        <span class="cal-side-item-date">${goal.targetDate ? formatGoalDate(goal.targetDate) : '长期'}</span>
+        <div class="cal-side-goal-progress" aria-hidden="true">
+          <span class="cal-side-goal-progress-bar" style="width:${goal.progress}%"></span>
+        </div>
+      </div>
+      <span class="cal-side-item-badge">${goal.status === 'done' ? '已完成' : getGoalDeadlineLabel(goal.targetDate)}</span>
+      <button type="button" class="cal-side-item-delete" data-id="${goal.id}" aria-label="删除">×</button>
+    </li>
+  `;
 
   panel.innerHTML = `
     <section class="cal-side-section">
       <div class="cal-side-section-head">
-        <h3 class="cal-side-heading">倒计时</h3>
-        <button type="button" class="cal-side-add" data-kind="countdown" aria-label="添加倒计时">+</button>
+        <h3 class="cal-side-heading">长期目标</h3>
+        <button type="button" class="cal-side-add" data-kind="goal" aria-label="添加目标">+</button>
       </div>
-      ${renderSidePanelList(countdowns, 'countdown', getCountdownLabel)}
-      <form class="cal-side-form" data-kind="countdown" hidden>
-        <input type="text" class="cal-side-input" placeholder="事件名称" maxlength="40" required>
-        <input type="date" class="cal-side-date" value="${defaultDateInputValue('countdown')}" required>
+      ${active.length
+        ? `<ul class="cal-side-list">${active.map(renderGoalItem).join('')}</ul>`
+        : '<p class="cal-side-empty">还没有目标，加一个想长期推进的事</p>'}
+      <form class="cal-side-form" data-kind="goal" hidden>
+        <input type="text" class="cal-side-input" placeholder="例如：跑完一场马拉松" maxlength="60" required>
+        <label class="cal-side-field">
+          <span>目标日期（可选）</span>
+          <input type="date" class="cal-side-date" value="">
+        </label>
+        <label class="cal-side-field">
+          <span>当前进度 ${0}%</span>
+          <input type="range" class="cal-side-progress" min="0" max="100" step="5" value="0">
+        </label>
         <div class="cal-side-form-actions">
           <button type="button" class="cal-side-cancel">取消</button>
           <button type="submit" class="cal-side-submit">添加</button>
         </div>
       </form>
-    </section>
-    <section class="cal-side-section">
-      <div class="cal-side-section-head">
-        <h3 class="cal-side-heading">纪念日</h3>
-        <button type="button" class="cal-side-add" data-kind="anniversary" aria-label="添加纪念日">+</button>
-      </div>
-      ${renderSidePanelList(anniversaries, 'anniversary', getAnniversaryLabel)}
-      <form class="cal-side-form" data-kind="anniversary" hidden>
-        <input type="text" class="cal-side-input" placeholder="名称" maxlength="40" required>
-        <input type="date" class="cal-side-date" value="${defaultDateInputValue('anniversary')}" required>
-        <div class="cal-side-form-actions">
-          <button type="button" class="cal-side-cancel">取消</button>
-          <button type="submit" class="cal-side-submit">添加</button>
-        </div>
-      </form>
+      ${done.length ? `
+        <div class="cal-side-done-head">已完成 · ${done.length}</div>
+        <ul class="cal-side-list cal-side-list--done">${done.map(renderGoalItem).join('')}</ul>
+      ` : ''}
     </section>
   `;
 
@@ -377,24 +374,27 @@ function renderSidePanel() {
 function bindSidePanel(panel) {
   panel.querySelectorAll('.cal-side-add').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const kind = btn.dataset.kind;
-      panel.querySelectorAll('.cal-side-form').forEach((form) => {
-        form.hidden = form.dataset.kind !== kind ? true : !form.hidden;
-      });
-      const form = panel.querySelector(`.cal-side-form[data-kind="${kind}"]`);
-      if (form && !form.hidden) {
-        form.querySelector('.cal-side-input')?.focus();
-      }
+      const form = panel.querySelector('.cal-side-form[data-kind="goal"]');
+      if (!form) return;
+      form.hidden = !form.hidden;
+      if (!form.hidden) form.querySelector('.cal-side-input')?.focus();
     });
   });
 
   panel.querySelectorAll('.cal-side-form').forEach((form) => {
+    const progress = form.querySelector('.cal-side-progress');
+    const progressLabel = progress?.closest('.cal-side-field')?.querySelector('span');
+    progress?.addEventListener('input', () => {
+      if (progressLabel) progressLabel.textContent = `当前进度 ${progress.value}%`;
+    });
+
     form.addEventListener('submit', (e) => {
       e.preventDefault();
-      const name = form.querySelector('.cal-side-input')?.value.trim();
-      const date = form.querySelector('.cal-side-date')?.value;
-      if (!name || !date) return;
-      addCountdown({ name, date, kind: form.dataset.kind });
+      const title = form.querySelector('.cal-side-input')?.value.trim();
+      const targetDate = form.querySelector('.cal-side-date')?.value || '';
+      const progressValue = Number(form.querySelector('.cal-side-progress')?.value || 0);
+      if (!title) return;
+      addGoal({ title, targetDate, progress: progressValue });
       renderSidePanel();
     });
 
@@ -403,9 +403,31 @@ function bindSidePanel(panel) {
     });
   });
 
+  panel.querySelectorAll('.cal-side-goal-check').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      toggleGoalDone(btn.dataset.id);
+      renderSidePanel();
+    });
+  });
+
   panel.querySelectorAll('.cal-side-item-delete').forEach((btn) => {
     btn.addEventListener('click', () => {
-      removeCountdown(Number(btn.dataset.id));
+      removeGoal(btn.dataset.id);
+      renderSidePanel();
+    });
+  });
+
+  panel.querySelectorAll('.cal-side-item--goal .cal-side-item-main').forEach((main) => {
+    main.addEventListener('click', () => {
+      const item = main.closest('.cal-side-item--goal');
+      const id = item?.dataset.id;
+      if (id == null || id === '') return;
+      const goal = loadGoals().find((g) => String(g.id) === String(id));
+      if (!goal) return;
+      const next = window.prompt('更新进度 0–100', String(goal.progress));
+      if (next == null) return;
+      const progress = Math.max(0, Math.min(100, Number(next) || 0));
+      updateGoal(id, { progress, status: progress >= 100 ? 'done' : 'active' });
       renderSidePanel();
     });
   });
@@ -426,7 +448,8 @@ function toggleViewMode() {
   renderCalendar();
 }
 
-const COMPOSE_ROW_HEIGHT = 72;
+const COMPOSE_ROW_HEIGHT = 84;
+const MAX_WEEK_EVENT_ROWS = 8;
 
 function getColumnIndex(dateKey, weekStartKey) {
   const ws = parseDateKey(weekStartKey).getTime();
@@ -446,58 +469,125 @@ function countColumnEventRows(events, weekStartKey, dateKey) {
   return Math.max(...inCol.map((ev) => ev._row)) + 1;
 }
 
+function getComposeRowHeight(container) {
+  const raw = getComputedStyle(container).getPropertyValue('--event-row-height').trim();
+  const n = Number.parseFloat(raw);
+  return Number.isFinite(n) && n > 0 ? n : COMPOSE_ROW_HEIGHT;
+}
+
+function expandCalendarForCompose(container, eventRows, composeHeight) {
+  const rowHeight = getComposeRowHeight(container);
+  const header = container.querySelector('.week-day-header');
+  const headerH = Math.ceil(header?.getBoundingClientRect().height || 72);
+  const needed = headerH + eventRows * rowHeight + composeHeight + 32;
+  container.classList.add('has-compose-open');
+  container.style.setProperty('--compose-space', `${Math.ceil(composeHeight + 16)}px`);
+  container.style.minHeight = `${needed}px`;
+}
+
+function clearCalendarComposeExpansion(container) {
+  if (!container) return;
+  container.classList.remove('has-compose-open');
+  container.style.removeProperty('--compose-space');
+  container.style.minHeight = '';
+}
+
 function positionComposePanel(compose, container, dateKey, weekStartKey, events) {
   const layer = container.querySelector('.week-compose-layer');
   const colIndex = getColumnIndex(dateKey, weekStartKey);
   if (!layer || colIndex < 0) return;
 
-  layer.appendChild(compose);
-  const eventRows = countColumnEventRows(events, weekStartKey, dateKey);
-  const topPx = eventRows * COMPOSE_ROW_HEIGHT + 8;
-  const colPct = (colIndex / 7) * 100;
-  const widthPct = 100 / 7;
+  /* 层里只保留当前这一个新建框，避免残留叠影 */
+  layer.querySelectorAll('.week-day-compose').forEach((el) => {
+    if (el !== compose) {
+      el.hidden = true;
+      el.classList.remove('is-popover');
+      const home = container.querySelector(`.week-day-body[data-date="${el.dataset.dateKey}"]`);
+      if (home && !home.contains(el)) home.appendChild(el);
+    }
+  });
 
-  compose.style.top = `${topPx}px`;
-  compose.style.left = `calc(${colPct}% + 6px)`;
-  compose.style.width = `calc(${widthPct}% - 12px)`;
+  layer.appendChild(compose);
+  compose.classList.add('is-popover');
+  compose.hidden = false;
+  layer.setAttribute('aria-hidden', 'false');
+
+  const eventRows = Math.min(countColumnEventRows(events, weekStartKey, dateKey), MAX_WEEK_EVENT_ROWS);
+  const rowHeight = getComposeRowHeight(container);
+  const { colWidth } = getGridMetrics(layer);
+  const padL = parseFloat(getComputedStyle(layer).paddingLeft) || 0;
+  const gutter = 4;
+  /* 宽度锁在当日列内，禁止强制最小宽度撑出邻列 */
+  const widthPx = Math.max(88, colWidth - gutter * 2);
+  const leftPx = padL + colIndex * colWidth + gutter;
+  const topPx = eventRows * rowHeight + 8;
+
+  compose.style.left = `${leftPx}px`;
+  compose.style.width = `${widthPx}px`;
+  compose.style.minWidth = '0';
+  compose.style.maxWidth = `${widthPx}px`;
   compose.style.right = 'auto';
   compose.style.bottom = 'auto';
+  compose.style.top = `${topPx}px`;
+
+  const composeHeight = Math.max(compose.getBoundingClientRect().height || 168, 168);
+  /* 只向下撑开日历，绝不把面板上推盖住原有待办 */
+  expandCalendarForCompose(container, eventRows, composeHeight);
+  compose.style.top = `${topPx}px`;
 }
 
 function closeAllComposers(container) {
+  const layer = container.querySelector('.week-compose-layer');
   container.querySelectorAll('.week-day-compose').forEach((el) => {
     el.hidden = true;
+    el.classList.remove('is-popover');
     el.style.top = '';
     el.style.left = '';
     el.style.width = '';
+    el.style.minWidth = '';
+    el.style.maxWidth = '';
     el.style.right = '';
     el.style.bottom = '';
     const body = container.querySelector(`.week-day-body[data-date="${el.dataset.dateKey}"]`);
     if (body && !body.contains(el)) body.appendChild(el);
   });
+  /* 清空层内残留节点 */
+  if (layer) {
+    layer.querySelectorAll('.week-day-compose').forEach((el) => {
+      const body = container.querySelector(`.week-day-body[data-date="${el.dataset.dateKey}"]`);
+      if (body) body.appendChild(el);
+      else el.remove();
+    });
+    layer.setAttribute('aria-hidden', 'true');
+  }
   container.querySelectorAll('.week-day-body.is-composing').forEach((el) => {
     el.classList.remove('is-composing');
   });
+  clearCalendarComposeExpansion(container);
 }
 
 function openComposer(body, container, weekStartKey, events) {
   closeAllComposers(container);
   const dateKey = body.dataset.date;
   const compose = body.querySelector('.week-day-compose');
-  const input = body.querySelector('.week-day-input');
+  const input = compose?.querySelector('.week-day-input');
   if (!compose || !input) return;
   compose.dataset.dateKey = dateKey;
   body.classList.add('is-composing');
-  positionComposePanel(compose, container, dateKey, weekStartKey, events);
-  compose.hidden = false;
   input.value = '';
   const repeatWeekly = compose.querySelector('.week-compose-repeat');
   const repeatDaily = compose.querySelector('.week-compose-daily');
   if (repeatWeekly) repeatWeekly.checked = false;
   if (repeatDaily) repeatDaily.checked = false;
-  const firstColor = compose.querySelector('input[type="radio"]');
-  if (firstColor) firstColor.checked = true;
-  requestAnimationFrame(() => input.focus());
+  const dayDefault = TODO_CATEGORIES[parseDateKey(dateKey).getDay() % TODO_CATEGORIES.length].id;
+  const preferred = compose.querySelector(`input[type="radio"][value="${dayDefault}"]`)
+    || compose.querySelector('input[type="radio"]');
+  if (preferred) preferred.checked = true;
+
+  requestAnimationFrame(() => {
+    positionComposePanel(compose, container, dateKey, weekStartKey, events);
+    input.focus();
+  });
 }
 
 function submitComposer(dateKey, compose) {
@@ -521,9 +611,8 @@ function submitComposer(dateKey, compose) {
   }
 
   addTodo({ text, startDate: dateKey, category, recurrence, weekdays });
-  compose.hidden = true;
   const container = document.getElementById('week-calendar');
-  container?.querySelector(`.week-day-body[data-date="${dateKey}"]`)?.classList.remove('is-composing');
+  if (container) closeAllComposers(container);
   renderCalendar();
 }
 
@@ -539,10 +628,7 @@ function bindComposer(body, container, weekStartKey, events) {
     e.preventDefault();
     e.stopPropagation();
     if (compose?.hidden) openComposer(body, container, weekStartKey, events);
-    else {
-      compose.hidden = true;
-      body.classList.remove('is-composing');
-    }
+    else closeAllComposers(container);
   });
 
   compose?.querySelector('.week-compose-submit')?.addEventListener('click', (e) => {
@@ -554,20 +640,28 @@ function bindComposer(body, container, weekStartKey, events) {
   compose?.querySelector('.week-compose-cancel')?.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    compose.hidden = true;
-    body.classList.remove('is-composing');
+    closeAllComposers(container);
+  });
+
+  const repeatWeekly = compose?.querySelector('.week-compose-repeat');
+  const repeatDaily = compose?.querySelector('.week-compose-daily');
+  repeatWeekly?.addEventListener('change', () => {
+    if (repeatWeekly.checked && repeatDaily) repeatDaily.checked = false;
+  });
+  repeatDaily?.addEventListener('change', () => {
+    if (repeatDaily.checked && repeatWeekly) repeatWeekly.checked = false;
   });
 
   input?.addEventListener('keydown', (e) => {
     e.stopPropagation();
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Enter') {
       e.preventDefault();
       submitComposer(dateKey, compose);
     }
     if (e.key === 'Escape') {
       e.preventDefault();
-      compose.hidden = true;
-      body.classList.remove('is-composing');
+      closeAllComposers(container);
     }
   });
 
@@ -622,7 +716,8 @@ function initTodoDetailDialog() {
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    const id = Number(document.getElementById('todo-detail-id').value);
+    const id = document.getElementById('todo-detail-id').value;
+    if (!id) return;
     const instanceDate = document.getElementById('todo-detail-instance').value || null;
     const master = getTodoById(id);
     const text = document.getElementById('todo-detail-title').value.trim();
@@ -652,7 +747,7 @@ function initTodoDetailDialog() {
   });
 
   document.getElementById('todo-detail-delete')?.addEventListener('click', () => {
-    const id = Number(document.getElementById('todo-detail-id').value);
+    const id = document.getElementById('todo-detail-id').value;
     const instanceDate = document.getElementById('todo-detail-instance').value || null;
     if (!id) return;
     const master = getTodoById(id);
@@ -752,7 +847,21 @@ function bindMove(card, todo, gridEl, weekStartKey, masterId, instanceDate) {
   card.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
     if (e.target.closest('.cal-event-resize, .cal-event-close, .cal-event-done, input, button')) return;
-    if (todo._isRecurring) return;
+
+    /* 重复事项禁止拖拽，但仍可点击打开详情 */
+    if (todo._isRecurring) {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const onUp = (ev) => {
+        document.removeEventListener('mouseup', onUp);
+        if (Math.abs(ev.clientX - startX) > 4 || Math.abs(ev.clientY - startY) > 4) return;
+        if (ev.target.closest('.cal-event-resize, .cal-event-close, .cal-event-done, input, button')) return;
+        openTodoDetail(masterId, instanceDate);
+      };
+      document.addEventListener('mouseup', onUp);
+      return;
+    }
 
     e.preventDefault();
 
@@ -901,11 +1010,13 @@ function renderWeekCalendar() {
 
   const events = assignEventRows(getTodosInWeek(weekStartKey));
   const maxRow = events.reduce((m, e) => Math.max(m, e._row), -1);
-  const eventRows = Math.max(maxRow + 1, 1);
+  const hiddenCount = events.filter((e) => e._row >= MAX_WEEK_EVENT_ROWS).length;
+  const visibleEvents = events.filter((e) => e._row < MAX_WEEK_EVENT_ROWS);
+  const eventRows = Math.max(Math.min(maxRow + 1, MAX_WEEK_EVENT_ROWS), 1);
 
   container.style.setProperty('--event-rows', String(eventRows));
   container.classList.toggle('is-dense', eventRows > 4);
-  container.classList.toggle('is-very-dense', eventRows > 8);
+  container.classList.toggle('is-very-dense', eventRows > 6);
 
   const headerCells = days.map((d) => {
     const key = toDateKey(d);
@@ -929,26 +1040,28 @@ function renderWeekCalendar() {
           <input type="text" class="week-day-input" placeholder="输入待办内容" maxlength="120">
           <div class="week-day-compose-categories" role="radiogroup" aria-label="分类">
             ${TODO_CATEGORIES.map((c) => `
-              <label class="week-category-option week-category-option--${c.id}">
+              <label class="week-category-option week-category-option--${c.id}" title="${c.label}">
                 <input type="radio" name="todo-category-${key}" value="${c.id}" ${c.id === defaultCategory ? 'checked' : ''}>
                 <span class="week-category-dot"></span>
                 <span class="week-category-label">${c.label}</span>
               </label>
             `).join('')}
           </div>
-          <div class="week-day-compose-options">
-            <label class="week-compose-option">
-              <input type="checkbox" class="week-compose-repeat">
-              <span>每周重复</span>
-            </label>
-            <label class="week-compose-option">
-              <input type="checkbox" class="week-compose-daily">
-              <span>每天重复</span>
-            </label>
-          </div>
-          <div class="week-day-compose-actions">
-            <button type="button" class="week-compose-cancel">取消</button>
-            <button type="button" class="week-compose-submit">添加</button>
+          <div class="week-compose-footer">
+            <div class="week-day-compose-options">
+              <label class="week-compose-option">
+                <input type="checkbox" class="week-compose-repeat">
+                <span>每周</span>
+              </label>
+              <label class="week-compose-option">
+                <input type="checkbox" class="week-compose-daily">
+                <span>每天</span>
+              </label>
+            </div>
+            <div class="week-day-compose-actions">
+              <button type="button" class="week-compose-cancel">取消</button>
+              <button type="button" class="week-compose-submit">添加</button>
+            </div>
           </div>
         </div>
       </div>
@@ -965,21 +1078,22 @@ function renderWeekCalendar() {
       <div class="week-compose-layer" aria-hidden="true"></div>
       <div class="week-cal-events" id="week-events-grid"></div>
     </div>
+    ${hiddenCount ? `<p class="week-events-overflow">还有 ${hiddenCount} 项待办未显示</p>` : ''}
   `;
 
   const bodies = container.querySelectorAll('.week-day-body');
   bodies.forEach((body) => {
-    bindComposer(body, container, weekStartKey, events);
+    bindComposer(body, container, weekStartKey, visibleEvents);
 
     body.addEventListener('dblclick', (e) => {
       if (e.target.closest('.week-day-add, .week-day-compose')) return;
       e.preventDefault();
-      openComposer(body, container, weekStartKey, events);
+      openComposer(body, container, weekStartKey, visibleEvents);
     });
   });
 
   const gridEl = container.querySelector('#week-events-grid');
-  for (const todo of events) {
+  for (const todo of visibleEvents) {
     const card = createEventCard(todo, weekStartKey, gridEl);
     if (card) gridEl.appendChild(card);
   }
@@ -1067,7 +1181,23 @@ export function initCalendarApp() {
 
   document.getElementById('calendar-dialog')?.addEventListener('click', (e) => {
     const dialog = document.getElementById('calendar-dialog');
-    if (e.target === dialog) dialog.close();
+    if (e.target === dialog) {
+      dialog.close();
+      return;
+    }
+    const week = document.getElementById('week-calendar');
+    if (
+      week
+      && !e.target.closest('.week-day-compose, .week-day-add, .cal-event')
+      && week.querySelector('.week-day-body.is-composing')
+    ) {
+      closeAllComposers(week);
+    }
+  });
+
+  document.getElementById('calendar-dialog')?.addEventListener('close', () => {
+    const week = document.getElementById('week-calendar');
+    if (week) closeAllComposers(week);
   });
 }
 

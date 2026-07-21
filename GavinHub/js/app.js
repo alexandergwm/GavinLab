@@ -189,6 +189,15 @@ function initDialogCloseButtons() {
   }, { passive: true });
 }
 
+function refreshSyncedUi() {
+  refreshDock();
+  void import('./shortcut-ui.js').then((m) => m.refreshShortcutsUI?.()).catch(() => {});
+  void import('./calendar.js').then((m) => {
+    const dialog = document.getElementById('calendar-dialog');
+    if (dialog?.open) m.renderCalendar?.();
+  }).catch(() => {});
+}
+
 async function initCore() {
   const load = async (label, loader) => {
     try {
@@ -199,15 +208,12 @@ async function initCore() {
     }
   };
 
-  void load('sync module', () => import('./sync.js')).then(async (syncMod) => {
-    if (!syncMod?.pullSyncOnStartup) return;
+  /* 先拉同步，再渲染 Dock/快捷方式，避免用过期本地数据画完 UI */
+  const syncMod = await load('sync module', () => import('./sync.js'));
+  if (syncMod?.pullSyncOnStartup) {
     const { applied } = await syncMod.pullSyncOnStartup();
     if (applied) settingsStore.reload();
-    syncMod.initSyncListener?.(() => {
-      settingsStore.reload();
-      refreshDock();
-    });
-  });
+  }
 
   wallpaper = await load('wallpaper module', () => import('./wallpaper.js'));
   shortcuts = await load('shortcuts module', () => import('./shortcuts.js'));
@@ -230,26 +236,39 @@ async function initCore() {
   initContextMenu();
   preloadPageModule(tabPage, getPageContext());
 
+  syncMod?.initSyncListener?.(() => {
+    settingsStore.reload();
+    refreshSyncedUi();
+  });
+
   if (wallpaper) {
     wallpaper.initWallpaperInfo();
     document.getElementById('wallpaper-info-btn')?.addEventListener('click', () => {
       openWallpaperLibrary();
     });
     (async () => {
-      const rotatedSource = await wallpaper.applyWallpaperRotation((nextSource) => {
+      const rotated = await wallpaper.applyWallpaperRotation((nextSource) => {
         document.getElementById('wallpaper-source').value = nextSource;
       });
-      const initialSource = rotatedSource || wallpaper.getInitialWallpaperSource();
+      const initialSource = rotated?.source || wallpaper.getInitialWallpaperSource();
       try {
-        await wallpaper.loadWallpaper(initialSource);
+        if (rotated?.type === 'next' && initialSource === 'bing') {
+          await wallpaper.loadNextWallpaper();
+        } else if (rotated?.type === 'next') {
+          await wallpaper.loadWallpaper(initialSource, { force: true });
+        } else {
+          await wallpaper.loadWallpaper(initialSource);
+        }
       } catch {
         /* loadWallpaper handles fallback */
       }
       updateFavoriteUI();
     })();
     if (shortcuts) await switchPage(tabPage);
-    let rotationInterval = wallpaper.initWallpaperRotation(async (source) => {
-      await wallpaper.loadWallpaper(source, { force: true });
+    let rotationInterval = wallpaper.initWallpaperRotation(async (source, meta = {}) => {
+      if (!meta.advanced) {
+        await wallpaper.loadWallpaper(source, { force: true });
+      }
       updateFavoriteUI();
     });
 
@@ -262,8 +281,10 @@ async function initCore() {
         }
       } else if (!rotationInterval) {
         // 恢复时立即检查一次（函数内部已判断是否 due）
-        rotationInterval = wallpaper.initWallpaperRotation(async (source) => {
-          await wallpaper.loadWallpaper(source, { force: true });
+        rotationInterval = wallpaper.initWallpaperRotation(async (source, meta = {}) => {
+          if (!meta.advanced) {
+            await wallpaper.loadWallpaper(source, { force: true });
+          }
           updateFavoriteUI();
         }, { runImmediately: true });
       }

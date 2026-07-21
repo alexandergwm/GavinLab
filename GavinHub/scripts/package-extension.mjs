@@ -152,6 +152,17 @@ function main() {
   console.log('  1. edge://extensions → 开发人员模式 → 加载解压缩的扩展');
   console.log(`  2. Select: ${distDir}`);
   console.log('  Or unzip gavinhub-edge.zip and load that folder.');
+
+  // 同步一份到仓库根 dist，避免还在加载旧路径 StartPage/dist
+  const parentDist = join(root, '..', 'dist');
+  try {
+    rmSync(parentDist, { recursive: true, force: true });
+    mkdirSync(parentDist, { recursive: true });
+    cpSync(join(root, 'dist'), parentDist, { recursive: true });
+    console.log(`  Also mirrored to: ${parentDist}/gavinhub-edge`);
+  } catch (err) {
+    console.warn(`  (skip parent dist mirror: ${err.message})`);
+  }
 }
 
 main();

@@ -6,6 +6,16 @@ dialog:modal {
   height: fit-content;
 }
 
+/* 日历对话框：覆盖上方 fit-content，占满可视区域并保持毛玻璃 */
+dialog.calendar-dialog:modal {
+  width: min(1480px, calc(100vw - 28px));
+  height: min(900px, calc(100vh - 28px));
+  max-height: calc(100vh - 28px);
+  background: var(--glass-panel-bg);
+  display: flex;
+  flex-direction: column;
+}
+
 /* 设置对话框 — 继承 modal-dialog 毛玻璃 */
 .settings-dialog {
   max-width: 380px;
@@ -384,10 +394,27 @@ dialog:modal {
   line-height: 1;
 }
 
-/* 日历 — 周 / 月视图 */
+/* 日历 — 周 / 月视图：尽量占满可视区域，少留四周空白
+   仅 [open] 时 flex；否则会盖掉 UA 的 display:none，关闭后整块留在壁纸上 */
 .calendar-dialog {
-  width: min(1120px, calc(100vw - 24px));
-  background: transparent;
+  width: min(1480px, calc(100vw - 28px));
+  height: min(900px, calc(100vh - 28px));
+  max-height: calc(100vh - 28px);
+  flex-direction: column;
+}
+
+.calendar-dialog[open] {
+  display: flex;
+}
+
+.calendar-dialog .cal-toolbar {
+  flex-shrink: 0;
+}
+
+.calendar-dialog .calendar-body {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
 }
 
 .cal-toolbar {
@@ -405,15 +432,15 @@ dialog:modal {
 }
 
 .cal-month-title {
-  font-size: 20px;
+  font-size: 26px;
   font-weight: 700;
   color: #222;
   line-height: 1.2;
 }
 
 .cal-lunar-info {
-  margin-top: 4px;
-  font-size: 12px;
+  margin-top: 6px;
+  font-size: 13px;
   color: #999;
 }
 
@@ -478,14 +505,23 @@ dialog:modal {
 .calendar-main {
   flex: 1;
   min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.calendar-main .week-calendar,
+.calendar-main .month-calendar {
+  flex: 1;
+  min-height: 0;
 }
 
 .cal-side-panel {
-  width: 220px;
+  width: min(300px, 28vw);
   flex-shrink: 0;
   border-left: 1px solid #ebebeb;
   background: #fafafa;
-  padding: 12px 10px;
+  padding: 16px 14px;
   overflow-y: auto;
 }
 
@@ -558,6 +594,94 @@ dialog:modal {
 
 .cal-side-item--anniversary {
   border-left: 3px solid #e85d8f;
+}
+
+.cal-side-item--goal {
+  grid-template-columns: auto 1fr auto;
+  border-left: 3px solid #5b8def;
+  align-items: center;
+  cursor: default;
+  padding-right: 26px;
+}
+
+.cal-side-item--goal .cal-side-item-main {
+  grid-column: 2;
+  cursor: pointer;
+}
+
+.cal-side-item--goal .cal-side-item-badge {
+  grid-column: 3;
+  grid-row: 1;
+  color: #5b8def;
+}
+
+.cal-side-item--goal.is-done {
+  opacity: 0.62;
+}
+
+.cal-side-item--goal.is-done .cal-side-item-name {
+  text-decoration: line-through;
+}
+
+.cal-side-goal-check {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, #5b8def 55%, #ccc);
+  background: transparent;
+  color: #5b8def;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.cal-side-item--goal.is-done .cal-side-goal-check {
+  background: color-mix(in srgb, #5b8def 22%, transparent);
+  border-color: #5b8def;
+}
+
+.cal-side-goal-progress {
+  margin-top: 6px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+.cal-side-goal-progress-bar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #6ea0f5, #5b8def);
+}
+
+.cal-side-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: #888;
+}
+
+.cal-side-field input[type='date'],
+.cal-side-field input[type='range'] {
+  width: 100%;
+}
+
+.cal-side-done-head {
+  margin: 14px 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #999;
+}
+
+.cal-side-list--done {
+  opacity: 0.85;
 }
 
 .cal-side-item-main {
@@ -671,6 +795,11 @@ dialog:modal {
 }
 
 @media (max-width: 720px) {
+  .calendar-dialog {
+    width: calc(100vw - 16px);
+    height: calc(100vh - 16px);
+  }
+
   .calendar-body {
     flex-direction: column;
   }
@@ -679,26 +808,43 @@ dialog:modal {
     width: 100%;
     border-left: none;
     border-top: 1px solid #ebebeb;
-    max-height: 200px;
+    max-height: min(280px, 36vh);
   }
 }
 
 .week-calendar {
   position: relative;
   --cal-col-gap: 0px;
-  --cal-event-inset: 3px;
-  --cal-edge-inset: 3px;
-  --event-row-height: 72px;
+  --cal-event-inset: 4px;
+  --cal-edge-inset: 4px;
+  --event-row-height: 84px;
   --event-area-rows: var(--event-rows, 1);
-  min-height: calc(var(--event-area-rows) * var(--event-row-height) + 120px);
+  --compose-space: 0px;
+  min-height: calc(var(--event-area-rows) * var(--event-row-height) + 160px + var(--compose-space));
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.week-calendar.has-compose-open {
+  min-height: calc(var(--event-area-rows) * var(--event-row-height) + var(--compose-space) + 48px);
+}
+
+.week-calendar.has-compose-open .week-day-body {
+  min-height: calc(var(--event-area-rows) * var(--event-row-height) + var(--compose-space) + 16px);
+}
+
+.calendar-main .week-calendar.has-compose-open {
+  min-height: calc(var(--event-area-rows) * var(--event-row-height) + var(--compose-space) + 96px);
 }
 
 .week-calendar.is-dense {
-  --event-row-height: 52px;
+  --event-row-height: 60px;
 }
 
 .week-calendar.is-very-dense {
-  --event-row-height: 40px;
+  --event-row-height: 48px;
 }
 
 .week-cal-grid {
@@ -709,13 +855,16 @@ dialog:modal {
   column-gap: var(--cal-col-gap);
   padding-inline: var(--cal-edge-inset);
   background: #fff;
+  flex: 1;
+  height: auto;
+  min-height: 0;
 }
 
 .week-day-header {
   grid-row: 1;
   position: relative;
   z-index: 5;
-  padding: 10px 8px 8px;
+  padding: 14px 10px 12px;
   text-align: center;
   border-right: 1px solid #f0f0f0;
   border-bottom: 1px solid #ebebeb;
@@ -736,7 +885,8 @@ dialog:modal {
   min-height: calc(var(--event-area-rows) * var(--event-row-height) + 48px);
   background: #fff;
   transition: background 0.15s;
-  pointer-events: none;
+  /* 需可点：空白处双击新建；事件层更高 z-index 仍优先接收卡片交互 */
+  pointer-events: auto;
 }
 
 .week-day-body.drop-target {
@@ -749,18 +899,18 @@ dialog:modal {
 
 .week-day-label {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   color: #999;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .week-day-num {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 28px;
-  height: 28px;
-  font-size: 14px;
+  min-width: 34px;
+  height: 34px;
+  font-size: 16px;
   font-weight: 500;
   color: #333;
   border-radius: 50%;
@@ -812,11 +962,37 @@ dialog:modal {
   position: absolute;
   z-index: 6;
   pointer-events: auto;
-  padding: 10px;
+  padding: 8px;
   background: #fff;
   border: 1px solid #e8e8e8;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+  box-sizing: border-box;
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.week-day-compose[hidden] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+.week-day-compose.is-popover {
+  z-index: 30;
+  padding: 8px;
+  border-radius: 12px;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 16px 40px rgba(0, 0, 0, 0.28);
+}
+
+.week-events-overflow {
+  margin: 0;
+  padding: 8px 12px 10px;
+  font-size: 12px;
+  color: #888;
+  flex-shrink: 0;
 }
 
 .week-compose-layer {
@@ -828,6 +1004,8 @@ dialog:modal {
   z-index: 20;
   padding: 0 var(--cal-edge-inset) 12px;
   box-sizing: border-box;
+  overflow: visible;
+  background: transparent;
 }
 
 .week-compose-layer .week-day-compose {
@@ -838,7 +1016,7 @@ dialog:modal {
   width: 100%;
   box-sizing: border-box;
   border: 1px solid #e0e0e0;
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 8px 10px;
   font-size: 13px;
   outline: none;
@@ -851,26 +1029,30 @@ dialog:modal {
 
 .week-day-compose-categories {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px 8px;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
   margin: 8px 0;
 }
 
 .week-category-option {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  gap: 0;
   cursor: pointer;
-  font-size: 11px;
-  color: #666;
-  padding: 2px 4px;
-  border-radius: 4px;
-  transition: background 0.15s;
+  font-size: 0;
+  color: transparent;
+  padding: 3px;
+  border-radius: 999px;
+  transition: background 0.15s, transform 0.15s;
 }
 
 .week-category-option:has(input:checked) {
-  background: rgba(0, 0, 0, 0.05);
-  color: #333;
+  background: rgba(0, 0, 0, 0.06);
+  color: transparent;
+  transform: scale(1.06);
 }
 
 .week-category-option input {
@@ -881,8 +1063,8 @@ dialog:modal {
 
 .week-category-dot {
   display: block;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   border: 2px solid transparent;
   flex-shrink: 0;
@@ -898,58 +1080,32 @@ dialog:modal {
 .week-category-option--study .week-category-dot { background: #fff5d6; }
 
 .week-category-label {
-  line-height: 1;
+  display: none;
 }
 
-.week-day-compose-colors {
+.week-compose-footer {
   display: flex;
-  gap: 6px;
-  margin: 8px 0;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
 }
-
-.week-color-dot {
-  display: inline-flex;
-  cursor: pointer;
-}
-
-.week-color-dot input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.week-color-dot::before {
-  content: '';
-  display: block;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 2px solid transparent;
-}
-
-.week-color-dot:has(input:checked)::before {
-  border-color: #333;
-}
-
-.week-color-dot--green::before { background: #dff6e6; }
-.week-color-dot--pink::before { background: #fde8ef; }
-.week-color-dot--blue::before { background: #e4f0ff; }
-.week-color-dot--yellow::before { background: #fff5d6; }
 
 .week-day-compose-options {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 14px;
-  margin-top: 8px;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0;
 }
 
 .week-compose-option {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 12px;
+  gap: 4px;
+  font-size: 11px;
   color: #666;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .week-compose-option input {
@@ -958,17 +1114,24 @@ dialog:modal {
 
 .week-day-compose-actions {
   display: flex;
-  justify-content: flex-end;
   gap: 6px;
+  margin: 0;
+  width: 100%;
 }
 
 .week-compose-cancel,
 .week-compose-submit {
+  flex: 1 1 0;
   border: none;
   border-radius: 6px;
-  padding: 5px 10px;
+  padding: 6px 4px;
   font-size: 12px;
   cursor: pointer;
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .week-compose-cancel {
@@ -2244,6 +2407,42 @@ dialog:modal {
   color: #ff8fab;
 }
 
+.modal-dialog .cal-side-item--goal {
+  border-left-color: #8eb4ff;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.modal-dialog .cal-side-item--goal .cal-side-item-badge {
+  color: #a8c4ff;
+}
+
+.modal-dialog .cal-side-goal-check {
+  border-color: rgba(174, 196, 255, 0.55);
+  color: #a8c4ff;
+}
+
+.modal-dialog .cal-side-item--goal.is-done .cal-side-goal-check {
+  background: rgba(139, 170, 255, 0.22);
+  border-color: #8eb4ff;
+}
+
+.modal-dialog .cal-side-goal-progress {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.modal-dialog .cal-side-field {
+  color: var(--glass-panel-text-muted);
+}
+
+.modal-dialog .cal-side-done-head {
+  color: var(--glass-panel-text-muted);
+}
+
+.modal-dialog .week-events-overflow {
+  color: var(--glass-panel-text-muted);
+}
+
 .modal-dialog .cal-side-item-delete {
   color: var(--glass-panel-text-muted);
 }
@@ -2313,11 +2512,17 @@ dialog:modal {
 }
 
 .modal-dialog .week-day-compose {
-  background: var(--glass-panel-bg);
-  backdrop-filter: var(--glass-panel-blur);
-  -webkit-backdrop-filter: var(--glass-panel-blur);
-  border-color: var(--glass-panel-border);
-  box-shadow: var(--glass-panel-shadow);
+  background: rgba(22, 26, 38, 0.94);
+  border-color: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 18px 48px rgba(0, 0, 0, 0.42);
+}
+
+.modal-dialog .week-day-compose.is-popover {
+  background: rgba(22, 26, 38, 0.96);
 }
 
 .modal-dialog .week-day-input {
@@ -2633,10 +2838,10 @@ dialog:modal {
 }
 
 .modal-dialog .week-day-compose {
-  background: rgba(20, 24, 36, 0.72);
-  border-color: var(--glass-panel-border);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(22, 26, 38, 0.96);
+  border-color: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
 }
 
 .modal-dialog .week-day-input {
@@ -2667,6 +2872,10 @@ dialog:modal {
 
 .modal-dialog .week-compose-submit:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+.modal-dialog .week-compose-footer {
+  gap: 8px;
 }
 
 .modal-dialog .todo-detail-title {

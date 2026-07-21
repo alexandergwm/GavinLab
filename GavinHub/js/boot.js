@@ -49,12 +49,12 @@ function watchBootGlassStable() {
     };
     const onAnim = (e) => {
       if (e.target !== dock) return;
-      if (e.animationName === 'boot-awaken-dock') {
+      if (e.animationName === 'boot-awaken-dock' || e.animationName === 'boot-awaken-dock-sidebar') {
         finish();
       }
     };
     dock?.addEventListener('animationend', onAnim);
-    window.setTimeout(finish, 1200);
+    window.setTimeout(finish, 800);
   });
 }
 

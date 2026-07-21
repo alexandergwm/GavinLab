@@ -36,20 +36,30 @@ export function saveGithubSyncConfig({ token, gistId } = {}) {
 function readConfigFromForm(config = loadGithubSyncConfig()) {
   const token = config.token?.trim();
   if (!token) throw new Error('no-token');
+  if (!/^(ghp_|github_pat_|gho_|ghu_|ghs_)/.test(token)) {
+    throw new Error('bad-token-format');
+  }
   return { token, gistId: config.gistId?.trim() || '' };
 }
 
 async function githubRequest(path, { token, method = 'GET', body } = {}) {
-  const res = await fetch(`${GITHUB_API}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(`${GITHUB_API}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (err) {
+    const networkErr = new Error(err?.message || 'network-error');
+    networkErr.code = 'network';
+    throw networkErr;
+  }
 
   if (!res.ok) {
     let message = `GitHub API ${res.status}`;
@@ -160,9 +170,19 @@ export function formatGithubSyncResult(result) {
 
 export function formatGithubSyncError(err) {
   if (err?.message === 'no-token') return '请先填写 GitHub Token';
+  if (err?.message === 'bad-token-format') {
+    return 'Token 格式不对，请用 classic 的 ghp_…，或 fine-grained 的 github_pat_…';
+  }
   if (err?.message === 'no-gist') return '请先填写 Gist ID，或点「保存并同步」自动创建';
   if (err?.message === 'gist-empty') return 'Gist 中找不到同步文件';
-  if (err?.status === 401) return 'Token 无效或已过期';
-  if (err?.status === 403) return 'Token 权限不足，需要 gist 权限';
+  if (err?.code === 'network' || /Failed to fetch|NetworkError/i.test(err?.message || '')) {
+    return '无法连接 GitHub，请检查网络或代理后重试';
+  }
+  if (err?.status === 401) return 'Token 无效或已过期，请重新创建并勾选 gist 权限';
+  if (err?.status === 403) {
+    return 'Token 权限不足：classic 需勾选 gist；fine-grained 需允许 Gists 读写';
+  }
+  if (err?.status === 404) return 'Gist 不存在或 Token 无权访问，将尝试新建';
+  if (err?.status === 422) return 'Gist 内容可能过大或格式无效，请精简待办后重试';
   return err?.message || 'GitHub 同步失败';
 }

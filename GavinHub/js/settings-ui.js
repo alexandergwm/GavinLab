@@ -219,11 +219,15 @@ export function initSettingsUI(api) {
   inited = true;
 
   const dialog = document.getElementById('settings-dialog');
+  const form = document.getElementById('settings-form');
   const btn = document.getElementById('settings-btn');
   const engineSelect = document.getElementById('search-engine');
   const wallpaperSelect = document.getElementById('wallpaper-source');
   const rotationSelect = document.getElementById('wallpaper-rotation');
   const greetingCheckbox = document.getElementById('show-greeting');
+
+  /* 禁止 Enter 提交表单误关设置（GitHub token 等输入框） */
+  form?.addEventListener('submit', (e) => e.preventDefault());
 
   const syncForm = () => {
     const settings = api.getSettings();
