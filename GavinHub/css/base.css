@@ -16,7 +16,7 @@
   --glass-search-bg-hover: rgba(255, 255, 255, 0.16);
   --glass-search-bg-focus: rgba(255, 255, 255, 0.3);
   --glass-search-blur: blur(22px) saturate(150%);
-  --glass-search-blur-focus: blur(32px) saturate(185%);
+  --glass-search-blur-focus: var(--glass-search-blur);
   --glass-search-border: rgba(255, 255, 255, 0.1);
   --glass-search-border-hover: rgba(255, 255, 255, 0.18);
   --glass-search-border-focus: rgba(255, 255, 255, 0.3);
@@ -71,7 +71,7 @@
   --transition-theme: 0.28s cubic-bezier(0.4, 0, 0.2, 1); /* 文字主题颜色渐变 */
   --transition-wallpaper: 0.45s cubic-bezier(0.4, 0, 0.2, 1); /* 壁纸滤镜/缩放 */
   --transition-page: 0.32s cubic-bezier(0.4, 0, 0.2, 1); /* 页面/毛玻璃切换 — 更平滑的跨页过渡 */
-  --transition-search-focus: 0.96s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-search-focus: 0.72s cubic-bezier(0.16, 1, 0.3, 1);
   --dock-height: 68px;
   --dock-bottom: 24px;
   --dock-clearance: calc(var(--dock-height) + var(--dock-bottom) + 28px);
@@ -80,12 +80,12 @@
   --icon-shadow-hover: 0 6px 20px rgba(0, 0, 0, 0.15);
   --dock-icon-radius: var(--icon-squircle-radius);
   --stage-top: 13vh;
-  --boot-wallpaper-duration: 1s;
-  --boot-ui-duration: 0.55s;
-  --boot-vignette-duration: 0.9s;
+  --boot-wallpaper-duration: 0.82s;
+  --boot-ui-duration: 0.54s;
+  --boot-vignette-duration: 0.78s;
   --boot-ui-delay-stage: 0s;
-  --boot-ui-delay-search: 0s;
-  --boot-ui-delay-dock: 0s;
+  --boot-ui-delay-search: 0.035s;
+  --boot-ui-delay-dock: 0.07s;
   --boot-vignette-delay: 0s;
   --boot-reveal-ease: cubic-bezier(0.25, 0.8, 0.25, 1);
   --search-form-top: calc(
@@ -143,6 +143,7 @@ body {
 
 html {
   background: #323232; /* 对齐青柠：壁纸淡入前的中性底，避免纯黑→图硬切 */
+  view-transition-name: none;
 }
 
 body {
@@ -184,16 +185,49 @@ body {
   height: 100%;
   object-fit: cover;
   object-position: center;
+  view-transition-name: gavinhub-wallpaper;
   opacity: 0;
   backface-visibility: hidden;
   transition:
-    filter var(--transition-search-focus),
     opacity var(--boot-wallpaper-duration) var(--boot-reveal-ease),
     transform var(--transition-search-focus);
 }
 
+::view-transition-group(gavinhub-wallpaper) {
+  animation-duration: 0.58s;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+::view-transition-old(gavinhub-wallpaper) {
+  animation: gavinhub-wallpaper-out 0.58s ease both;
+}
+
+::view-transition-new(gavinhub-wallpaper) {
+  animation: gavinhub-wallpaper-in 0.58s ease both;
+}
+
+@keyframes gavinhub-wallpaper-out {
+  to { opacity: 0; }
+}
+
+@keyframes gavinhub-wallpaper-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .wallpaper-img.wallpaper-show {
   opacity: 1;
+}
+
+body.boot-awakening .wallpaper-img {
+  transform: scale(1.012);
+  transition:
+    opacity var(--boot-wallpaper-duration) var(--boot-reveal-ease),
+    transform 1.05s var(--boot-reveal-ease);
+}
+
+body.boot-awakening .wallpaper-img.wallpaper-show {
+  transform: scale(1);
 }
 
 .wallpaper-img.wallpaper-instant {
@@ -301,21 +335,17 @@ body.search-focused:not(.page-blur-active) .scene-vignette {
   inset: 0;
   z-index: 1;
   background: rgba(8, 10, 18, 0.08);
-  backdrop-filter: blur(0) saturate(100%);
-  -webkit-backdrop-filter: blur(0) saturate(100%);
+  backdrop-filter: blur(5px) saturate(108%);
+  -webkit-backdrop-filter: blur(5px) saturate(108%);
   opacity: 0;
   visibility: hidden;
   transition:
     opacity var(--transition-search-focus),
-    backdrop-filter var(--transition-search-focus),
-    -webkit-backdrop-filter var(--transition-search-focus),
     visibility var(--transition-search-focus);
   pointer-events: none;
 }
 
 body.search-focused .search-focus-overlay {
-  backdrop-filter: blur(5px) saturate(108%);
-  -webkit-backdrop-filter: blur(5px) saturate(108%);
   opacity: 1;
   visibility: visible;
 }
@@ -328,6 +358,7 @@ body.boot-awakening:not(.boot-ui-settled) .stage {
 
 body.boot-awakening:not(.boot-ui-settled) .search-form,
 body.boot-awakening:not(.boot-ui-settled) .dock {
+  opacity: 0;
   visibility: hidden;
   pointer-events: none;
 }
@@ -343,8 +374,10 @@ body.boot-awakening:not(.boot-ui-settled) .dock {
 
 body.boot-awakening.boot-ui-settled .search-form,
 body.boot-awakening.boot-ui-settled .dock {
+  opacity: 1;
   visibility: visible;
   pointer-events: auto;
+  will-change: opacity, transform;
 }
 
 body.boot-awakening .search-form,
@@ -359,18 +392,10 @@ body.boot-awakening .search-box:focus-within .search-submit {
   transition: none !important;
 }
 
-/* 启动动画期间减弱毛玻璃算力，减少掉帧；稳定后再用完整 blur */
-body.boot-awakening:not(.boot-glass-stable) .dock {
-  backdrop-filter: blur(12px) saturate(130%) !important;
-  -webkit-backdrop-filter: blur(12px) saturate(130%) !important;
-}
-
-body.boot-awakening:not(.boot-glass-stable) .search-box,
+/* 启动期保持 idle 材质，避免 focus 状态抢在 UI 苏醒前出现。 */
 body.boot-awakening:not(.boot-glass-stable) .search-box.focused {
   background: var(--glass-search-bg);
   border-color: var(--glass-search-border);
-  backdrop-filter: blur(10px) saturate(130%) !important;
-  -webkit-backdrop-filter: blur(10px) saturate(130%) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.14),
     0 6px 20px rgba(0, 0, 0, 0.08);
@@ -402,27 +427,33 @@ body.boot-awakening.boot-ui-settled .dock {
 
 @keyframes boot-awaken-ui-move {
   from {
+    opacity: 0;
     transform: translate3d(0, 5px, 0);
   }
   to {
+    opacity: 1;
     transform: translate3d(0, 0, 0);
   }
 }
 
 @keyframes boot-awaken-dock {
   from {
+    opacity: 0;
     transform: translateX(-50%) translate3d(0, 5px, 0);
   }
   to {
+    opacity: 1;
     transform: translateX(-50%) translate3d(0, 0, 0);
   }
 }
 
 @keyframes boot-awaken-dock-sidebar {
   from {
+    opacity: 0;
     transform: translateY(-50%) translate3d(0, 5px, 0);
   }
   to {
+    opacity: 1;
     transform: translateY(-50%) translate3d(0, 0, 0);
   }
 }
@@ -465,8 +496,7 @@ body.boot-awakening.boot-ui-settled .dock {
 }
 
 body.search-focused:not(.page-blur-active) .wallpaper-img {
-  filter: blur(3px) brightness(0.96);
-  transform: scale(1.032);
+  transform: scale(1.012);
 }
 
 body.search-focused .clock-trigger,
@@ -603,10 +633,23 @@ body[data-text-tone='dark'] .weather-icon {
 
 .weather-icon {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15em;
   vertical-align: -0.2em;
   margin-right: 3px;
   color: inherit;
   filter: none;
+}
+
+#weather-summary {
+  display: inline-block;
+  width: 8.5em;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
 }
 
 .panel-stack {

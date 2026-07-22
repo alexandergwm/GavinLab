@@ -61,9 +61,15 @@ page.on('request', (request) => {
 });
 await page.addInitScript(() => {
   window.__longTasks = [];
+  window.__layoutShifts = [];
   new PerformanceObserver((list) => {
     window.__longTasks.push(...list.getEntries().map((entry) => entry.duration));
   }).observe({ type: 'longtask', buffered: true });
+  new PerformanceObserver((list) => {
+    window.__layoutShifts.push(...list.getEntries()
+      .filter((entry) => !entry.hadRecentInput)
+      .map((entry) => entry.value));
+  }).observe({ type: 'layout-shift', buffered: true });
   Object.defineProperty(navigator, 'connection', {
     configurable: true,
     value: { saveData: true },
@@ -86,12 +92,15 @@ try {
       localResources: resources.filter((entry) => entry.name.startsWith(location.origin)).length,
       longTasks: window.__longTasks.length,
       maxLongTaskMs: Math.round(Math.max(0, ...window.__longTasks)),
+      cumulativeLayoutShift: Number(window.__layoutShifts.reduce((sum, value) => sum + value, 0).toFixed(4)),
     };
   });
 
   assert(await page.locator('#clock').isVisible(), 'clock should be visible');
   assert(await page.locator('#search-input').isVisible(), 'search should be visible');
   assert(await page.locator('#dock').isVisible(), 'dock should be visible');
+  assert(baseline.cumulativeLayoutShift <= 0.01,
+    `initial UI should not shift while becoming interactive: ${JSON.stringify(baseline)}`);
 
   const syncSafety = await page.evaluate(async () => {
     localStorage.setItem('startpage-sync-local-at', '100');
@@ -162,6 +171,14 @@ try {
     suggestionState.hidden === false && suggestionState.text.includes('7'),
     `calculator suggestion should render: ${JSON.stringify(suggestionState)} errors=${errors.join(' | ')}`,
   );
+  await page.evaluate(() => {
+    const input = document.getElementById('search-input');
+    input.blur();
+    input.focus({ preventScroll: true });
+  });
+  await page.waitForTimeout(180);
+  assert(!(await page.locator('#search-suggestions').evaluate((el) => el.hidden)),
+    'rapid blur/refocus must not let stale cleanup hide current suggestions');
   await search.fill('a');
   await search.fill('ab');
   await search.fill('abc');
@@ -193,15 +210,27 @@ try {
       const dock = document.getElementById('dock');
       if (dock) {
         const rect = dock.getBoundingClientRect();
-        const matrix = new DOMMatrixReadOnly(getComputedStyle(dock).transform);
-        if (rect.width > 0 && getComputedStyle(dock).visibility !== 'hidden') {
+        const dockStyle = getComputedStyle(dock);
+        const matrix = new DOMMatrixReadOnly(dockStyle.transform);
+        if (rect.width > 0) {
+          const searchStyle = getComputedStyle(document.getElementById('search-form'));
+          const stageStyle = getComputedStyle(document.querySelector('.stage'));
           window.__dockFrames.push({
+            time: performance.now() - startedAt,
             left: rect.left,
             right: rect.right,
             center: rect.left + rect.width / 2,
             viewport: innerWidth,
             sidebar: document.documentElement.classList.contains('layout-sidebar'),
             skew: Math.abs(matrix.b) + Math.abs(matrix.c),
+            dockOpacity: Number(dockStyle.opacity),
+            searchOpacity: Number(searchStyle.opacity),
+            stageOpacity: Number(stageStyle.opacity),
+            blankDockIcons: [...dock.querySelectorAll('.dock-item .shortcut-icon')].filter((icon) => {
+              if (icon.querySelector('.shortcut-icon-letter')) return false;
+              const img = icon.querySelector('img');
+              return !img || !img.complete || img.naturalWidth === 0;
+            }).length,
           });
         }
       }
@@ -214,6 +243,10 @@ try {
     timeout: 8000,
   });
   await page.waitForSelector('#search-engine-badge[aria-label]', { timeout: 8000 });
+  await page.waitForFunction(() => document.body.classList.contains('boot-glass-stable'), null, {
+    timeout: 8000,
+  });
+  await page.waitForTimeout(850);
   const freshTabSearch = await page.evaluate(() => {
     const settings = JSON.parse(localStorage.getItem('startpage-settings') || '{}');
     const label = document.querySelector('#search-engine-badge')?.getAttribute('aria-label');
@@ -234,6 +267,38 @@ try {
         && Math.abs(frame.center - frame.viewport / 2) < 1),
     `desktop dock should stay centered throughout startup: ${JSON.stringify(desktopDockFrames.slice(0, 4))}`,
   );
+  for (const key of ['stageOpacity', 'searchOpacity', 'dockOpacity']) {
+    assert(
+      desktopDockFrames.some((frame) => frame[key] > 0.04 && frame[key] < 0.96),
+      `${key} should have intermediate frames instead of appearing in one step`,
+    );
+  }
+  assert(desktopDockFrames.every((frame) => frame.blankDockIcons === 0),
+    'dock icons should always show a letter fallback or a decoded image');
+  const frameGaps = desktopDockFrames.slice(1)
+    .map((frame, index) => frame.time - desktopDockFrames[index].time);
+  const maxFrameGap = Math.max(0, ...frameGaps);
+  assert(maxFrameGap < 80,
+    `startup animation should not stall between frames: max gap ${maxFrameGap.toFixed(1)}ms`);
+
+  const motionContract = await page.evaluate(() => ({
+    emptyTextAlign: getComputedStyle(document.getElementById('search-input')).textAlign,
+    searchTransitions: getComputedStyle(document.getElementById('search-box')).transitionProperty,
+    overlayTransitions: getComputedStyle(document.getElementById('search-focus-overlay')).transitionProperty,
+  }));
+  assert(motionContract.emptyTextAlign === 'center',
+    `empty focused search should remain centered: ${JSON.stringify(motionContract)}`);
+  assert(!motionContract.searchTransitions.includes('backdrop-filter'),
+    `search focus must not animate backdrop-filter: ${JSON.stringify(motionContract)}`);
+  assert(!motionContract.overlayTransitions.includes('backdrop-filter'),
+    `full-screen ambience must only fade its prepared blur layer: ${JSON.stringify(motionContract)}`);
+
+  await search.fill('1');
+  assert(await search.evaluate((el) => getComputedStyle(el).textAlign) === 'left',
+    'search text should align left only after the user types');
+  await search.fill('');
+  assert(await search.evaluate((el) => getComputedStyle(el).textAlign) === 'center',
+    'clearing search should restore centered empty state');
 
   await page.setViewportSize({ width: 430, height: 900 });
   await page.reload({ waitUntil: 'domcontentloaded' });
@@ -302,12 +367,44 @@ try {
     `narrow calendar should scroll horizontally instead of crushing columns: ${JSON.stringify(mobileCalendar)}`,
   );
 
+  const delayedSyncPage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  await delayedSyncPage.addInitScript(() => {
+    Object.defineProperty(navigator, 'connection', {
+      configurable: true,
+      value: { saveData: true },
+    });
+    globalThis.chrome = {
+      runtime: { lastError: null },
+      storage: {
+        sync: {
+          get(_keys, callback) { setTimeout(() => callback({}), 1200); },
+          set(_value, callback) { callback?.(); },
+          remove(_keys, callback) { callback?.(); },
+        },
+        onChanged: { addListener() {} },
+      },
+    };
+  });
+  await delayedSyncPage.route('https://**/*', (route) => route.abort());
+  await delayedSyncPage.goto(url, { waitUntil: 'domcontentloaded' });
+  await delayedSyncPage.waitForFunction(() =>
+    document.getElementById('search-engine-badge')?.getAttribute('aria-label')?.includes('Google'), null, {
+    timeout: 700,
+  });
+  await delayedSyncPage.waitForFunction(() => document.querySelectorAll('#dock > *').length >= 2, null, {
+    timeout: 700,
+  });
+  await delayedSyncPage.waitForSelector('#search-input', { state: 'visible', timeout: 1100 });
+  assert(await delayedSyncPage.locator('#search-input').isVisible(),
+    'slow account sync must not block local search interactivity');
+  await delayedSyncPage.close();
+
   const severeErrors = errors.filter((message) =>
     !message.includes('ERR_FAILED')
     && !message.includes('Failed to load resource')
     && !message.includes('天气加载失败'));
   assert(severeErrors.length === 0, `unexpected browser errors:\n${severeErrors.join('\n')}`);
-  console.log('REGRESSION OK: boot, routing, search, storage, sync, mobile, calendar');
+  console.log('REGRESSION OK: boot motion, routing, search, storage, background sync, mobile, calendar');
   console.log(`PERF BASELINE: ${JSON.stringify(baseline)}`);
 } finally {
   await browser.close();

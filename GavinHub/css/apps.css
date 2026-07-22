@@ -45,6 +45,18 @@ body.page-apps-active .header-actions {
   transform: scale(1.04);
 }
 
+.icon-btn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.icon-btn:focus-visible,
+.dock-tab:focus-visible,
+.dock-item:focus-visible,
+.shortcut-item:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--meta-color) 72%, transparent);
+  outline-offset: 3px;
+}
+
 .icon-btn:disabled {
   opacity: 0.4;
   cursor: default;
@@ -323,6 +335,10 @@ body.page-apps-active .header-actions {
   transition: transform 0.25s cubic-bezier(0.2, 0, 0, 1);
 }
 
+.shortcut-item:active .shortcut-icon {
+  transform: scale(0.96);
+}
+
 .shortcut-icon {
   width: 72px;
   height: 72px;
@@ -358,6 +374,21 @@ body.page-apps-active .header-actions {
   object-position: center;
   border-radius: inherit;
   display: block;
+}
+
+.shortcut-icon-img-enter {
+  animation: shortcut-icon-enter 0.2s ease both;
+}
+
+@keyframes shortcut-icon-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shortcut-icon-img-enter {
+    animation: none;
+  }
 }
 
 .shortcut-icon--round img {
@@ -831,6 +862,14 @@ body.boot-awakening .dock:hover {
   transform: scale(1.08);
 }
 
+.dock-tab:active {
+  transform: scale(0.92);
+}
+
+.dock-tab.active:active .dock-tab-icon {
+  transform: scale(0.98);
+}
+
 body[data-text-theme='on-light'] .dock-tab.active {
   background: transparent;
   color: var(--meta-color);
@@ -913,6 +952,10 @@ body[data-text-theme='on-light'] .dock-tab.active {
 
 .dock-item.dock-link:hover .shortcut-icon--dock {
   box-shadow: var(--icon-shadow-hover);
+}
+
+.dock-item:active {
+  transform: scale(0.98) translateY(0);
 }
 
 /* Edge 侧边栏 / 窄面板 — 左侧竖向 Dock */

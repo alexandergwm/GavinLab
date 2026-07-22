@@ -7,6 +7,7 @@ import { focusSearchInput, scheduleInitialSearchFocus, initSearchFocusHooks, dis
 const settingsStore = createSettingsStore();
 /** 每个新标签页独立，仅内存保存，不写入 localStorage */
 let tabPage = 'home';
+let pageTransitionToken = 0;
 
 /** @type {typeof import('./wallpaper.js')} */
 let wallpaper;
@@ -63,7 +64,11 @@ function applyPageClasses(page) {
   }
 }
 
-async function switchPage(page) {
+async function switchPage(page, { force = false } = {}) {
+  if (!PAGE_CYCLE.includes(page)) return;
+  if (!force && page === tabPage) return;
+
+  const transitionToken = ++pageTransitionToken;
   const fromApps = tabPage === 'apps';
   if (tabPage === 'home' && page !== 'home') {
     dismissSearchForPageLeave();
@@ -71,6 +76,8 @@ async function switchPage(page) {
   const returningHome = fromApps && page === 'home';
   if (returningHome) {
     document.body.classList.add('search-reveal-pending');
+  } else {
+    document.body.classList.remove('search-reveal-pending');
   }
   tabPage = page;
 
@@ -78,6 +85,7 @@ async function switchPage(page) {
   refreshDock();
 
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  if (transitionToken !== pageTransitionToken) return;
 
   if (page === 'apps') {
     wallpaper?.syncAppsBlurWallpaper?.();
@@ -86,9 +94,11 @@ async function switchPage(page) {
   if (returningHome) {
     document.body.classList.remove('search-reveal-pending');
     await new Promise((resolve) => requestAnimationFrame(resolve));
+    if (transitionToken !== pageTransitionToken) return;
   }
 
   await onPageEnter(page, getPageContext());
+  if (transitionToken !== pageTransitionToken) return;
 
   const wp = wallpaper.getCurrentWallpaper();
   if (wp && fromApps) {
@@ -208,17 +218,17 @@ async function initCore() {
     }
   };
 
-  /* 先拉同步，再渲染 Dock/快捷方式，避免用过期本地数据画完 UI */
-  const syncMod = await load('sync module', () => import('./sync.js'));
-  if (syncMod?.pullSyncOnStartup) {
-    const { applied } = await syncMod.pullSyncOnStartup();
-    if (applied) settingsStore.reload();
-  }
+  const syncModPromise = load('sync module', () => import('./sync.js'));
+  const [wallpaperMod, shortcutsMod, dockUi, metaBar, layoutMode] = await Promise.all([
+    load('wallpaper module', () => import('./wallpaper.js')),
+    load('shortcuts module', () => import('./shortcuts.js')),
+    load('dock-ui module', () => import('./dock-ui.js')),
+    load('meta-bar module', () => import('./meta-bar.js')),
+    load('layout-mode module', () => import('./layout-mode.js')),
+  ]);
 
-  wallpaper = await load('wallpaper module', () => import('./wallpaper.js'));
-  shortcuts = await load('shortcuts module', () => import('./shortcuts.js'));
-  const dockUi = await load('dock-ui module', () => import('./dock-ui.js'));
-  const metaBar = await load('meta-bar module', () => import('./meta-bar.js'));
+  wallpaper = wallpaperMod;
+  shortcuts = shortcutsMod;
 
   metaBar?.initMetaBar(async () => {
     const cal = await pageModules.calendar();
@@ -226,7 +236,6 @@ async function initCore() {
   });
 
   dockUi?.initDockUI({ onDockChange: refreshDock });
-  const layoutMode = await load('layout-mode module', () => import('./layout-mode.js'));
   layoutMode?.initLayoutMode?.();
 
   initFavorite();
@@ -236,9 +245,24 @@ async function initCore() {
   initContextMenu();
   preloadPageModule(tabPage, getPageContext());
 
-  syncMod?.initSyncListener?.(() => {
-    settingsStore.reload();
-    refreshSyncedUi();
+  /* 本地首屏先立即可用；账号同步静默追上，避免网络延迟阻塞 Dock 与搜索。 */
+  applyPageClasses(tabPage);
+  refreshDock();
+  void switchPage(tabPage, { force: true });
+
+  void syncModPromise.then(async (syncMod) => {
+    if (!syncMod) return;
+    syncMod.initSyncListener?.(() => {
+      settingsStore.reload();
+      refreshSyncedUi();
+    });
+    const { applied } = await syncMod.pullSyncOnStartup?.() || { applied: false };
+    if (applied) {
+      settingsStore.reload();
+      refreshSyncedUi();
+    }
+  }).catch((err) => {
+    console.warn('[GavinHub] background sync failed', err);
   });
 
   if (wallpaper) {
@@ -264,7 +288,6 @@ async function initCore() {
       }
       updateFavoriteUI();
     })();
-    if (shortcuts) await switchPage(tabPage);
     let rotationInterval = wallpaper.initWallpaperRotation(async (source, meta = {}) => {
       if (!meta.advanced) {
         await wallpaper.loadWallpaper(source, { force: true });
@@ -293,7 +316,7 @@ async function initCore() {
 
   const initWeatherWhenIdle = async () => {
     const weatherUi = await load('weather-ui module', () => import('./weather-ui.js'));
-    weatherUi?.initWeather().catch(() => {});
+    weatherUi?.initWeather?.();
   };
   if ('requestIdleCallback' in window) {
     requestIdleCallback(initWeatherWhenIdle, { timeout: 1200 });
@@ -303,12 +326,13 @@ async function initCore() {
 }
 
 async function init() {
+  /* 搜索不依赖同步或壁纸网络请求，优先变为可交互。 */
+  void initSearchModule();
   try {
     await initCore();
   } catch (err) {
     console.error('[GavinHub] core init failed', err);
   }
-  void initSearchModule();
 }
 
 init();

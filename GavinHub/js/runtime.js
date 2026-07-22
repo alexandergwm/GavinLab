@@ -39,6 +39,9 @@ export async function loadModule(id, loader, bootstrap, ctx = {}) {
       entry.mod = bootstrap ? bootstrap(mod, ctx) ?? mod : mod;
       entry.promise = null;
       return entry.mod;
+    }).catch((err) => {
+      entry.promise = null;
+      throw err;
     });
   }
   return entry.promise;
@@ -73,8 +76,10 @@ export const pageModules = {
 /** 进入页面时的标准懒加载流程 */
 export async function onPageEnter(page, ctx = {}) {
   if (page === 'apps') {
-    await pageModules.apps(ctx);
-    await pageModules.settings(ctx.settingsApi);
+    await Promise.all([
+      pageModules.apps(ctx),
+      pageModules.settings(ctx.settingsApi),
+    ]);
   }
   await runPageEnterHooks(page, ctx);
 }
