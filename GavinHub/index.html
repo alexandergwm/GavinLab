@@ -24,20 +24,13 @@
       position: absolute; inset: 0; width: 100%; height: 100%;
       object-fit: cover; object-position: center;
       opacity: 0; backface-visibility: hidden;
-      transition: opacity 0.82s cubic-bezier(0.25, 0.8, 0.25, 1);
+      transition: opacity 1s cubic-bezier(0.25, 0.8, 0.25, 1);
     }
     #wallpaper-img.wallpaper-show { opacity: 1; }
-    body.boot-awakening #wallpaper-img {
-      transform: scale(1.012);
-      transition:
-        opacity 0.82s cubic-bezier(0.25, 0.8, 0.25, 1),
-        transform 1.05s cubic-bezier(0.25, 0.8, 0.25, 1);
-    }
-    body.boot-awakening #wallpaper-img.wallpaper-show { transform: scale(1); }
     body.boot-awakening .scene-vignette { opacity: 0; }
     body.boot-awakening.boot-vignette-visible .scene-vignette {
       opacity: 0.88;
-              transition: opacity 0.78s cubic-bezier(0.25, 0.8, 0.25, 1) 0s;
+      transition: opacity 0.9s cubic-bezier(0.25, 0.8, 0.25, 1) 0s;
     }
   </style>
   <script>
@@ -118,7 +111,7 @@
             window.setTimeout(function () {
               document.body.classList.add('boot-vignette-visible', 'boot-ui-settled', 'boot-done');
               document.dispatchEvent(new CustomEvent('boot-ui-settled'));
-            }, 60);
+            }, 80);
           });
         });
         return;
@@ -129,7 +122,7 @@
         document.dispatchEvent(new CustomEvent('boot-ui-settled'));
       }
       function scheduleBootUiReveal() {
-        window.setTimeout(settleBootUi, 60);
+        window.setTimeout(settleBootUi, 80);
       }
       function awaken() {
         requestAnimationFrame(function () {
@@ -199,7 +192,7 @@
         <button id="date-trigger" class="meta-part" type="button" aria-label="打开日历">
           <span id="date-text"></span>
         </button><span class="meta-sep"> · </span><button id="weather-trigger" class="meta-part" type="button" aria-label="查看天气">
-          <span id="weather-icon" class="weather-icon"></span><span id="weather-summary">天气</span>
+          <span id="weather-icon" class="weather-icon"></span><span id="weather-summary">加载中…</span>
         </button>
       </p>
 

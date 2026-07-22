@@ -173,19 +173,19 @@ function openWeatherDialog() {
   }).catch(() => {});
 }
 
-export function initWeather() {
+export async function initWeather() {
   const trigger = document.getElementById('weather-trigger');
   const dialog = document.getElementById('weather-dialog');
   const summary = document.getElementById('weather-summary');
-  const cached = getCachedWeather();
 
-  if (cached) renderWeatherBar(cached);
+  if (summary) summary.textContent = '加载中…';
 
-  void loadWeather().then((data) => {
-    if (data) renderWeatherBar(data);
-  }).catch(() => {
-    if (!cached && summary) summary.textContent = '天气';
-  });
+  try {
+    const data = await loadWeather();
+    renderWeatherBar(data);
+  } catch {
+    if (summary) summary.textContent = '天气加载失败';
+  }
 
   trigger?.addEventListener('click', openWeatherDialog);
   bindWeatherRefresh();

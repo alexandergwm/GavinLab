@@ -39,7 +39,6 @@ import {
   settleBootUiClasses,
   onBootUiSettled,
   BOOT_UI_REVEAL_DELAY_MS,
-  prefersReducedMotion,
 } from './boot-ui.js';
 import {
   isLocalWallpaperUrl,
@@ -818,38 +817,16 @@ async function applyWallpaperSwitch(data) {
   if (!targetUrl && data.type !== 'gradient') return currentWallpaper;
 
   const displayUrl = resolveSwitchDisplayUrl(data, targetUrl);
-  if (displayUrl && data.type !== 'gradient') {
-    try {
-      await loadImageElement(displayUrl, /^https?:/i.test(displayUrl));
-    } catch { /* applyWallpaper retains its normal fallback behavior */ }
-  }
-
-  let committed = false;
-  const commit = () => {
-    if (committed) return;
-    committed = true;
-    applyWallpaper(
-      { ...data, url: displayUrl, previewUrl: data.previewUrl },
-      {
-        preserveUrl: true,
-        forceRepaint: true,
-        adaptImmediate: true,
-        immediateBlur: true,
-        instantReveal: true,
-      },
-    );
-  };
-
-  if (document.startViewTransition && !prefersReducedMotion() && data.type !== 'gradient') {
-    try {
-      const transition = document.startViewTransition(commit);
-      await transition.updateCallbackDone;
-    } catch {
-      commit();
-    }
-  } else {
-    commit();
-  }
+  applyWallpaper(
+    { ...data, url: displayUrl, previewUrl: data.previewUrl },
+    {
+      preserveUrl: true,
+      forceRepaint: true,
+      adaptImmediate: true,
+      immediateBlur: true,
+      instantReveal: true,
+    },
+  );
 
   if (displayUrl !== targetUrl) {
     void upgradeWallpaperToTargetUrl({ ...data, url: targetUrl, previewUrl: data.previewUrl });

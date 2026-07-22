@@ -6,7 +6,6 @@ import { KEYS } from './keys.js';
 
 const SHORTCUTS_KEY = KEYS.shortcuts;
 const DOCK_KEY = KEYS.dock;
-const iconRenderGenerations = new WeakMap();
 
 function svgDataUrl(svg) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
@@ -574,8 +573,7 @@ function renderLetterAvatar(container, item) {
 }
 
 export function renderIconInto(container, item, pageUrl = item.url, options = {}) {
-  const generation = (iconRenderGenerations.get(container) || 0) + 1;
-  iconRenderGenerations.set(container, generation);
+  const { eager = false } = options;
   container.innerHTML = '';
   container.classList.remove(
     'shortcut-icon--letter',
@@ -591,46 +589,73 @@ export function renderIconInto(container, item, pageUrl = item.url, options = {}
 
   const iconSrc = item.icon && !isUnacceptableStoredIcon(item.icon, pageUrl || item.url) ? item.icon : '';
   if (iconSrc) {
-    const fallbackItem = {
-      ...item,
-      letter: item.letter || deriveLetterLabel(item.name, item.url || pageUrl),
-      color: item.color || deriveLetterColor(letterColorSeed(item.name, item.url || pageUrl)),
-    };
-    renderLetterAvatar(container, fallbackItem);
-
-    const mountImageWhenReady = (src, { cacheOnAccept = false, onReject } = {}) => {
-      if (!src || iconRenderGenerations.get(container) !== generation) return;
+    if (eager) {
+      prepareImageIconContainer(container);
       const img = document.createElement('img');
       img.alt = '';
       img.decoding = 'async';
-      bindIconWithFallback(img, src, () => {
-        if (iconRenderGenerations.get(container) !== generation) return;
-        onReject?.();
-      }, () => {
-        if (iconRenderGenerations.get(container) !== generation) return;
-        prepareImageIconContainer(container);
-        classifyIconImage(container, img, iconSrc);
-        img.classList.add('shortcut-icon-img-enter');
-        container.appendChild(img);
-        if (cacheOnAccept) ensureIconCached(iconSrc);
+      const toLetter = () => renderLetterAvatar(container, {
+        ...item,
+        letter: item.letter || deriveLetterLabel(item.name, item.url || pageUrl),
+        color: item.color || deriveLetterColor(letterColorSeed(item.name, item.url || pageUrl)),
       });
-    };
+      bindIconWithFallback(img, iconSrc, toLetter, () => {
+        classifyIconImage(container, img, iconSrc);
+        ensureIconCached(iconSrc);
+      });
+      container.appendChild(img);
 
-    void (async () => {
-      let cachedUrl = '';
+      void (async () => {
+        try {
+          const cachedUrl = await getIconObjectUrl(iconSrc);
+          if (cachedUrl && img.isConnected) img.src = cachedUrl;
+        } catch { /* ignore */ }
+      })();
+      return;
+    }
+
+    // Lazy approach: paint letter immediately for responsiveness. Upgrade to image once we have (cached or remote).
+    renderLetterAvatar(container, item);
+
+    (async () => {
+      let usedCached = false;
       try {
-        cachedUrl = await getIconObjectUrl(iconSrc) || '';
-      } catch { /* fall through to the original URL */ }
-      if (iconRenderGenerations.get(container) !== generation) return;
-      if (cachedUrl) {
-        mountImageWhenReady(cachedUrl, {
-          onReject: () => {
-            if (cachedUrl !== iconSrc) mountImageWhenReady(iconSrc, { cacheOnAccept: true });
-          },
-        });
-      } else {
-        mountImageWhenReady(iconSrc, { cacheOnAccept: true });
-      }
+        const cachedUrl = await getIconObjectUrl(iconSrc);
+        if (cachedUrl) {
+          usedCached = true;
+          prepareImageIconContainer(container);
+          const img = document.createElement('img');
+          img.alt = '';
+          img.loading = 'lazy';
+          img.decoding = 'async';
+          img.src = cachedUrl;
+          const finish = () => classifyIconImage(container, img, iconSrc);
+          img.addEventListener('load', finish, { once: true });
+          if (img.complete) finish();
+          container.appendChild(img);
+          return;
+        }
+      } catch { /* ignore, fall to remote */ }
+
+      if (usedCached) return;
+
+      // First time for this icon (or no cache): load remote, on success cache the blob for future.
+      // Use same bind logic which will replace the letter content.
+      const toLetter = () => renderLetterAvatar(container, {
+        ...item,
+        letter: item.letter || deriveLetterLabel(item.name, item.url || pageUrl),
+        color: item.color || deriveLetterColor(letterColorSeed(item.name, item.url || pageUrl)),
+      });
+      const img = document.createElement('img');
+      img.alt = '';
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      bindIconWithFallback(img, iconSrc, toLetter, () => {
+        classifyIconImage(container, img, iconSrc);
+        ensureIconCached(iconSrc);
+      });
+      prepareImageIconContainer(container);
+      container.appendChild(img);
     })();
 
     return;

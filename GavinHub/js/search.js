@@ -483,8 +483,6 @@ function getModePlaceholder() {
 function updateModeLabel() {
   if (!inputEl) return;
 
-  boxEl?.classList.toggle('has-value', Boolean(inputEl.value.trim()));
-
   if (modeLabelEl) {
     modeLabelEl.hidden = true;
     modeLabelEl.setAttribute('aria-hidden', 'true');
@@ -944,11 +942,7 @@ export function initSearch({ getSettings: settingsGetter, onSettingsChange: sett
     applySearchFocusAmbience();
   };
 
-  let blurCleanupTimer = null;
-
   inputEl.addEventListener('focus', () => {
-    clearTimeout(blurCleanupTimer);
-    blurCleanupTimer = null;
     applySearchFocusLayout();
     if (shouldDeferFocusChrome()) return;
     applySearchFocusAmbience();
@@ -969,16 +963,11 @@ export function initSearch({ getSettings: settingsGetter, onSettingsChange: sett
   }, { once: true });
 
   inputEl.addEventListener('blur', () => {
-    cancelPendingCompletions();
-    suggestionGen += 1;
     document.body.classList.remove('search-focused');
     boxEl.classList.remove('focused');
     updateModeLabel();
     searchQuote.hide();
-    clearTimeout(blurCleanupTimer);
-    blurCleanupTimer = setTimeout(() => {
-      blurCleanupTimer = null;
-      if (document.activeElement === inputEl) return;
+    setTimeout(() => {
       hideSuggestions();
       if (!engineMenuOpen) hideEngineMenu();
     }, 120);
