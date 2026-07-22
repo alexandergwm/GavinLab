@@ -52,6 +52,18 @@ const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const errors = [];
 let completionRequests = 0;
+
+const [baseCss, dialogsCss] = await Promise.all([
+  readFile(join(root, 'css/base.css'), 'utf8'),
+  readFile(join(root, 'css/dialogs.css'), 'utf8'),
+]);
+assert(baseCss.includes('--boot-ui-delay-search: 0s;'),
+  'search reveal must remain synchronized with the rest of the startup UI');
+assert(baseCss.includes('--boot-ui-delay-dock: 0s;'),
+  'dock reveal must remain synchronized with the rest of the startup UI');
+assert(!dialogsCss.includes('allow-discrete'),
+  'native dialogs must not use discrete close transitions that flash in Edge');
+
 page.on('pageerror', (err) => errors.push(err.message));
 page.on('request', (request) => {
   const hostname = new URL(request.url()).hostname;
@@ -92,6 +104,18 @@ try {
   assert(await page.locator('#clock').isVisible(), 'clock should be visible');
   assert(await page.locator('#search-input').isVisible(), 'search should be visible');
   assert(await page.locator('#dock').isVisible(), 'dock should be visible');
+
+  for (const dialogId of ['calendar-dialog', 'weather-dialog']) {
+    await page.evaluate((id) => document.getElementById(id)?.showModal(), dialogId);
+    await page.locator(`#${dialogId} .modal-close`).first().click();
+    await page.waitForFunction((id) => !document.getElementById(id)?.open, dialogId);
+    const closedState = await page.locator(`#${dialogId}`).evaluate((dialog) => ({
+      display: getComputedStyle(dialog).display,
+      open: dialog.open,
+    }));
+    assert(closedState.open === false && closedState.display === 'none',
+      `${dialogId} should disappear cleanly after close: ${JSON.stringify(closedState)}`);
+  }
 
   const syncSafety = await page.evaluate(async () => {
     localStorage.setItem('startpage-sync-local-at', '100');
