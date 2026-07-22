@@ -303,9 +303,9 @@
             <span>GitHub Token</span>
             <input type="password" id="github-sync-token" placeholder="粘贴 ghp_…" autocomplete="off" spellcheck="false">
           </label>
-          <label class="settings-field settings-field--gist" id="github-gist-field" hidden>
+          <label class="settings-field settings-field--gist" id="github-gist-field">
             <span>Gist ID</span>
-            <input type="text" id="github-sync-gist-id" readonly spellcheck="false" autocapitalize="off">
+            <input type="text" id="github-sync-gist-id" placeholder="另一台电脑粘贴同一个 Gist ID" spellcheck="false" autocapitalize="off">
           </label>
           <button type="button" id="github-sync-merge-btn" class="settings-sync-btn settings-sync-btn--primary settings-sync-file-action">保存并同步</button>
           <p id="github-sync-status" class="settings-hint settings-sync-manual-hint" hidden></p>
@@ -313,7 +313,7 @@
         <p class="settings-hint settings-sync-scope-hint">同步：快捷方式、Dock、待办、长期目标等（不含壁纸与搜索模式）</p>
       </div>
       <menu class="settings-actions">
-        <button type="submit" value="close">关闭</button>
+        <button type="button" class="modal-close">关闭</button>
       </menu>
     </form>
   </dialog>

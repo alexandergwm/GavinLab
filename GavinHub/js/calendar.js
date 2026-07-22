@@ -38,6 +38,7 @@ let viewWeekStart = new Date();
 let viewMonthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let viewMode = 'week';
 let dayMenuDateKey = null;
+let expandedWeekKey = '';
 
 const WEEK_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 const DOW_SHORT = ['日', '一', '二', '三', '四', '五', '六'];
@@ -1010,9 +1011,13 @@ function renderWeekCalendar() {
 
   const events = assignEventRows(getTodosInWeek(weekStartKey));
   const maxRow = events.reduce((m, e) => Math.max(m, e._row), -1);
-  const hiddenCount = events.filter((e) => e._row >= MAX_WEEK_EVENT_ROWS).length;
-  const visibleEvents = events.filter((e) => e._row < MAX_WEEK_EVENT_ROWS);
-  const eventRows = Math.max(Math.min(maxRow + 1, MAX_WEEK_EVENT_ROWS), 1);
+  const isExpanded = expandedWeekKey === weekStartKey;
+  const hiddenCount = isExpanded ? 0 : events.filter((e) => e._row >= MAX_WEEK_EVENT_ROWS).length;
+  const visibleEvents = isExpanded ? events : events.filter((e) => e._row < MAX_WEEK_EVENT_ROWS);
+  const eventRows = Math.max(
+    isExpanded ? maxRow + 1 : Math.min(maxRow + 1, MAX_WEEK_EVENT_ROWS),
+    1,
+  );
 
   container.style.setProperty('--event-rows', String(eventRows));
   container.classList.toggle('is-dense', eventRows > 4);
@@ -1078,8 +1083,20 @@ function renderWeekCalendar() {
       <div class="week-compose-layer" aria-hidden="true"></div>
       <div class="week-cal-events" id="week-events-grid"></div>
     </div>
-    ${hiddenCount ? `<p class="week-events-overflow">还有 ${hiddenCount} 项待办未显示</p>` : ''}
+    ${(hiddenCount || isExpanded) ? `
+      <p class="week-events-overflow">
+        ${isExpanded ? `已显示全部 ${events.length} 项待办` : `还有 ${hiddenCount} 项待办未显示`}
+        <button type="button" class="week-events-overflow-btn">
+          ${isExpanded ? '收起' : '展开全部'}
+        </button>
+      </p>
+    ` : ''}
   `;
+
+  container.querySelector('.week-events-overflow-btn')?.addEventListener('click', () => {
+    expandedWeekKey = isExpanded ? '' : weekStartKey;
+    renderCalendar();
+  });
 
   const bodies = container.querySelectorAll('.week-day-body');
   bodies.forEach((body) => {

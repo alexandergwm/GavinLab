@@ -1,4 +1,4 @@
-# Start Page
+# GavinHub
 
 轻量级个人浏览器主页，纯 HTML / CSS / 原生 JS，无构建依赖。
 
@@ -8,7 +8,9 @@
 - **底部 Dock**：快速切换页面与常用链接
 - **每日壁纸**：默认使用 Bing 每日壁纸 API，失败时回退本地图片
 - **壁纸信息**：应用页右上角悬停显示壁纸标题与描述
-- **本地持久化**：设置、快捷方式、点赞数均存于 `localStorage`
+- **日历与待办**：周/月视图、重复事项和长期目标
+- **多端同步**：Edge 账号、JSON 文件或 GitHub Gist
+- **本地持久化**：设置、快捷方式和待办均保存在浏览器本地
 
 ## 快速开始
 
@@ -37,15 +39,21 @@ python3 -m http.server 8080
 ## 项目结构
 
 ```
-StartPage/
+GavinHub/
 ├── index.html          # 入口
-├── css/style.css       # 样式
+├── manifest.json       # Edge 扩展配置
+├── css/                # 页面与弹窗样式
 ├── js/
-│   ├── app.js          # 主逻辑
+│   ├── boot.js         # 轻量启动入口
+│   ├── app.js          # 页面协调
 │   ├── clock.js        # 时钟
 │   ├── wallpaper.js    # 壁纸加载
 │   ├── shortcuts.js    # 快捷方式与 Dock
+│   ├── calendar.js     # 日历与待办
+│   ├── sync.js         # Edge / 文件同步
+│   ├── github-sync.js  # GitHub Gist 同步
 │   └── storage.js      # 本地存储
+├── scripts/            # 检查与扩展打包
 └── assets/             # 静态资源
 ```
 
@@ -62,3 +70,11 @@ StartPage/
 - 时钟每分钟更新一次，避免每秒渲染
 - 图标优先使用字母占位，外链 favicon 懒加载
 - 壁纸 API 请求失败自动降级，不阻塞页面
+
+## 检查与打包
+
+```bash
+npm run check
+```
+
+该命令会运行静态检查、浏览器回归、扩展打包和扩展加载测试。

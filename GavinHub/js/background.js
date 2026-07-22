@@ -57,3 +57,15 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (!changeInfo.url) return;
   maybeSwapNtpTab({ ...tab, id: tabId, url: changeInfo.url, pendingUrl: changeInfo.url });
 });
+
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  chrome.tabs.get(tabId, (tab) => {
+    if (chrome.runtime.lastError) return;
+    maybeSwapNtpTab(tab);
+  });
+});
+
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (message?.type !== 'gavinhub-open-index') return;
+  swapNtpToFocusablePage(sender.tab?.id);
+});

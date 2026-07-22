@@ -5,7 +5,6 @@
 import { KEYS } from './keys.js';
 import {
   exportSyncBundle,
-  exportSyncBundleJson,
   importSyncBundle,
   getSyncLocalTimestamp,
 } from './sync.js';
@@ -92,7 +91,8 @@ async function pullFromGithub(config = loadGithubSyncConfig()) {
 
 async function pushToGithub(config = loadGithubSyncConfig()) {
   const { token, gistId: existingId } = readConfigFromForm(config);
-  const content = exportSyncBundleJson();
+  const payload = exportSyncBundle();
+  const content = JSON.stringify(payload, null, 2);
 
   if (existingId) {
     await githubRequest(`/gists/${existingId}`, {
@@ -100,7 +100,7 @@ async function pushToGithub(config = loadGithubSyncConfig()) {
       method: 'PATCH',
       body: { files: { [GIST_FILENAME]: { content } } },
     });
-    return { gistId: existingId, updatedAt: exportSyncBundle().updatedAt };
+    return { gistId: existingId, updatedAt: payload.updatedAt };
   }
 
   const gist = await githubRequest('/gists', {
@@ -113,17 +113,16 @@ async function pushToGithub(config = loadGithubSyncConfig()) {
     },
   });
 
-  saveGithubSyncConfig({ gistId: gist.id });
-  return { gistId: gist.id, updatedAt: exportSyncBundle().updatedAt };
+  return { gistId: gist.id, updatedAt: payload.updatedAt };
 }
 
 /** 比较时间戳：较新者胜出 */
 export async function syncWithGithub(config = loadGithubSyncConfig()) {
-  saveGithubSyncConfig(config);
-  const { token, gistId } = readConfigFromForm(loadGithubSyncConfig());
+  const { token, gistId } = readConfigFromForm(config);
 
   if (!gistId) {
     const result = await pushToGithub({ token, gistId: '' });
+    saveGithubSyncConfig({ token, gistId: result.gistId });
     return { action: 'uploaded', gistId: result.gistId, reloaded: false };
   }
 
@@ -131,11 +130,6 @@ export async function syncWithGithub(config = loadGithubSyncConfig()) {
   try {
     remote = await pullFromGithub({ token, gistId });
   } catch (err) {
-    if (err.status === 404) {
-      saveGithubSyncConfig({ gistId: '' });
-      const result = await pushToGithub({ token, gistId: '' });
-      return { action: 'uploaded-new', gistId: result.gistId, reloaded: false };
-    }
     throw err;
   }
 
@@ -144,12 +138,15 @@ export async function syncWithGithub(config = loadGithubSyncConfig()) {
 
   if (remoteAt > localAt) {
     importSyncBundle(remote);
+    saveGithubSyncConfig({ token, gistId });
     return { action: 'downloaded', reloaded: true };
   }
   if (localAt > remoteAt) {
     await pushToGithub({ token, gistId });
+    saveGithubSyncConfig({ token, gistId });
     return { action: 'uploaded', reloaded: false };
   }
+  saveGithubSyncConfig({ token, gistId });
   return { action: 'up-to-date', reloaded: false };
 }
 
@@ -159,8 +156,6 @@ export function formatGithubSyncResult(result) {
       return '已从 GitHub 拉取最新配置';
     case 'uploaded':
       return '已上传到 GitHub';
-    case 'uploaded-new':
-      return `已创建新 Gist：${result.gistId || ''}`;
     case 'up-to-date':
       return '本地与 GitHub 已是最新';
     default:
@@ -182,7 +177,7 @@ export function formatGithubSyncError(err) {
   if (err?.status === 403) {
     return 'Token 权限不足：classic 需勾选 gist；fine-grained 需允许 Gists 读写';
   }
-  if (err?.status === 404) return 'Gist 不存在或 Token 无权访问，将尝试新建';
+  if (err?.status === 404) return 'Gist 不存在或 Token 无权访问，请核对 Gist ID；清空后可新建';
   if (err?.status === 422) return 'Gist 内容可能过大或格式无效，请精简待办后重试';
   return err?.message || 'GitHub 同步失败';
 }

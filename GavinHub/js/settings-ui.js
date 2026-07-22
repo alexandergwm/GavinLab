@@ -133,7 +133,7 @@ function syncGithubFormFromStorage() {
       ? '已保存 GitHub Token，留空沿用；粘贴新 Token 可替换'
       : '粘贴 ghp_…';
     gistId.value = cfg.gistId;
-    if (gistField) gistField.hidden = !cfg.gistId;
+    if (gistField) gistField.hidden = false;
   }).catch(() => {});
 }
 
@@ -161,7 +161,13 @@ function setGithubSyncStatus(text, isError = false) {
 async function runGithubSync(api) {
   const githubSync = await import('./github-sync.js');
   const config = readGithubFormConfig(githubSync.loadGithubSyncConfig());
-  githubSync.saveGithubSyncConfig(config);
+  const button = document.getElementById('github-sync-merge-btn');
+  if (button?.disabled) return;
+  if (button) {
+    button.disabled = true;
+    button.textContent = '同步中…';
+  }
+  setGithubSyncStatus('正在连接 GitHub…', false);
 
   try {
     const result = await githubSync.syncWithGithub(config);
@@ -179,6 +185,11 @@ async function runGithubSync(api) {
     }
   } catch (err) {
     setGithubSyncStatus(githubSync.formatGithubSyncError(err), true);
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = '保存并同步';
+    }
   }
 }
 

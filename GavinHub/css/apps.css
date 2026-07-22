@@ -1022,6 +1022,13 @@ body[data-text-theme='on-light'] .dock-tab.active {
 }
 
 :is(body.layout-sidebar, html.layout-sidebar body) .search-form {
+  left: calc(var(--dock-rail-width) + 8px);
+  right: 10px;
+  width: auto;
+  margin-left: 0;
+}
+
+:is(body.layout-sidebar, html.layout-sidebar body) .search-form-spacer {
   width: 100%;
 }
 

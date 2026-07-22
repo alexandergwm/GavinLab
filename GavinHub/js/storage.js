@@ -9,9 +9,13 @@ const SYNCED_STORAGE_KEYS = new Set([
   KEYS.goals,
   KEYS.importantDates,
 ]);
+const SYNCED_SETTING_FIELDS = new Set(['baseCurrency', 'showGreeting']);
 
 function scheduleSyncForKey(key = KEYS.settings) {
   if (!SYNCED_STORAGE_KEYS.has(key)) return;
+  try {
+    localStorage.setItem(KEYS.syncLocalAt, String(Date.now()));
+  } catch { /* storage may be unavailable in restricted contexts */ }
   queueMicrotask(() => {
     syncModulePromise ||= import('./sync.js');
     syncModulePromise.then((sync) => {
@@ -227,7 +231,9 @@ export function saveSettings(partial) {
   delete next.githubUsername;
   stripTabSessionFields(next);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  scheduleSyncForKey();
+  if (Object.keys(partial).some((key) => SYNCED_SETTING_FIELDS.has(key))) {
+    scheduleSyncForKey(STORAGE_KEY);
+  }
   return next;
 }
 

@@ -41,7 +41,12 @@ try {
   const ntpPage = await context.newPage();
   const errors = [];
   ntpPage.on('pageerror', (error) => errors.push(error.message));
-  await ntpPage.goto('chrome://newtab/');
+  try {
+    await ntpPage.goto('chrome://newtab/');
+  } catch (error) {
+    /* 壳页会被后台立即关闭；关闭快于 goto 完成属于正常成功路径。 */
+    if (!/Target page, context or browser has been closed/i.test(error?.message || '')) throw error;
+  }
   const indexPage = await waitForIndexPage(context, extensionId);
   indexPage.on('pageerror', (error) => errors.push(error.message));
   await indexPage.waitForSelector('#clock', { state: 'visible', timeout: 8000 });

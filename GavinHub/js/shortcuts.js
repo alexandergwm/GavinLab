@@ -68,10 +68,18 @@ function dockTabIcon(name) {
 function loadList(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
+    if (!raw) return [...fallback];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [...fallback];
   } catch {
-    return fallback;
+    return [...fallback];
   }
+}
+
+function normalizeItemId(item) {
+  if (!item || typeof item !== 'object') return null;
+  if (item.id == null || item.id === '') return null;
+  return { ...item, id: String(item.id) };
 }
 
 function transparentKnownIconForUrl(url = '') {
@@ -143,11 +151,14 @@ function mergeDockLinkFromShortcut(item, shortcutById) {
 }
 
 function readSanitizedShortcuts() {
-  return loadList(SHORTCUTS_KEY, DEFAULT_SHORTCUTS).map(sanitizeShortcut);
+  return loadList(SHORTCUTS_KEY, DEFAULT_SHORTCUTS)
+    .map(normalizeItemId)
+    .filter(Boolean)
+    .map(sanitizeShortcut);
 }
 
 export function loadShortcuts() {
-  const list = loadList(SHORTCUTS_KEY, DEFAULT_SHORTCUTS);
+  const list = loadList(SHORTCUTS_KEY, DEFAULT_SHORTCUTS).map(normalizeItemId).filter(Boolean);
   const sanitized = list.map(sanitizeShortcut);
   let changed = false;
   sanitized.forEach((s, i) => {
@@ -161,7 +172,7 @@ export function loadShortcuts() {
 }
 
 export function loadDock() {
-  let dock = loadList(DOCK_KEY, DEFAULT_DOCK);
+  let dock = loadList(DOCK_KEY, DEFAULT_DOCK).map(normalizeItemId).filter(Boolean);
 
   // 页面切换已内置为 Dock 分段标签，持久化 dock 只保留快捷链接
   const links = dock.filter((d) => d.type === 'link');

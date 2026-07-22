@@ -24,6 +24,7 @@ export const KEYS = {
   greetingLast: 'startpage-greeting-last',
   githubToken: 'startpage-github-token',
   githubGistId: 'startpage-github-gist-id',
+  syncLocalAt: 'startpage-sync-local-at',
 };
 
 export const SESSION_KEYS = {

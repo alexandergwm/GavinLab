@@ -9,7 +9,7 @@ import { ensureGoalsFromLegacyCountdowns } from './goals.js';
 const SYNC_VERSION = 1;
 const SYNC_ROOT_KEY = 'gavinhubSync';
 const SYNC_CHUNK_PREFIX = 'gavinhubSync_c';
-const SYNC_LOCAL_AT_KEY = 'startpage-sync-local-at';
+const SYNC_LOCAL_AT_KEY = KEYS.syncLocalAt;
 /** 单条约 8192；按 JSON.stringify(value)+key 计，CJK 最坏按 \uXXXX 预留 */
 const SYNC_CHUNK_SAFE_CHARS = 1200;
 const SYNC_TOTAL_SAFE_CHARS = 90000;
@@ -63,7 +63,7 @@ function buildSyncPayload() {
   const settingsRaw = readLocalJson(KEYS.settings) || {};
   const payload = {
     v: SYNC_VERSION,
-    updatedAt: Date.now(),
+    updatedAt: getLocalSyncAt() || Date.now(),
     settings: extractSyncSettings(settingsRaw),
   };
   for (const key of SYNC_DATA_KEYS) {
@@ -251,7 +251,13 @@ export async function pullSyncOnStartup() {
 
   try {
     const remote = await storageGetSync();
-    const localAt = getLocalSyncAt();
+    let localAt = getLocalSyncAt();
+
+    /* 旧版已有本地数据但没有修改时间：优先保住本地数据，避免首次升级被旧云端覆盖。 */
+    if (!localAt && localHasUserData()) {
+      localAt = Date.now();
+      setLocalSyncAt(localAt);
+    }
 
     if (!remote || isEmptyPayload(remote)) {
       if (localHasUserData()) {
