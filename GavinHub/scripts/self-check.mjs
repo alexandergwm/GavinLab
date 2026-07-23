@@ -14,14 +14,48 @@ function assert(cond, msg) {
   if (!cond) errors.push(msg);
 }
 
-for (const f of ['css/base.css', 'css/home.css', 'css/dock.css', 'css/apps.css', 'css/feed.css', 'css/dialogs.css']) {
+for (const f of [
+  'css/base.css',
+  'css/home.css',
+  'css/dock.css',
+  'css/apps.css',
+  'css/feed.css',
+  'css/dialogs.css',
+  'css/settings.css',
+  'css/calendar.css',
+  'css/todo-dialog.css',
+  'css/weather.css',
+]) {
   assert(existsSync(join(root, f)), `missing ${f}`);
 }
 const html = read('index.html');
 assert(html.includes('data-lazy-style="apps"'), 'apps stylesheet should be non-blocking');
 assert(html.includes('data-lazy-style="dialogs"'), 'dialog stylesheet should be non-blocking');
+for (const [style, file] of [
+  ['settings', 'settings.css'],
+  ['calendar', 'calendar.css'],
+  ['todo', 'todo-dialog.css'],
+  ['weather', 'weather.css'],
+]) {
+  assert(html.includes(`data-lazy-style="${style}"`), `${style} stylesheet should be lazy`);
+  assert(html.includes(`data-dialog-style="${style}"`), `${style} dialog should declare its stylesheet`);
+  assert(
+    !html.includes(`rel="preload" as="style" href="css/${file}"`),
+    `${style} stylesheet should not compete with startup resources`,
+  );
+}
 assert(html.includes('js/boot.js'), 'index.html should load boot.js');
-for (const part of ['css/base.css', 'css/home.css', 'css/dock.css', 'css/apps.css', 'css/dialogs.css']) {
+for (const part of [
+  'css/base.css',
+  'css/home.css',
+  'css/dock.css',
+  'css/apps.css',
+  'css/dialogs.css',
+  'css/settings.css',
+  'css/calendar.css',
+  'css/todo-dialog.css',
+  'css/weather.css',
+]) {
   assert(html.includes(part), `index.html should link ${part}`);
 }
 assert(!html.includes('css/feed.css'), 'index.html should not link feed.css');
@@ -71,7 +105,8 @@ assert(runtime.includes("features.load('settings'"), 'settings should use the fe
 const preparePageBody = runtime.slice(runtime.indexOf('export async function preparePage'), runtime.indexOf('/** 进入页面时'));
 assert(!preparePageBody.includes('pageModules.settings'), 'apps navigation must not initialize settings before the transition');
 assert(runtime.includes("ensureStyle('apps')"), 'apps route should activate its stylesheet before painting');
-assert(read('js/dialog-ui.js').includes("ensureStyle('dialogs')"), 'dialogs should activate styling before opening');
+assert(read('js/dialog-ui.js').includes('export function prepareDialogStyles'), 'dialogs should expose parallel style preparation');
+assert(read('js/dialog-ui.js').includes('dataset.dialogStyle'), 'dialogs should activate feature styling');
 
 const settingsUi = read('js/settings-ui.js');
 assert(settingsUi.includes('export function initSettingsUI'), 'settings-ui.js should export initSettingsUI');
@@ -81,6 +116,10 @@ assert(wpLib.includes('return { open }'), 'wallpaper-library.js should return { 
 
 assert(read('js/calendar.js').includes('export function initCalendarApp'), 'calendar.js should export initCalendarApp');
 assert(!read('js/calendar.js').includes('export function initDateInfo'), 'calendar.js should not export initDateInfo');
+const weatherUi = read('js/weather-ui.js');
+assert(weatherUi.includes("import('./weather-modal.js')"), 'weather modal should load on demand');
+assert(weatherUi.includes("prepareDialogStyles('weather-dialog')"), 'weather module and styles should prepare in parallel');
+assert(read('js/weather-modal.js').includes('export function openWeatherDialog'), 'weather modal should expose its opener');
 
 for (const f of ['js/wallpaper.js', 'js/wallpaper-fetch.js', 'js/wallpaper-image.js', 'js/wallpaper-effects.js', 'js/util.js']) {
   assert(existsSync(join(root, f)), `missing ${f}`);
@@ -174,4 +213,4 @@ if (errors.length) {
   console.error('SELF-CHECK FAILED:\n' + errors.map((e) => `  - ${e}`).join('\n'));
   process.exit(1);
 }
-console.log('SELF-CHECK OK:', jsFiles.length, 'JS modules, 6 CSS parts, runtime layer ready');
+console.log('SELF-CHECK OK:', jsFiles.length, 'JS modules, 10 CSS parts, runtime layer ready');

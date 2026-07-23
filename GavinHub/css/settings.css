@@ -1,0 +1,245 @@
+/* 设置对话框 — 继承 modal-dialog 毛玻璃 */
+.settings-dialog {
+  max-width: 380px;
+  width: calc(100vw - 48px);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+}
+
+.settings-form {
+  padding: 24px;
+}
+
+.settings-form h2 {
+  font-size: 18px;
+  margin-bottom: 20px;
+  color: var(--glass-panel-text);
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: var(--glass-panel-text-muted);
+}
+
+.settings-field select,
+.settings-field input {
+  padding: 8px 12px;
+  border: 1px solid var(--glass-panel-border);
+  border-radius: 8px;
+  font-size: 14px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--glass-panel-text);
+}
+
+.settings-field select:focus-visible,
+.settings-field input:focus-visible {
+  outline: none;
+  border-color: var(--glass-panel-border-hover);
+  box-shadow: var(--glass-focus-ring);
+}
+
+.settings-field--checkbox {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--glass-panel-text);
+}
+
+.settings-field--checkbox input {
+  width: 16px;
+  height: 16px;
+  accent-color: #667eea;
+}
+
+.settings-hint {
+  font-size: 12px;
+  color: var(--glass-panel-text-muted);
+  margin: -8px 0 12px;
+}
+
+.settings-sync-block {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--glass-panel-divider);
+}
+
+.settings-sync-block-title {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--glass-panel-text);
+}
+
+.settings-sync-tabs,
+.settings-sync-subtabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--glass-panel-border);
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+
+.settings-sync-tab,
+.settings-sync-subtab {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  padding: 8px 6px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--glass-panel-text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.settings-sync-tab.active,
+.settings-sync-subtab.active {
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--glass-panel-text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.settings-sync-tab:focus-visible,
+.settings-sync-subtab:focus-visible {
+  outline: 2px solid #667eea;
+  outline-offset: 1px;
+}
+
+.settings-sync-panel[hidden] {
+  display: none !important;
+}
+
+.settings-sync-panel-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-sync-scope-hint {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.settings-sync-file-action {
+  width: 100%;
+  margin-top: 0;
+}
+
+.settings-sync-manual-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.settings-sync-manual-hint.is-error {
+  color: #c0392b;
+}
+
+.settings-sync-btn {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--glass-panel-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--glass-panel-text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.settings-sync-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: var(--glass-panel-border-hover);
+}
+
+.settings-sync-btn:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.settings-sync-btn--primary {
+  background: rgba(102, 126, 234, 0.72);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+.settings-sync-btn--primary:hover {
+  background: rgba(102, 126, 234, 0.88);
+}
+
+.settings-sync-block .settings-github-steps {
+  margin-top: 0;
+}
+
+.settings-github-steps {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--glass-panel-text-muted);
+}
+
+.settings-github-steps li + li {
+  margin-top: 4px;
+}
+
+.settings-github-steps code {
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.12);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+.settings-link-btn {
+  border: none;
+  padding: 0;
+  background: none;
+  color: #a8b8ff;
+  font-size: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.settings-link-btn:hover {
+  color: #c5d0ff;
+}
+
+.settings-field--gist input {
+  color: var(--glass-panel-text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.settings-actions button {
+  padding: 8px 20px;
+  border: 1px solid var(--glass-panel-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--glass-panel-text);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.settings-actions button:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: var(--glass-panel-border-hover);
+}

@@ -67,6 +67,23 @@ if (blockingCssBytes > 50_000) {
   errors.push(`render-blocking CSS is ${blockingCssBytes} bytes (budget 50000)`);
 }
 
+const lazyCssBudgets = {
+  'css/dialogs.css': 5_000,
+  'css/settings.css': 7_000,
+  'css/weather.css': 9_000,
+  'css/todo-dialog.css': 9_000,
+  'css/calendar.css': 40_000,
+};
+for (const [relativePath, budget] of Object.entries(lazyCssBudgets)) {
+  const file = join(root, relativePath);
+  if (!existsSync(file)) {
+    errors.push(`missing lazy stylesheet: ${relativePath}`);
+    continue;
+  }
+  const bytes = statSync(file).size;
+  if (bytes > budget) errors.push(`${relativePath} is ${bytes} bytes (budget ${budget})`);
+}
+
 if (errors.length) {
   console.error(`ARCHITECTURE AUDIT FAILED:\n${errors.map((error) => `  - ${error}`).join('\n')}`);
   process.exit(1);

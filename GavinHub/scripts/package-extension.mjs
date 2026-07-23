@@ -22,6 +22,10 @@ const INCLUDE = [
   'css/dock.css',
   'css/apps.css',
   'css/dialogs.css',
+  'css/settings.css',
+  'css/calendar.css',
+  'css/todo-dialog.css',
+  'css/weather.css',
   'assets/default-wallpaper.jpg',
 ];
 

@@ -14,6 +14,10 @@
   <link rel="stylesheet" href="css/dock.css">
   <link rel="preload" as="style" href="css/apps.css" data-lazy-style="apps">
   <link rel="preload" as="style" href="css/dialogs.css" data-lazy-style="dialogs">
+  <link href="css/settings.css" data-lazy-style="settings">
+  <link href="css/calendar.css" data-lazy-style="calendar">
+  <link href="css/todo-dialog.css" data-lazy-style="todo">
+  <link href="css/weather.css" data-lazy-style="weather">
   <style id="boot-critical-hide">
     .search-suggestions, .search-quote { display: none !important; }
   </style>
@@ -282,7 +286,7 @@
 
   <nav id="dock" class="dock" aria-label="快捷导航"></nav>
 
-  <dialog id="settings-dialog" class="modal-dialog settings-dialog">
+  <dialog id="settings-dialog" class="modal-dialog settings-dialog" data-dialog-style="settings">
     <form class="settings-form" id="settings-form">
       <h2>设置</h2>
       <label class="settings-field">
@@ -370,7 +374,7 @@
     <div id="wallpaper-library-grid" class="wallpaper-library-grid"></div>
   </dialog>
 
-  <dialog id="calendar-dialog" class="modal-dialog calendar-dialog">
+  <dialog id="calendar-dialog" class="modal-dialog calendar-dialog" data-dialog-style="calendar">
     <div class="cal-toolbar">
       <div class="cal-toolbar-left">
         <h2 id="cal-title" class="cal-month-title"></h2>
@@ -392,7 +396,7 @@
     </div>
   </dialog>
 
-  <dialog id="todo-detail-dialog" class="todo-detail-dialog">
+  <dialog id="todo-detail-dialog" class="todo-detail-dialog" data-dialog-style="todo">
     <form id="todo-detail-form" class="todo-detail-form">
       <div class="todo-detail-header">
         <button type="button" class="modal-close todo-detail-close" aria-label="关闭">×</button>
@@ -458,7 +462,7 @@
     </form>
   </dialog>
 
-  <dialog id="weather-dialog" class="modal-dialog weather-dialog">
+  <dialog id="weather-dialog" class="modal-dialog weather-dialog" data-dialog-style="weather">
     <div class="modal-header weather-modal-header">
       <span class="modal-header-side" aria-hidden="true"></span>
       <h2 class="modal-title">天气详情</h2>

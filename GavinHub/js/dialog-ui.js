@@ -9,6 +9,16 @@ function resolveDialog(dialogOrId) {
   return dialogOrId;
 }
 
+function getDialogStyleIds(dialog) {
+  return ['dialogs', dialog?.dataset.dialogStyle].filter(Boolean);
+}
+
+export function prepareDialogStyles(dialogOrId) {
+  const dialog = resolveDialog(dialogOrId);
+  if (!(dialog instanceof HTMLDialogElement)) return Promise.resolve([]);
+  return Promise.allSettled(getDialogStyleIds(dialog).map(ensureStyle));
+}
+
 export function openDialog(dialogOrId) {
   const dialog = resolveDialog(dialogOrId);
   if (!(dialog instanceof HTMLDialogElement) || dialog.open) return false;
@@ -26,8 +36,9 @@ export function openDialog(dialogOrId) {
       console.warn('[GavinHub] dialog failed to open', error);
     }
   };
-  if (getStyleStatus('dialogs') === 'ready') show();
-  else void ensureStyle('dialogs').then(show, show);
+  const styleIds = getDialogStyleIds(dialog);
+  if (styleIds.every((id) => getStyleStatus(id) === 'ready')) show();
+  else void prepareDialogStyles(dialog).then(show);
   return true;
 }
 

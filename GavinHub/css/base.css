@@ -71,7 +71,7 @@
   --transition-theme: 0.28s cubic-bezier(0.4, 0, 0.2, 1); /* 文字主题颜色渐变 */
   --transition-wallpaper: 0.45s cubic-bezier(0.4, 0, 0.2, 1); /* 壁纸滤镜/缩放 */
   --transition-page: 0.32s cubic-bezier(0.4, 0, 0.2, 1); /* 页面/毛玻璃切换 — 更平滑的跨页过渡 */
-  --transition-search-focus: 0.96s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-search-focus: 0.82s cubic-bezier(0.16, 1, 0.3, 1);
   --dock-height: 68px;
   --dock-bottom: 24px;
   --dock-clearance: calc(var(--dock-height) + var(--dock-bottom) + 28px);

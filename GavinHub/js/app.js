@@ -3,7 +3,7 @@ import { createSettingsStore } from './settings-store.js';
 import { initKeyboard } from './keyboard.js';
 import { PAGE_CYCLE, onPageEnter, pageModules, preloadPageModule, preparePage } from './runtime.js';
 import { focusSearchInput, scheduleInitialSearchFocus, initSearchFocusHooks, dismissSearchForPageLeave } from './search-focus.js';
-import { initDialogController } from './dialog-ui.js';
+import { initDialogController, prepareDialogStyles } from './dialog-ui.js';
 import { loadOptionalModules, nextPaint, runWhenIdle, settleWithin, waitForTransition } from './lifecycle.js';
 import { createPageRouter } from './page-router.js';
 
@@ -182,7 +182,10 @@ function initLazyFeatureActions() {
     settingsButton.dataset.loading = '1';
     settingsButton.setAttribute('aria-busy', 'true');
     try {
-      const controller = await pageModules.settings(settingsApi);
+      const [controller] = await Promise.all([
+        pageModules.settings(settingsApi),
+        prepareDialogStyles('settings-dialog'),
+      ]);
       controller?.open?.();
     } catch (error) {
       console.error('[GavinHub] settings failed to open', error);
@@ -303,7 +306,10 @@ async function initCore() {
   }
 
   modules.metaBar?.initMetaBar(async () => {
-    const cal = await pageModules.calendar();
+    const [cal] = await Promise.all([
+      pageModules.calendar(),
+      prepareDialogStyles('calendar-dialog'),
+    ]);
     cal.openCalendarDialog();
   });
 

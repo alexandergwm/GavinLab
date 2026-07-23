@@ -67,6 +67,13 @@ assert(!baseCss.includes('transition:\n    filter var(--transition-search-focus)
   'full-screen wallpaper filters must not animate during search focus');
 assert(!baseCss.includes('body.search-focused:not(.page-blur-active) .wallpaper-img'),
   'search focus should use a composited overlay instead of filtering the wallpaper');
+const homeCss = await readFile(join(root, 'css/home.css'), 'utf8');
+assert(!/\.search-engine-badge\s*\{[^}]*transition:[^}]*width/s.test(homeCss),
+  'search focus must not animate the engine badge width');
+assert(
+  (homeCss.match(/var\(--transition-search-focus\)/g) || []).length >= 5,
+  'search box focus properties should share one transition timeline',
+);
 assert(!/\.wallpaper-blur\s*\{[^}]*filter:/s.test(baseCss),
   'apps wallpaper effects should be baked into the preview bitmap');
 assert(!/\.search-focus-overlay\s*\{[^}]*filter:/s.test(baseCss),
@@ -106,6 +113,9 @@ try {
   const intelligenceLoadedAtStartup = await page.evaluate(() => performance.getEntriesByType('resource')
     .some((entry) => /\/js\/(smart-input|currency)\.js$/.test(entry.name)));
   assert(!intelligenceLoadedAtStartup, 'search intelligence should not load before the first query');
+  const weatherModalLoadedAtStartup = await page.evaluate(() => performance.getEntriesByType('resource')
+    .some((entry) => entry.name.endsWith('/js/weather-modal.js')));
+  assert(!weatherModalLoadedAtStartup, 'weather modal should not load on the home startup path');
   const lifecycleSafety = await page.evaluate(async () => {
     const [{ createFeatureRegistry }, dialogs, { createWallpaperEffects }] = await Promise.all([
       import('./js/feature-registry.js'),
@@ -125,7 +135,7 @@ try {
     await registry.load('retryable').catch(() => null);
     const retryValue = await registry.load('retryable');
 
-    const dialog = document.getElementById('weather-dialog');
+    const dialog = document.getElementById('shortcuts-dialog');
     dialogs.openDialog(dialog);
     dialogs.closeDialog(dialog);
     await new Promise((resolve) => setTimeout(resolve, 40));
@@ -194,14 +204,45 @@ try {
   assert(await page.locator('#clock').isVisible(), 'clock should be visible');
   assert(await page.locator('#search-input').isVisible(), 'search should be visible');
   assert(await page.locator('#dock').isVisible(), 'dock should be visible');
+  const activeFeatureStylesAtStartup = await page.evaluate(() =>
+    [...document.querySelectorAll('link[data-active-style]')]
+      .map((link) => link.dataset.activeStyle)
+      .filter((id) => ['settings', 'calendar', 'weather'].includes(id)));
+  assert(
+    activeFeatureStylesAtStartup.length === 0,
+    `feature dialog styles should remain idle at startup: ${activeFeatureStylesAtStartup}`,
+  );
 
   await page.locator('#weather-trigger').click();
   await page.waitForSelector('#weather-dialog[open]', { timeout: 1000 });
+  assert(
+    await page.evaluate(() => performance.getEntriesByType('resource')
+      .some((entry) => entry.name.endsWith('/js/weather-modal.js'))),
+    'opening weather should activate its modal module',
+  );
+  const activeStylesAfterWeather = await page.evaluate(() =>
+    [...document.querySelectorAll('link[data-active-style]')]
+      .map((link) => link.dataset.activeStyle));
+  assert(
+    activeStylesAfterWeather.includes('dialogs')
+      && activeStylesAfterWeather.includes('weather')
+      && !activeStylesAfterWeather.includes('calendar')
+      && !activeStylesAfterWeather.includes('settings'),
+    `weather should activate only its dialog styles: ${activeStylesAfterWeather}`,
+  );
   await page.locator('#weather-dialog .modal-close').click();
   await page.waitForFunction(() => !document.getElementById('weather-dialog')?.open);
 
   for (const dialogId of ['calendar-dialog']) {
-    await page.evaluate((id) => document.getElementById(id)?.showModal(), dialogId);
+    await page.evaluate(async (id) => {
+      const { openDialog } = await import('./js/dialog-ui.js');
+      openDialog(id);
+    }, dialogId);
+    await page.waitForSelector(`#${dialogId}[open]`);
+    assert(
+      await page.evaluate(() => Boolean(document.querySelector('link[data-active-style="calendar"]'))),
+      'calendar should activate its feature stylesheet',
+    );
     await page.locator(`#${dialogId} .modal-close`).first().click();
     await page.waitForFunction((id) => !document.getElementById(id)?.open, dialogId);
     const closedState = await page.locator(`#${dialogId}`).evaluate((dialog) => ({
@@ -477,9 +518,34 @@ try {
   await page.locator('.cal-side-add').click();
   assert(await page.locator('.cal-side-form').isVisible(), 'goal form should open on demand');
   await page.locator('.cal-side-cancel').click();
+  await page.locator('#cal-view-toggle').click();
+  await page.waitForSelector('.month-calendar');
+  assert(await page.locator('.month-day-cell').count() >= 28,
+    'month view should render a complete delegated date grid');
+  assert(
+    await page.locator('#week-calendar').getAttribute('data-month-cells-bound') === 'true',
+    'month view should use a single delegated event boundary',
+  );
+  await page.locator('.month-day-cell:not(.is-other-month)').first().click({ button: 'right' });
+  await page.waitForFunction(() => !document.getElementById('cal-day-menu')?.hidden);
+  await page.locator('#cal-title').click();
+  await page.locator('#cal-view-toggle').click();
+  await page.waitForSelector('.week-calendar');
   assert(await page.locator('.cal-event').count() === 8, 'busy week should start in compact mode');
   await page.locator('.week-events-overflow-btn').click();
   await page.waitForFunction(() => document.querySelectorAll('.cal-event').length === 20);
+  assert(
+    !(await page.locator('link[data-active-style="todo"]').count()),
+    'todo editor styling should remain idle while browsing the calendar',
+  );
+  await page.locator('.cal-event-title').first().click();
+  await page.waitForSelector('#todo-detail-dialog[open]');
+  assert(
+    await page.locator('link[data-active-style="todo"]').count() === 1,
+    'opening a todo should activate only its editor stylesheet',
+  );
+  await page.locator('#todo-detail-dialog .modal-close').click();
+  await page.waitForFunction(() => !document.getElementById('todo-detail-dialog')?.open);
   const mobileCalendar = await page.evaluate(() => {
     const main = document.querySelector('.calendar-main');
     return { scrollWidth: main?.scrollWidth, clientWidth: main?.clientWidth };

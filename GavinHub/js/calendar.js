@@ -184,52 +184,65 @@ function gotoWeekForDate(dateKey) {
 }
 
 function bindMonthCells(container) {
-  container.querySelectorAll('.month-day-cell').forEach((cell) => {
-    let pressTimer = null;
-    let longPressTriggered = false;
+  if (container.dataset.monthCellsBound === 'true') return;
+  container.dataset.monthCellsBound = 'true';
 
-    cell.addEventListener('click', (e) => {
-      e.preventDefault();
-      const todoEl = e.target.closest('.month-todo-item');
-      if (todoEl) {
-        if (longPressTriggered) {
-          longPressTriggered = false;
-          return;
-        }
-        openTodoDetail(todoEl.dataset.todoId, todoEl.dataset.todoInstance || null);
-        return;
-      }
-      if (longPressTriggered) {
-        longPressTriggered = false;
-        return;
-      }
-      gotoWeekForDate(cell.dataset.date);
-    });
+  let pressTimer = null;
+  let pressedCell = null;
+  let longPressTriggered = false;
 
-    cell.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      showDayMenu(cell.dataset.date, e.clientX, e.clientY);
-    });
+  const getCell = (target) => target.closest?.('.month-day-cell');
+  const clearPress = ({ resetLongPress = false } = {}) => {
+    if (pressTimer) window.clearTimeout(pressTimer);
+    pressTimer = null;
+    pressedCell = null;
+    if (resetLongPress) longPressTriggered = false;
+  };
 
-    cell.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0) return;
+  container.addEventListener('click', (event) => {
+    const cell = getCell(event.target);
+    if (!cell || !container.contains(cell)) return;
+    event.preventDefault();
+    if (longPressTriggered) {
       longPressTriggered = false;
-      pressTimer = setTimeout(() => {
-        longPressTriggered = true;
-        showDayMenu(cell.dataset.date, e.clientX, e.clientY);
-      }, 500);
-    });
+      return;
+    }
 
-    const clearPress = () => {
-      if (pressTimer) {
-        clearTimeout(pressTimer);
-        pressTimer = null;
-      }
-    };
-    cell.addEventListener('pointerup', clearPress);
-    cell.addEventListener('pointercancel', clearPress);
-    cell.addEventListener('pointerleave', clearPress);
+    const todo = event.target.closest('.month-todo-item');
+    if (todo) {
+      openTodoDetail(todo.dataset.todoId, todo.dataset.todoInstance || null);
+      return;
+    }
+    gotoWeekForDate(cell.dataset.date);
+  });
+
+  container.addEventListener('contextmenu', (event) => {
+    const cell = getCell(event.target);
+    if (!cell || !container.contains(cell)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    showDayMenu(cell.dataset.date, event.clientX, event.clientY);
+  });
+
+  container.addEventListener('pointerdown', (event) => {
+    const cell = getCell(event.target);
+    if (event.button !== 0 || !cell || !container.contains(cell)) return;
+    clearPress({ resetLongPress: true });
+    pressedCell = cell;
+    const { clientX, clientY } = event;
+    pressTimer = window.setTimeout(() => {
+      pressTimer = null;
+      longPressTriggered = true;
+      showDayMenu(cell.dataset.date, clientX, clientY);
+    }, 500);
+  });
+
+  container.addEventListener('pointerup', () => clearPress());
+  container.addEventListener('pointercancel', () => clearPress({ resetLongPress: true }));
+  container.addEventListener('pointerout', (event) => {
+    if (pressedCell && !pressedCell.contains(event.relatedTarget)) {
+      clearPress({ resetLongPress: true });
+    }
   });
 }
 

@@ -42,7 +42,7 @@ python3 -m http.server 8080
 GavinHub/
 ├── index.html          # 入口
 ├── manifest.json       # Edge 扩展配置
-├── css/                # 按首屏、Dock、应用页和弹窗拆分的样式
+├── css/                # 首屏、Dock、应用及功能弹窗的按需样式
 ├── js/
 │   ├── boot.js         # 轻量启动入口
 │   ├── app.js          # 页面协调
@@ -53,6 +53,8 @@ GavinHub/
 │   ├── wallpaper.js    # 壁纸加载
 │   ├── wallpaper-effects.js # 毛玻璃层与预览缓存
 │   ├── search-intelligence.js # 搜索智能解析懒加载边界
+│   ├── weather-ui.js   # 首屏天气摘要
+│   ├── weather-modal.js # 按需天气详情
 │   ├── shortcuts.js    # 快捷方式与 Dock
 │   ├── calendar.js     # 日历与待办
 │   ├── sync.js         # Edge / 文件同步
@@ -73,6 +75,7 @@ GavinHub/
 - 零运行时依赖，无构建步骤
 - 功能、页面、弹窗和样式拥有独立生命周期，可按需加载并在失败后重试
 - 应用页样式和搜索智能解析按需加载，压低新标签页首屏解析成本
+- 设置、天气、日历和待办编辑器拥有独立样式生命周期
 - 壁纸效果层拥有独立异步预览和可回收缓存，避免主线程同步图片编码
 - 时钟每分钟更新一次，避免每秒渲染
 - 图标优先使用字母占位，外链 favicon 懒加载

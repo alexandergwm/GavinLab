@@ -32,11 +32,11 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.14),
     0 6px 20px rgba(0, 0, 0, 0.08);
   transition:
-    background 0.62s cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 0.62s cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 0.72s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.62s cubic-bezier(0.16, 1, 0.3, 1),
-    border-radius 0.44s cubic-bezier(0.16, 1, 0.3, 1);
+    background var(--transition-search-focus),
+    border-color var(--transition-search-focus),
+    box-shadow var(--transition-search-focus),
+    transform var(--transition-search-focus),
+    border-radius var(--transition-search-focus);
 }
 
 .search-box[data-glass-refresh='1'] {
@@ -71,9 +71,9 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  width: 0;
+  width: auto;
   overflow: hidden;
-  padding-left: 0;
+  padding-left: 14px;
   border: none;
   background: transparent;
   font-size: 11px;
@@ -81,13 +81,9 @@
   letter-spacing: 0.02em;
   color: color-mix(in srgb, var(--meta-color) 62%, transparent);
   white-space: nowrap;
-  opacity: 0;
+  opacity: 1;
   cursor: pointer;
-  transition:
-    width 0.38s cubic-bezier(0.22, 1, 0.36, 1),
-    padding 0.38s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.34s ease,
-    color 0.12s ease;
+  transition: color 0.12s ease;
 }
 
 .search-engine-badge .search-badge-icon {
@@ -160,9 +156,6 @@ body[data-text-theme='on-light'] .search-engine-badge.has-icon:hover .search-bad
 }
 
 .search-box:focus-within .search-engine-badge {
-  width: auto;
-  padding-left: 14px;
-  opacity: 1;
   color: color-mix(in srgb, var(--meta-color) 72%, transparent);
 }
 
