@@ -1,4 +1,6 @@
-const DEFAULT_CACHE_SIZE = 4;
+// Full-viewport previews are intentionally high resolution; two wallpapers are
+// enough for instant back/forward switching without retaining excess bitmaps.
+const DEFAULT_CACHE_SIZE = 2;
 const PREVIEW_WAIT_MS = 800;
 
 export function createWallpaperEffects({

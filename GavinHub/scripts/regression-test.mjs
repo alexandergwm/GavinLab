@@ -134,16 +134,36 @@ try {
   await page.waitForFunction(() => document.body.classList.contains('search-focused'), null, {
     timeout: 3000,
   });
-  const bootEffectState = await page.evaluate(() => ({
-    effectsReady: document.body.classList.contains('wallpaper-effects-ready'),
-    appsLayer: document.getElementById('wallpaper-blur')?.style.backgroundImage || '',
-    focusLayer: document.getElementById('search-focus-overlay')?.style.backgroundImage || '',
-  }));
+  const bootEffectState = await page.evaluate(async () => {
+    const appsLayer = document.getElementById('wallpaper-blur')?.style.backgroundImage || '';
+    const focusLayer = document.getElementById('search-focus-overlay')?.style.backgroundImage || '';
+    const measureBackgroundWidth = (value) => new Promise((resolve) => {
+      const url = value.match(/^url\(["']?(.*?)["']?\)$/)?.[1];
+      if (!url) {
+        resolve(0);
+        return;
+      }
+      const image = new Image();
+      image.onload = () => resolve(image.naturalWidth);
+      image.onerror = () => resolve(0);
+      image.src = url;
+    });
+    return {
+      effectsReady: document.body.classList.contains('wallpaper-effects-ready'),
+      appsLayer,
+      focusLayer,
+      appsLayerWidth: await measureBackgroundWidth(appsLayer),
+    };
+  });
   assert(
     bootEffectState.effectsReady
       && bootEffectState.appsLayer.includes('blob:')
       && bootEffectState.focusLayer.includes('blob:'),
     `search focus must wait for final wallpaper effects: ${JSON.stringify(bootEffectState)}`,
+  );
+  assert(
+    bootEffectState.appsLayerWidth >= 1280,
+    `apps glass preview must retain viewport-level detail: ${JSON.stringify(bootEffectState)}`,
   );
   const bootVisualState = await page.evaluate(() => {
     const visibleFrames = window.__bootVisualFrames.filter((frame) => frame.searchVisible);

@@ -3,6 +3,9 @@
 export const MIN_CACHE_WIDTH = 1280;
 const IMAGE_PROBE_TIMEOUT_MS = 8000;
 const ANALYSIS_MAX_WIDTH = 512;
+const APPS_EFFECT_MIN_WIDTH = 1280;
+const APPS_EFFECT_MAX_WIDTH = 1920;
+const APPS_EFFECT_BLUR_PX = 18;
 
 export function isLocalWallpaperUrl(url) {
   return !!url && !/^https?:/i.test(url) && !url.startsWith('blob:') && !url.startsWith('data:');
@@ -126,9 +129,12 @@ function canvasToObjectUrl(canvas, quality) {
 
 /** Build lightweight layers asynchronously so transitions only animate opacity. */
 export async function createWallpaperEffectPreviews(url) {
-  const loaded = await loadAnalysisSource(url, { maxWidth: 960 });
+  const viewportWidth = Math.max(APPS_EFFECT_MIN_WIDTH, Math.ceil(window.innerWidth * 1.05));
+  const appsTargetWidth = Math.min(APPS_EFFECT_MAX_WIDTH, viewportWidth);
+  const decodeWidth = Math.max(appsTargetWidth, 1200);
+  const loaded = await loadAnalysisSource(url, { maxWidth: decodeWidth });
   try {
-    const render = async (targetWidth, quality, filter) => {
+    const render = async (targetWidth, quality, filter, overscan = 0) => {
       const width = Math.min(targetWidth, loaded.width);
       const height = Math.max(1, Math.round(width * loaded.height / loaded.width));
       const canvas = document.createElement('canvas');
@@ -139,12 +145,23 @@ export async function createWallpaperEffectPreviews(url) {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.filter = filter;
-      ctx.drawImage(loaded.source, 0, 0, width, height);
+      ctx.drawImage(
+        loaded.source,
+        -overscan,
+        -overscan,
+        width + overscan * 2,
+        height + overscan * 2,
+      );
       return canvasToObjectUrl(canvas, quality);
     };
     const [apps, focus] = await Promise.all([
-      render(300, 0.72, 'brightness(84%) saturate(96%)'),
-      render(900, 0.8, 'brightness(94%) saturate(104%)'),
+      render(
+        appsTargetWidth,
+        0.86,
+        `blur(${APPS_EFFECT_BLUR_PX}px) brightness(84%) saturate(112%)`,
+        APPS_EFFECT_BLUR_PX * 2,
+      ),
+      render(1200, 0.82, 'brightness(94%) saturate(104%)'),
     ]);
     return {
       apps,

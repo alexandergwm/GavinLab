@@ -200,12 +200,13 @@ body {
 .wallpaper-blur {
   z-index: 1;
   opacity: 0;
-  transform: translateZ(0) scale(1.012);
+  transform: translateZ(0) scale(1.025);
   transition: none;
   pointer-events: none;
   background-color: transparent;
   backface-visibility: hidden;
   contain: strict;
+  image-rendering: auto;
   will-change: opacity;
 }
 
