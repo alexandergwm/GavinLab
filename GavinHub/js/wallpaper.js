@@ -45,7 +45,8 @@ import {
   isWallpaperUrlReachable,
   loadImageElement,
   measureBlobWidth,
-  createWallpaperEffectPreviews,
+  createWallpaperAppsPreview,
+  createWallpaperFocusPreview,
   MIN_CACHE_WIDTH,
 } from './wallpaper-image.js';
 import { createWallpaperEffects } from './wallpaper-effects.js';
@@ -84,9 +85,11 @@ let currentWallpaper = isValidCachedWallpaperMeta(storedBootWallpaper)
   ? { ...storedBootWallpaper, type: storedBootWallpaper.type || 'image' }
   : { ...DEFAULT_WALLPAPER };
 let initialWallpaperRevealed = document.body.classList.contains('boot-done');
-let wallpaperEffectsReadyPromise = Promise.resolve(false);
+let wallpaperFocusReadyPromise = Promise.resolve(false);
+let wallpaperAppsReadyPromise = Promise.resolve(false);
 const wallpaperEffects = createWallpaperEffects({
-  createPreviews: createWallpaperEffectPreviews,
+  createFocusPreview: createWallpaperFocusPreview,
+  createAppsPreview: createWallpaperAppsPreview,
 });
 
 window.addEventListener('pagehide', wallpaperEffects.dispose, { once: true });
@@ -583,16 +586,24 @@ function getBlurWallpaperUrl(data) {
   return data?.url || '';
 }
 
-/** 同步模糊层壁纸 — 应用页依赖此层，不可 idle 延迟 */
+function getWallpaperEffectPayload(data = currentWallpaper) {
+  if (!data) return null;
+  if (data.type === 'gradient' && data.css) {
+    return { type: 'gradient', css: data.css };
+  }
+  return { type: 'image', url: getBlurWallpaperUrl(data) };
+}
+
+/** 首页搜索聚焦只等待轻量预览，不再被第二页高清模糊阻塞。 */
+function syncFocusWallpaperLayer(data = currentWallpaper) {
+  if (!data) return Promise.resolve(false);
+  return wallpaperEffects.sync(getWallpaperEffectPayload(data));
+}
+
+/** 第二页高清毛玻璃可在空闲期预热，也可作为进入页面的前置条件。 */
 function syncBlurWallpaperLayer(data = currentWallpaper) {
   if (!data) return Promise.resolve(false);
-
-  if (data.type === 'gradient' && data.css) {
-    return wallpaperEffects.sync({ type: 'gradient', css: data.css });
-  }
-
-  const url = getBlurWallpaperUrl(data);
-  return wallpaperEffects.sync({ type: 'image', url });
+  return wallpaperEffects.prepareApps(getWallpaperEffectPayload(data));
 }
 
 function markInitialWallpaperEffectsReady() {
@@ -603,26 +614,44 @@ function markInitialWallpaperEffectsReady() {
 }
 
 function trackWallpaperEffects(promise) {
-  wallpaperEffectsReadyPromise = Promise.resolve(promise).finally(markInitialWallpaperEffectsReady);
-  return wallpaperEffectsReadyPromise;
+  wallpaperFocusReadyPromise = Promise.resolve(promise).finally(markInitialWallpaperEffectsReady);
+  return wallpaperFocusReadyPromise;
 }
 
 export function syncAppsBlurWallpaper() {
   const data = getCurrentWallpaper();
   const paintedUrl = getPaintedWallpaperUrl();
+  wallpaperAppsReadyPromise = syncBlurWallpaperLayer(
+    paintedUrl && data?.type !== 'gradient' ? { ...data, url: paintedUrl } : data,
+  );
+  return wallpaperAppsReadyPromise;
+}
+
+export function syncSearchFocusWallpaper() {
+  const data = getCurrentWallpaper();
+  const paintedUrl = getPaintedWallpaperUrl();
   return trackWallpaperEffects(
-    syncBlurWallpaperLayer(
+    syncFocusWallpaperLayer(
       paintedUrl && data?.type !== 'gradient' ? { ...data, url: paintedUrl } : data,
     ),
   );
 }
 
 function scheduleBlurWallpaper(data) {
-  return trackWallpaperEffects(syncBlurWallpaperLayer(data));
+  const focusReady = trackWallpaperEffects(syncFocusWallpaperLayer(data));
+  if (document.body.classList.contains('page-apps-active')) {
+    wallpaperAppsReadyPromise = syncBlurWallpaperLayer(data);
+  }
+  return focusReady;
 }
 
 export function prepareWallpaperEffects() {
-  return wallpaperEffectsReadyPromise;
+  return syncAppsBlurWallpaper();
+}
+
+export function prewarmWallpaperEffects() {
+  if (document.hidden || navigator.connection?.saveData) return Promise.resolve(false);
+  return syncAppsBlurWallpaper();
 }
 
 function revokeBlobUrl(cacheKey) {

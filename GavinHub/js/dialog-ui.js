@@ -1,8 +1,10 @@
 import { ensureStyle, getStyleStatus } from './style-registry.js';
+import { motionController } from './motion-controller.js';
 
 let initialized = false;
 const pendingOpen = new WeakMap();
 const pendingDialogs = new Set();
+const dialogMotions = new WeakMap();
 
 function resolveDialog(dialogOrId) {
   if (typeof dialogOrId === 'string') return document.getElementById(dialogOrId);
@@ -32,6 +34,16 @@ export function openDialog(dialogOrId) {
     if (dialog.open) return;
     try {
       dialog.showModal();
+      const motion = motionController.begin('dialog', {
+        rootClasses: ['dialog-transitioning'],
+        element: dialog,
+        elementClasses: ['dialog-opening'],
+      });
+      dialogMotions.set(dialog, motion);
+      void motion.wait(dialog, {
+        animation: 'gavinhub-dialog-enter',
+        timeout: 340,
+      }).then(() => motion.finish());
     } catch (error) {
       console.warn('[GavinHub] dialog failed to open', error);
     }
@@ -47,6 +59,9 @@ export function closeDialog(dialogOrId, returnValue = '') {
   if (!(dialog instanceof HTMLDialogElement)) return false;
   const wasPending = pendingOpen.delete(dialog);
   pendingDialogs.delete(dialog);
+  dialogMotions.get(dialog)?.cancel();
+  dialogMotions.delete(dialog);
+  motionController.cancel('dialog');
   if (!dialog.open) return wasPending;
   dialog.close(returnValue);
   return true;
@@ -75,5 +90,13 @@ export function initDialogController() {
       pendingOpen.delete(dialog);
     }
     pendingDialogs.clear();
+  }, true);
+
+  document.addEventListener('close', (event) => {
+    const dialog = event.target;
+    if (!(dialog instanceof HTMLDialogElement)) return;
+    dialogMotions.get(dialog)?.cancel();
+    dialogMotions.delete(dialog);
+    motionController.cancel('dialog');
   }, true);
 }

@@ -1,5 +1,5 @@
 import { KEYS } from './keys.js';
-import { readJson, writeJson } from './storage.js';
+import { createTodoStore } from './todo-store.js';
 
 const TODOS_KEY = KEYS.todos;
 
@@ -77,12 +77,22 @@ function migrate(raw) {
   return items;
 }
 
+const todoStore = createTodoStore({ key: TODOS_KEY, migrate });
+
 export function loadTodos() {
-  return migrate(readJson(TODOS_KEY, null));
+  return todoStore.load();
 }
 
 function saveTodos(items) {
-  writeJson(TODOS_KEY, items);
+  return todoStore.set(items);
+}
+
+export function subscribeTodos(listener) {
+  return todoStore.subscribe(listener);
+}
+
+export function flushTodos() {
+  return todoStore.flush();
 }
 
 export function parseDateKey(key) {
@@ -154,24 +164,23 @@ function expandTodosOnDate(items, dateKey) {
   const result = [];
   for (const item of items) {
     if (!occursOnDate(item, dateKey)) continue;
-    result.push(item.recurrence ? expandTodoInstance(item, dateKey) : item);
+    result.push(item.recurrence ? expandTodoInstance(item, dateKey) : { ...item });
   }
   return result;
 }
 
 export function getExpandedTodosOnDate(dateKey) {
-  return expandTodosOnDate(loadTodos(), dateKey);
+  return todoStore.query(`date:${dateKey}`, (items) => expandTodosOnDate(items, dateKey));
 }
 
 export function getExpandedTodosInWeek(weekStartKey) {
   const ws = parseDateKey(weekStartKey);
-  const items = loadTodos();
   const seen = new Map();
   for (let i = 0; i < 7; i += 1) {
     const d = new Date(ws);
     d.setDate(d.getDate() + i);
     const key = toDateKey(d);
-    for (const todo of expandTodosOnDate(items, key)) {
+    for (const todo of getExpandedTodosOnDate(key)) {
       const uid = todo._instanceDate ? `${todo._masterId}@${todo._instanceDate}` : String(todo.id);
       if (!seen.has(uid)) seen.set(uid, { ...todo, _uid: uid });
     }
@@ -207,9 +216,7 @@ export function addTodo({ text, startDate, endDate, category, recurrence, weekda
     }
   }
 
-  items.push(todo);
-  saveTodos(items);
-  return items;
+  return saveTodos([...items, todo]);
 }
 
 export function moveTodo(id, newStartDate, weekStartKey) {
@@ -296,7 +303,7 @@ export function updateTodo(id, patch, scope = 'all', instanceDate = null) {
 }
 
 export function getTodoById(id, instanceDate = null) {
-  const item = loadTodos().find((t) => matchTodoId(t.id, id));
+  const item = todoStore.getById(id);
   if (!item) return null;
   if (item.recurrence && instanceDate) {
     const expanded = expandTodoInstance(item, instanceDate);

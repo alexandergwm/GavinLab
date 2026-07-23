@@ -14,7 +14,11 @@ const SYNCED_SETTING_FIELDS = new Set(['baseCurrency', 'showGreeting']);
 function scheduleSyncForKey(key = KEYS.settings) {
   if (!SYNCED_STORAGE_KEYS.has(key)) return;
   try {
-    localStorage.setItem(KEYS.syncLocalAt, String(Date.now()));
+    const now = Date.now();
+    localStorage.setItem(KEYS.syncLocalAt, String(now));
+    const revisions = JSON.parse(localStorage.getItem(KEYS.syncRevisions) || '{}');
+    revisions[key] = now;
+    localStorage.setItem(KEYS.syncRevisions, JSON.stringify(revisions));
   } catch { /* storage may be unavailable in restricted contexts */ }
   queueMicrotask(() => {
     syncModulePromise ||= import('./sync.js');

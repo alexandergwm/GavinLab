@@ -1,57 +1,55 @@
-// Full-viewport previews are intentionally high resolution; two wallpapers are
-// enough for instant back/forward switching without retaining excess bitmaps.
-const DEFAULT_CACHE_SIZE = 2;
+const DEFAULT_CACHE_SIZE = 4;
 const PREVIEW_WAIT_MS = 800;
 
 export function createWallpaperEffects({
   createPreviews,
+  createFocusPreview = createPreviews,
+  createAppsPreview = createPreviews,
   maxCacheSize = DEFAULT_CACHE_SIZE,
 } = {}) {
   const previewCache = new Map();
   const previewRequests = new Map();
-  let activeImageUrl = '';
+  let activeKey = '';
   let generation = 0;
 
-  function getLayers() {
-    return {
-      apps: document.getElementById('wallpaper-blur'),
-      focus: document.getElementById('search-focus-overlay'),
-    };
+  function getLayer(kind) {
+    return document.getElementById(kind === 'apps' ? 'wallpaper-blur' : 'search-focus-overlay');
   }
 
-  function applyPreviews(previews, layers) {
-    if (previews?.apps && layers.apps) {
-      layers.apps.style.backgroundImage = `url("${previews.apps}")`;
-    }
-    if (previews?.focus && layers.focus) {
-      layers.focus.style.backgroundImage = `url("${previews.focus}")`;
-    }
+  function getFactory(kind) {
+    return kind === 'apps' ? createAppsPreview : createFocusPreview;
   }
 
-  function rememberPreviews(url, previews) {
-    previewCache.set(url, previews);
+  function previewKey(kind, url) {
+    return `${kind}:${url}`;
+  }
+
+  function rememberPreview(key, preview) {
+    previewCache.set(key, preview);
     while (previewCache.size > maxCacheSize) {
-      const oldestUrl = previewCache.keys().next().value;
-      previewCache.get(oldestUrl)?.dispose?.();
-      previewCache.delete(oldestUrl);
+      const oldestKey = previewCache.keys().next().value;
+      previewCache.get(oldestKey)?.dispose?.();
+      previewCache.delete(oldestKey);
     }
   }
 
-  function requestPreviews(url) {
-    const cached = previewCache.get(url);
+  function requestPreview(kind, url) {
+    const key = previewKey(kind, url);
+    const cached = previewCache.get(key);
     if (cached) return Promise.resolve(cached);
-    if (!createPreviews) return Promise.resolve(null);
-    const pending = previewRequests.get(url);
+    const factory = getFactory(kind);
+    if (!factory) return Promise.resolve(null);
+    const pending = previewRequests.get(key);
     if (pending) return pending.bounded;
 
     const requestGeneration = generation;
-    const previewPromise = createPreviews(url).then((previews) => {
+    const previewPromise = factory(url).then((preview) => {
       if (requestGeneration !== generation) {
-        previews?.dispose?.();
+        preview?.dispose?.();
         return null;
       }
-      rememberPreviews(url, previews);
-      return previews;
+      rememberPreview(key, preview);
+      return preview;
     }).catch(() => null);
     let timeoutId = 0;
     const bounded = Promise.race([
@@ -60,61 +58,60 @@ export function createWallpaperEffects({
         timeoutId = window.setTimeout(() => resolve(null), PREVIEW_WAIT_MS);
       }),
     ]).finally(() => window.clearTimeout(timeoutId));
-    previewRequests.set(url, { bounded });
-    void previewPromise.finally(() => {
-      previewRequests.delete(url);
-    });
+    previewRequests.set(key, { bounded });
+    void previewPromise.finally(() => previewRequests.delete(key));
     return bounded;
   }
 
-  function applyImageFallback(url, layers) {
-    for (const layer of Object.values(layers).filter(Boolean)) {
-      layer.style.backgroundImage = url ? `url("${url}")` : '';
-      layer.style.backgroundColor = url ? 'transparent' : '';
-    }
+  function setActive({ type = 'image', css = '', url = '' } = {}) {
+    const nextKey = type === 'gradient' ? `gradient:${css}` : `image:${url}`;
+    activeKey = nextKey;
+    return nextKey;
   }
 
-  async function syncImage(url, layers) {
+  function applyFallback(layer, value) {
+    if (!layer) return;
+    layer.style.backgroundImage = value || '';
+    layer.style.backgroundColor = '';
+  }
+
+  async function syncKind(kind, data = {}) {
+    const layer = getLayer(kind);
+    if (!layer) return false;
+    const expectedKey = setActive(data);
+    const { type = 'image', css = '', url = '' } = data;
+
+    if (type === 'gradient' && css) {
+      applyFallback(layer, css);
+      return true;
+    }
     if (!url) {
-      applyImageFallback('', layers);
+      applyFallback(layer, '');
       return false;
     }
 
-    const previews = await requestPreviews(url);
-    if (activeImageUrl !== url) return false;
-    if (previews) {
-      applyPreviews(previews, getLayers());
-      return true;
-    }
-    applyImageFallback(url, getLayers());
-    return false;
+    const preview = await requestPreview(kind, url);
+    if (activeKey !== expectedKey) return false;
+    const previewUrl = preview?.[kind];
+    applyFallback(layer, previewUrl ? `url("${previewUrl}")` : `url("${url}")`);
+    return Boolean(previewUrl);
   }
 
-  function sync({ type = 'image', css = '', url = '' } = {}) {
-    const layers = getLayers();
-    const elements = Object.values(layers).filter(Boolean);
-    if (!elements.length) return Promise.resolve(false);
+  function sync(data) {
+    return syncKind('focus', data);
+  }
 
-    if (type === 'gradient' && css) {
-      activeImageUrl = '';
-      for (const layer of elements) {
-        layer.style.backgroundImage = css;
-        layer.style.backgroundColor = '';
-      }
-      return Promise.resolve(true);
-    }
-
-    activeImageUrl = url;
-    return syncImage(url, layers);
+  function prepareApps(data) {
+    return syncKind('apps', data);
   }
 
   function dispose() {
     generation += 1;
-    for (const previews of previewCache.values()) previews.dispose?.();
+    for (const preview of previewCache.values()) preview.dispose?.();
     previewCache.clear();
     previewRequests.clear();
-    activeImageUrl = '';
+    activeKey = '';
   }
 
-  return { sync, dispose };
+  return { sync, prepareApps, dispose };
 }

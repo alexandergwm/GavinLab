@@ -3,27 +3,27 @@
  * Token 需 gist 权限：https://github.com/settings/tokens
  */
 import { KEYS } from './keys.js';
+import { loadGithubToken, saveGithubToken } from './credential-store.js';
 import {
   exportSyncBundle,
+  hasNewerSyncData,
   importSyncBundle,
-  getSyncLocalTimestamp,
+  mergeSyncBundles,
 } from './sync.js';
 
 const GIST_FILENAME = 'gavinhub-sync.json';
 const GITHUB_API = 'https://api.github.com';
 
-export function loadGithubSyncConfig() {
+export async function loadGithubSyncConfig() {
   return {
-    token: localStorage.getItem(KEYS.githubToken) || '',
+    token: await loadGithubToken(),
     gistId: localStorage.getItem(KEYS.githubGistId) || '',
   };
 }
 
-export function saveGithubSyncConfig({ token, gistId } = {}) {
+export async function saveGithubSyncConfig({ token, gistId } = {}) {
   if (token != null) {
-    const trimmed = token.trim();
-    if (trimmed) localStorage.setItem(KEYS.githubToken, trimmed);
-    else localStorage.removeItem(KEYS.githubToken);
+    await saveGithubToken(token);
   }
   if (gistId != null) {
     const trimmed = gistId.trim();
@@ -32,7 +32,7 @@ export function saveGithubSyncConfig({ token, gistId } = {}) {
   }
 }
 
-function readConfigFromForm(config = loadGithubSyncConfig()) {
+function readConfigFromForm(config) {
   const token = config.token?.trim();
   if (!token) throw new Error('no-token');
   if (!/^(ghp_|github_pat_|gho_|ghu_|ghs_)/.test(token)) {
@@ -82,14 +82,14 @@ function extractPayloadFromGist(gist) {
   return JSON.parse(content);
 }
 
-async function pullFromGithub(config = loadGithubSyncConfig()) {
+async function pullFromGithub(config) {
   const { token, gistId } = readConfigFromForm(config);
   if (!gistId) throw new Error('no-gist');
   const gist = await githubRequest(`/gists/${gistId}`, { token });
   return extractPayloadFromGist(gist);
 }
 
-async function pushToGithub(config = loadGithubSyncConfig()) {
+async function pushToGithub(config) {
   const { token, gistId: existingId } = readConfigFromForm(config);
   const payload = exportSyncBundle();
   const content = JSON.stringify(payload, null, 2);
@@ -116,13 +116,13 @@ async function pushToGithub(config = loadGithubSyncConfig()) {
   return { gistId: gist.id, updatedAt: payload.updatedAt };
 }
 
-/** 比较时间戳：较新者胜出 */
-export async function syncWithGithub(config = loadGithubSyncConfig()) {
-  const { token, gistId } = readConfigFromForm(config);
+/** 按数据集版本合并，避免一端改待办时覆盖另一端刚改的快捷方式。 */
+export async function syncWithGithub(config) {
+  const { token, gistId } = readConfigFromForm(config || await loadGithubSyncConfig());
 
   if (!gistId) {
     const result = await pushToGithub({ token, gistId: '' });
-    saveGithubSyncConfig({ token, gistId: result.gistId });
+    await saveGithubSyncConfig({ token, gistId: result.gistId });
     return { action: 'uploaded', gistId: result.gistId, reloaded: false };
   }
 
@@ -133,20 +133,19 @@ export async function syncWithGithub(config = loadGithubSyncConfig()) {
     throw err;
   }
 
-  const localAt = getSyncLocalTimestamp();
-  const remoteAt = remote.updatedAt || 0;
+  const local = exportSyncBundle();
+  const remoteNewer = hasNewerSyncData(remote, local);
+  const localNewer = hasNewerSyncData(local, remote);
+  const merged = mergeSyncBundles(local, remote);
 
-  if (remoteAt > localAt) {
-    importSyncBundle(remote);
-    saveGithubSyncConfig({ token, gistId });
-    return { action: 'downloaded', reloaded: true };
-  }
-  if (localAt > remoteAt) {
+  if (remoteNewer) importSyncBundle(merged);
+  if (localNewer) {
     await pushToGithub({ token, gistId });
-    saveGithubSyncConfig({ token, gistId });
-    return { action: 'uploaded', reloaded: false };
   }
-  saveGithubSyncConfig({ token, gistId });
+  await saveGithubSyncConfig({ token, gistId });
+  if (remoteNewer && localNewer) return { action: 'merged', reloaded: true };
+  if (remoteNewer) return { action: 'downloaded', reloaded: true };
+  if (localNewer) return { action: 'uploaded', reloaded: false };
   return { action: 'up-to-date', reloaded: false };
 }
 
@@ -156,6 +155,8 @@ export function formatGithubSyncResult(result) {
       return '已从 GitHub 拉取最新配置';
     case 'uploaded':
       return '已上传到 GitHub';
+    case 'merged':
+      return '已合并本地与 GitHub 的最新修改';
     case 'up-to-date':
       return '本地与 GitHub 已是最新';
     default:

@@ -1,0 +1,37 @@
+name: GavinHub extension
+
+on:
+  push:
+    paths:
+      - 'GavinHub/**'
+      - '.github/workflows/gavinhub.yml'
+  pull_request:
+    paths:
+      - 'GavinHub/**'
+      - '.github/workflows/gavinhub.yml'
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: GavinHub
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: GavinHub/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run check
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gavinhub-edge
+          path: |
+            GavinHub/dist/gavinhub-edge.zip
+            test-results/visual/*.png
+          if-no-files-found: warn

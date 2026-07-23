@@ -1,14 +1,17 @@
 import { toggleWallpaperFavorite, isWallpaperFavorited } from './storage.js';
 import { createSettingsStore } from './settings-store.js';
 import { initKeyboard } from './keyboard.js';
-import { PAGE_CYCLE, onPageEnter, pageModules, preloadPageModule, preparePage } from './runtime.js';
+import { onPageEnter, pageModules, preloadPageModule, preparePage } from './runtime.js';
 import { focusSearchInput, scheduleInitialSearchFocus, initSearchFocusHooks, dismissSearchForPageLeave } from './search-focus.js';
 import { initDialogController, prepareDialogStyles } from './dialog-ui.js';
-import { loadOptionalModules, nextPaint, runWhenIdle, settleWithin, waitForTransition } from './lifecycle.js';
+import { loadOptionalModules, nextPaint, runWhenIdle, settleWithin } from './lifecycle.js';
 import { createPageRouter } from './page-router.js';
+import { motionController } from './motion-controller.js';
+import { getPageDefinition, listPageIds } from './page-registry.js';
 
 const settingsStore = createSettingsStore();
 const INITIAL_PAGE = 'home';
+const PAGE_CYCLE = listPageIds();
 const STARTUP_SYNC_BUDGET_MS = 120;
 
 /** @type {typeof import('./wallpaper.js')} */
@@ -71,9 +74,11 @@ function applyPageClasses(page) {
 const pageRouter = createPageRouter({
   pages: PAGE_CYCLE,
   initialPage: INITIAL_PAGE,
-  beforeChange() {
-    document.body.classList.add('page-transitioning');
-    document.querySelector('main.app')?.setAttribute('aria-busy', 'true');
+  beforeChange(context) {
+    context.motion = motionController.begin('page', {
+      rootClasses: ['page-transitioning'],
+      busyElement: document.querySelector('main.app'),
+    });
   },
   applyChange({ fromPage, nextPage }) {
     if (fromPage === 'home' && nextPage !== 'home') dismissSearchForPageLeave();
@@ -109,26 +114,26 @@ const pageRouter = createPageRouter({
       scheduleInitialSearchFocus();
     }
   },
-  async settle({ fromPage, nextPage, isCurrent }) {
+  async settle(context) {
+    const { fromPage, nextPage, isCurrent } = context;
     const panel = document.querySelector(`.page-panel[data-page="${nextPage}"]`);
     if (fromPage === nextPage) await nextPaint();
     else {
-      await waitForTransition(panel, {
-        property: nextPage === 'home' ? 'transform' : 'opacity',
+      await context.motion?.wait(panel, {
+        property: getPageDefinition(nextPage)?.transitionProperty,
         timeout: 380,
       });
     }
     if (!isCurrent()) return;
-    document.body.classList.remove('page-transitioning');
-    document.querySelector('main.app')?.removeAttribute('aria-busy');
+    context.motion?.finish();
   },
   onCancel() {
-    document.body.classList.remove('page-transitioning', 'search-reveal-pending');
-    document.querySelector('main.app')?.removeAttribute('aria-busy');
+    motionController.cancel('page');
+    document.body.classList.remove('search-reveal-pending');
   },
   onError(error) {
-    document.body.classList.remove('page-transitioning', 'search-reveal-pending');
-    document.querySelector('main.app')?.removeAttribute('aria-busy');
+    motionController.cancel('page');
+    document.body.classList.remove('search-reveal-pending');
     console.error('[GavinHub] page navigation failed', error);
   },
 });
@@ -236,17 +241,40 @@ function initContextMenu() {
 }
 
 function prewarmSecondaryFeatures() {
-  let cancelIdle = null;
-  const timer = window.setTimeout(() => {
+  let cancelModuleIdle = null;
+  let cancelEffectsIdle = null;
+  const moduleTimer = window.setTimeout(() => {
     if (document.hidden) return;
-    cancelIdle = runWhenIdle(
+    cancelModuleIdle = runWhenIdle(
       () => preloadPageModule('apps', getPageContext()),
       { timeout: 500, fallbackDelay: 80 },
     );
   }, 180);
+
+  const prewarmEffects = () => {
+    if (document.hidden) return;
+    cancelEffectsIdle = runWhenIdle(
+      () => wallpaper?.prewarmWallpaperEffects?.(),
+      { timeout: 900, fallbackDelay: 120 },
+    );
+  };
+  const effectsTimer = window.setTimeout(prewarmEffects, 320);
+  const dock = document.getElementById('dock');
+  const onDockIntent = (event) => {
+    if (!event.target.closest?.('.dock-tab[data-page="apps"]')) return;
+    window.clearTimeout(effectsTimer);
+    cancelEffectsIdle?.();
+    void wallpaper?.prewarmWallpaperEffects?.();
+    dock?.removeEventListener('pointerover', onDockIntent);
+  };
+  dock?.addEventListener('pointerover', onDockIntent, { passive: true });
+
   window.addEventListener('pagehide', () => {
-    window.clearTimeout(timer);
-    cancelIdle?.();
+    window.clearTimeout(moduleTimer);
+    window.clearTimeout(effectsTimer);
+    dock?.removeEventListener('pointerover', onDockIntent);
+    cancelModuleIdle?.();
+    cancelEffectsIdle?.();
   }, { once: true });
 }
 
@@ -283,7 +311,7 @@ async function initCore() {
 
   wallpaper = modules.wallpaper;
   shortcuts = modules.shortcuts;
-  wallpaper?.syncAppsBlurWallpaper?.();
+  wallpaper?.syncSearchFocusWallpaper?.();
   if (syncGate.settled && syncGate.value?.result?.applied) settingsStore.reload();
 
   const registerSyncListener = (syncMod) => {

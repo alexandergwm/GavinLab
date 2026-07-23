@@ -60,6 +60,29 @@ try {
     null,
     { timeout: 8000 },
   );
+  const credentialMigration = await indexPage.evaluate(async () => {
+    await chrome.storage.local.remove('gavinhubCredentials');
+    localStorage.setItem('startpage-github-token', 'ghp_extension_migration_test');
+    const credentials = await import('./js/credential-store.js');
+    credentials.clearCredentialCache();
+    const token = await credentials.loadGithubToken();
+    const stored = await chrome.storage.local.get('gavinhubCredentials');
+    const legacyRemoved = !localStorage.getItem('startpage-github-token');
+    await chrome.storage.local.remove('gavinhubCredentials');
+    credentials.clearCredentialCache();
+    return {
+      token,
+      storedToken: stored.gavinhubCredentials?.githubToken || '',
+      legacyRemoved,
+    };
+  });
+  if (
+    credentialMigration.token !== 'ghp_extension_migration_test'
+    || credentialMigration.storedToken !== 'ghp_extension_migration_test'
+    || !credentialMigration.legacyRemoved
+  ) {
+    throw new Error(`credential migration failed: ${JSON.stringify(credentialMigration)}`);
+  }
   if (errors.length) throw new Error(errors.join('\n'));
   console.log(`EXTENSION SMOKE OK: ${extensionId}`);
 } finally {

@@ -25,6 +25,7 @@ export const KEYS = {
   githubToken: 'startpage-github-token',
   githubGistId: 'startpage-github-gist-id',
   syncLocalAt: 'startpage-sync-local-at',
+  syncRevisions: 'startpage-sync-revisions',
 };
 
 export const SESSION_KEYS = {

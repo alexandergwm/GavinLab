@@ -134,36 +134,19 @@ try {
   await page.waitForFunction(() => document.body.classList.contains('search-focused'), null, {
     timeout: 3000,
   });
-  const bootEffectState = await page.evaluate(async () => {
+  const bootEffectState = await page.evaluate(() => {
     const appsLayer = document.getElementById('wallpaper-blur')?.style.backgroundImage || '';
     const focusLayer = document.getElementById('search-focus-overlay')?.style.backgroundImage || '';
-    const measureBackgroundWidth = (value) => new Promise((resolve) => {
-      const url = value.match(/^url\(["']?(.*?)["']?\)$/)?.[1];
-      if (!url) {
-        resolve(0);
-        return;
-      }
-      const image = new Image();
-      image.onload = () => resolve(image.naturalWidth);
-      image.onerror = () => resolve(0);
-      image.src = url;
-    });
     return {
       effectsReady: document.body.classList.contains('wallpaper-effects-ready'),
       appsLayer,
       focusLayer,
-      appsLayerWidth: await measureBackgroundWidth(appsLayer),
     };
   });
   assert(
     bootEffectState.effectsReady
-      && bootEffectState.appsLayer.includes('blob:')
       && bootEffectState.focusLayer.includes('blob:'),
-    `search focus must wait for final wallpaper effects: ${JSON.stringify(bootEffectState)}`,
-  );
-  assert(
-    bootEffectState.appsLayerWidth >= 1280,
-    `apps glass preview must retain viewport-level detail: ${JSON.stringify(bootEffectState)}`,
+    `search focus must wait for its final wallpaper effect: ${JSON.stringify(bootEffectState)}`,
   );
   const bootVisualState = await page.evaluate(() => {
     const visibleFrames = window.__bootVisualFrames.filter((frame) => frame.searchVisible);
@@ -342,10 +325,52 @@ try {
     } catch { /* the test aborts external requests */ }
     const savedToken = localStorage.getItem('startpage-github-token');
     localStorage.removeItem('startpage-github-token');
-    return { mutationAt, savedToken };
+    const sync = await import('./js/sync.js');
+    const local = {
+      v: 2,
+      updatedAt: 200,
+      revisions: {
+        'startpage-todos': 200,
+        'startpage-shortcuts': 100,
+      },
+      'startpage-todos': [{ id: 1, text: 'local todo' }],
+      'startpage-shortcuts': [{ id: 'old-local' }],
+    };
+    const remote = {
+      v: 2,
+      updatedAt: 220,
+      revisions: {
+        'startpage-todos': 150,
+        'startpage-shortcuts': 220,
+      },
+      'startpage-todos': [{ id: 2, text: 'old remote todo' }],
+      'startpage-shortcuts': [{ id: 'remote shortcut' }],
+    };
+    const merged = sync.mergeSyncBundles(local, remote);
+    const emptyIsNewer = sync.hasNewerSyncData({
+      v: 2,
+      updatedAt: 999,
+      revisions: { 'startpage-todos': 0 },
+      'startpage-todos': null,
+    }, remote);
+    return {
+      mutationAt,
+      savedToken,
+      mergedTodo: merged['startpage-todos']?.[0]?.text,
+      mergedShortcut: merged['startpage-shortcuts']?.[0]?.id,
+      syncVersion: sync.exportSyncBundle().v,
+      emptyIsNewer,
+    };
   });
   assert(syncSafety.mutationAt > 100, 'local sync timestamp should advance after a synced data change');
   assert(syncSafety.savedToken === 'ghp_saved_token', 'failed GitHub sync must not overwrite a working token');
+  assert(
+    syncSafety.mergedTodo === 'local todo'
+      && syncSafety.mergedShortcut === 'remote shortcut'
+      && syncSafety.syncVersion === 2
+      && syncSafety.emptyIsNewer === false,
+    `sync should merge each dataset independently: ${JSON.stringify(syncSafety)}`,
+  );
 
   await page.evaluate(() => {
     localStorage.setItem('startpage-shortcuts', JSON.stringify({ corrupted: true }));

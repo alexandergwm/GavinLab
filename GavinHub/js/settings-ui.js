@@ -123,13 +123,13 @@ function readGithubFormConfig(saved = {}) {
   };
 }
 
-function syncGithubFormFromStorage() {
+async function syncGithubFormFromStorage() {
   const github = document.getElementById('github-sync-token');
   const gistId = document.getElementById('github-sync-gist-id');
   const gistField = document.getElementById('github-gist-field');
   if (!github || !gistId) return;
-  import('./github-sync.js').then((mod) => {
-    const cfg = mod.loadGithubSyncConfig();
+  import('./github-sync.js').then(async (mod) => {
+    const cfg = await mod.loadGithubSyncConfig();
     github.value = '';
     github.placeholder = cfg.token
       ? '已保存 GitHub Token，留空沿用；粘贴新 Token 可替换'
@@ -162,7 +162,7 @@ function setGithubSyncStatus(text, isError = false) {
 
 async function runGithubSync(api) {
   const githubSync = await import('./github-sync.js');
-  const config = readGithubFormConfig(githubSync.loadGithubSyncConfig());
+  const config = readGithubFormConfig(await githubSync.loadGithubSyncConfig());
   const button = document.getElementById('github-sync-merge-btn');
   if (button?.disabled) return;
   if (button) {

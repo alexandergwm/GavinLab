@@ -91,7 +91,7 @@ for (const f of ['js/lifecycle.js', 'js/page-router.js', 'js/dialog-ui.js', 'js/
   assert(existsSync(join(root, f)), `missing architecture module ${f}`);
 }
 assert(app.includes("from './page-router.js'"), 'app.js should use the cancellable page router');
-assert(app.includes('waitForTransition'), 'page transitions should settle through the lifecycle layer');
+assert(app.includes('context.motion?.wait'), 'page transitions should settle through the motion controller');
 assert(app.includes('page-transitioning'), 'page transitions should expose a unified visual state');
 assert(app.includes('prepareWallpaperEffects'), 'apps navigation should wait for final wallpaper effects');
 assert(app.includes('STARTUP_SYNC_BUDGET_MS'), 'app.js should cap sync work on the critical startup path');
@@ -105,7 +105,7 @@ assert(featureRegistry.includes('export function createFeatureRegistry'), 'featu
 assert(runtime.includes("features.load('settings'"), 'settings should use the feature registry');
 const preparePageBody = runtime.slice(runtime.indexOf('export async function preparePage'), runtime.indexOf('/** 进入页面时'));
 assert(!preparePageBody.includes('pageModules.settings'), 'apps navigation must not initialize settings before the transition');
-assert(runtime.includes("ensureStyle('apps')"), 'apps route should activate its stylesheet before painting');
+assert(runtime.includes('definition.style ? ensureStyle'), 'page routes should activate registered styles before painting');
 assert(read('js/dialog-ui.js').includes('export function prepareDialogStyles'), 'dialogs should expose parallel style preparation');
 assert(read('js/dialog-ui.js').includes('dataset.dialogStyle'), 'dialogs should activate feature styling');
 
@@ -219,6 +219,18 @@ assert(
 assert(manifest.background?.service_worker === 'js/background.js', 'manifest should register background.js');
 assert(Array.isArray(manifest.permissions) && manifest.permissions.includes('storage'), 'manifest needs storage permission for sync');
 assert(existsSync(join(root, 'js/sync.js')), 'missing sync.js');
+assert(existsSync(join(root, 'js/todo-store.js')), 'missing cached todo store');
+assert(read('js/todo-store.js').includes('queryCache'), 'todo store should cache date projections');
+assert(read('js/todo-store.js').includes('queueMicrotask'), 'todo store should batch persistence');
+assert(existsSync(join(root, 'js/motion-controller.js')), 'missing shared motion controller');
+assert(read('js/app.js').includes("motionController.begin('page'"), 'page navigation should use the motion controller');
+assert(read('js/dialog-ui.js').includes("motionController.begin('dialog'"), 'dialogs should use the motion controller');
+assert(existsSync(join(root, 'js/credential-store.js')), 'missing extension-private credential store');
+assert(read('js/credential-store.js').includes('chrome.storage.local'), 'GitHub token should use extension-local storage');
+assert(read('js/sync.js').includes('const SYNC_VERSION = 2'), 'sync payload should use per-dataset revision format');
+assert(read('js/sync.js').includes('mergeSyncBundles'), 'sync should merge independent datasets');
+assert(existsSync(join(root, 'js/page-registry.js')), 'missing extensible page registry');
+assert(read('js/runtime.js').includes('getPageDefinition'), 'runtime should prepare pages from registry metadata');
 
 assert(jsFiles.length >= 28, `expected >=28 js modules, got ${jsFiles.length}`);
 
