@@ -13,6 +13,8 @@ export function createPageRouter({
   afterPaint,
   enter,
   afterChange,
+  settle,
+  onCancel,
   onError,
 }) {
   const allowed = new Set(pages);
@@ -26,8 +28,10 @@ export function createPageRouter({
     if (!allowed.has(nextPage)) return false;
     if (!force && nextPage === currentPage) {
       if (pendingPage && pendingPage !== currentPage) {
+        const cancelledPage = pendingPage;
         revision += 1;
         pendingPage = null;
+        onCancel?.({ currentPage, cancelledPage });
         return true;
       }
       return false;
@@ -59,11 +63,16 @@ export function createPageRouter({
       if (!isCurrent(token)) return false;
 
       await afterChange?.(context);
+      if (!isCurrent(token)) return false;
+
+      await settle?.(context);
       if (isCurrent(token)) pendingPage = null;
       return isCurrent(token);
     } catch (error) {
-      if (isCurrent(token)) pendingPage = null;
-      onError?.(error, context);
+      if (isCurrent(token)) {
+        pendingPage = null;
+        onError?.(error, context);
+      }
       return false;
     }
   }

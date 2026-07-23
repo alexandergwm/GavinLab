@@ -4,7 +4,7 @@ import { initKeyboard } from './keyboard.js';
 import { PAGE_CYCLE, onPageEnter, pageModules, preloadPageModule, preparePage } from './runtime.js';
 import { focusSearchInput, scheduleInitialSearchFocus, initSearchFocusHooks, dismissSearchForPageLeave } from './search-focus.js';
 import { initDialogController } from './dialog-ui.js';
-import { loadOptionalModules, nextPaint, runWhenIdle, settleWithin } from './lifecycle.js';
+import { loadOptionalModules, nextPaint, runWhenIdle, settleWithin, waitForTransition } from './lifecycle.js';
 import { createPageRouter } from './page-router.js';
 
 const settingsStore = createSettingsStore();
@@ -71,6 +71,10 @@ function applyPageClasses(page) {
 const pageRouter = createPageRouter({
   pages: PAGE_CYCLE,
   initialPage: INITIAL_PAGE,
+  beforeChange() {
+    document.body.classList.add('page-transitioning');
+    document.querySelector('main.app')?.setAttribute('aria-busy', 'true');
+  },
   applyChange({ fromPage, nextPage }) {
     if (fromPage === 'home' && nextPage !== 'home') dismissSearchForPageLeave();
     document.body.classList.toggle(
@@ -102,8 +106,26 @@ const pageRouter = createPageRouter({
       scheduleInitialSearchFocus();
     }
   },
+  async settle({ fromPage, nextPage, isCurrent }) {
+    const panel = document.querySelector(`.page-panel[data-page="${nextPage}"]`);
+    if (fromPage === nextPage) await nextPaint();
+    else {
+      await waitForTransition(panel, {
+        property: nextPage === 'home' ? 'transform' : 'opacity',
+        timeout: 380,
+      });
+    }
+    if (!isCurrent()) return;
+    document.body.classList.remove('page-transitioning');
+    document.querySelector('main.app')?.removeAttribute('aria-busy');
+  },
+  onCancel() {
+    document.body.classList.remove('page-transitioning', 'search-reveal-pending');
+    document.querySelector('main.app')?.removeAttribute('aria-busy');
+  },
   onError(error) {
-    document.body.classList.remove('search-reveal-pending');
+    document.body.classList.remove('page-transitioning', 'search-reveal-pending');
+    document.querySelector('main.app')?.removeAttribute('aria-busy');
     console.error('[GavinHub] page navigation failed', error);
   },
 });

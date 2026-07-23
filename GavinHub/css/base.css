@@ -630,6 +630,10 @@ body[data-text-tone='dark'] .weather-icon {
   z-index: 1;
 }
 
+body.page-transitioning .page-panel.active {
+  will-change: opacity, transform;
+}
+
 /* 回主页：搜索栏不做 opacity 淡入（祖先 opacity<1 会让 backdrop-filter 失效） */
 .page-panel.page-home.active {
   visibility: visible;

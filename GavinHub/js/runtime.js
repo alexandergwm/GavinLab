@@ -1,4 +1,5 @@
 import { createFeatureRegistry } from './feature-registry.js';
+import { ensureStyle } from './style-registry.js';
 
 /** 页面运行时：页面定义与功能加载保持分离。 */
 
@@ -69,7 +70,7 @@ export function getFeatureStatus(id) {
 /** 在视觉切换前准备页面模块，避免解析和首轮渲染挤占动画帧。 */
 export async function preparePage(page, ctx = {}) {
   if (page === 'apps') {
-    await pageModules.apps(ctx);
+    await Promise.all([ensureStyle('apps'), pageModules.apps(ctx)]);
   }
 }
 

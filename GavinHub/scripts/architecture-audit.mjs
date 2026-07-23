@@ -63,8 +63,8 @@ for (const match of html.matchAll(/<link\s+[^>]*rel=["']stylesheet["'][^>]*href=
   const file = join(root, match[1]);
   if (existsSync(file)) blockingCssBytes += statSync(file).size;
 }
-if (blockingCssBytes > 70_000) {
-  errors.push(`render-blocking CSS is ${blockingCssBytes} bytes (budget 70000)`);
+if (blockingCssBytes > 50_000) {
+  errors.push(`render-blocking CSS is ${blockingCssBytes} bytes (budget 50000)`);
 }
 
 if (errors.length) {

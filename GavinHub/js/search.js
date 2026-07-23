@@ -16,8 +16,7 @@ import {
 } from './storage.js';
 import { KEYS } from './keys.js';
 import { initLazySearchQuote } from './lazy-search-quote.js';
-import { buildCurrencySuggestion, parseCurrencyInput } from './currency.js';
-import { buildSmartSuggestions, resolveSmartAction } from './smart-input.js';
+import { getSearchIntelligence } from './search-intelligence.js';
 import { fetchQueryCompletions } from './search-suggest.js';
 import { createSuggestionNode, activateSuggestionItem } from './search-suggestions-ui.js';
 
@@ -220,6 +219,7 @@ async function trySmartSubmit(query) {
   const { searchMode, mapProvider } = getSettings();
   if (searchMode !== 'normal') return false;
 
+  const { buildSmartSuggestions, resolveSmartAction } = await getSearchIntelligence();
   const smartItems = buildSmartSuggestions(query, { getMapUrl, mapProvider });
   const action = resolveSmartAction(query, smartItems);
   if (!action) return false;
@@ -280,7 +280,7 @@ async function executeSearch(query) {
   openInNewTab(url);
 }
 
-function buildSyncSuggestions(query) {
+function buildLocalSuggestions(query, intelligence) {
   if (isTabTriggerInput(query)) {
     return [];
   }
@@ -289,6 +289,7 @@ function buildSyncSuggestions(query) {
   const { searchMode, mapProvider } = getSettings();
 
   if (searchMode === 'normal') {
+    const { buildSmartSuggestions, parseCurrencyInput } = intelligence;
     const smartItems = buildSmartSuggestions(query, { getMapUrl, mapProvider });
     items.push(...smartItems);
 
@@ -721,11 +722,13 @@ export async function refreshSearchSuggestions() {
   const gen = suggestionGen;
 
   const { searchMode, searchEngine } = getSettings();
-  let items = buildSyncSuggestions(query);
+  const intelligence = await getSearchIntelligence();
+  if (gen !== suggestionGen) return;
+  let items = buildLocalSuggestions(query, intelligence);
 
-  const needsCurrency = searchMode === 'normal' && parseCurrencyInput(query);
+  const needsCurrency = searchMode === 'normal' && intelligence.parseCurrencyInput(query);
   if (needsCurrency) {
-    const currencyItem = await buildCurrencySuggestion(query);
+    const currencyItem = await intelligence.buildCurrencySuggestion(query);
     if (gen !== suggestionGen) return;
     if (currencyItem) items.push(currencyItem);
   }

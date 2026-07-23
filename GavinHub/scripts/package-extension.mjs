@@ -19,6 +19,7 @@ const INCLUDE = [
   'EXTENSION.md',
   'css/base.css',
   'css/home.css',
+  'css/dock.css',
   'css/apps.css',
   'css/dialogs.css',
   'assets/default-wallpaper.jpg',

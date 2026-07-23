@@ -13,6 +13,32 @@ export function nextPaint(frames = 1) {
   });
 }
 
+export function waitForTransition(element, {
+  property,
+  timeout = 420,
+} = {}) {
+  if (!(element instanceof Element)) return nextPaint();
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return nextPaint();
+
+  return new Promise((resolve) => {
+    let timer = 0;
+    const finish = () => {
+      element.removeEventListener('transitionend', onEnd);
+      element.removeEventListener('transitioncancel', finish);
+      window.clearTimeout(timer);
+      resolve();
+    };
+    const onEnd = (event) => {
+      if (event.target !== element) return;
+      if (property && event.propertyName !== property) return;
+      finish();
+    };
+    element.addEventListener('transitionend', onEnd);
+    element.addEventListener('transitioncancel', finish, { once: true });
+    timer = window.setTimeout(finish, timeout);
+  });
+}
+
 export async function loadOptionalModules(loaders, onError = console.error) {
   const entries = Object.entries(loaders);
   const loaded = await Promise.all(entries.map(async ([name, loader]) => {

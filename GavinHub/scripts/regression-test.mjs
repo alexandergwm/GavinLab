@@ -103,10 +103,14 @@ try {
   const settingsLoadedAtStartup = await page.evaluate(() => performance.getEntriesByType('resource')
     .some((entry) => entry.name.endsWith('/js/settings-ui.js')));
   assert(!settingsLoadedAtStartup, 'settings module should not load on the home startup path');
+  const intelligenceLoadedAtStartup = await page.evaluate(() => performance.getEntriesByType('resource')
+    .some((entry) => /\/js\/(smart-input|currency)\.js$/.test(entry.name)));
+  assert(!intelligenceLoadedAtStartup, 'search intelligence should not load before the first query');
   const lifecycleSafety = await page.evaluate(async () => {
-    const [{ createFeatureRegistry }, dialogs] = await Promise.all([
+    const [{ createFeatureRegistry }, dialogs, { createWallpaperEffects }] = await Promise.all([
       import('./js/feature-registry.js'),
       import('./js/dialog-ui.js'),
+      import('./js/wallpaper-effects.js'),
     ]);
     let attempts = 0;
     const registry = createFeatureRegistry({
@@ -125,11 +129,37 @@ try {
     dialogs.openDialog(dialog);
     dialogs.closeDialog(dialog);
     await new Promise((resolve) => setTimeout(resolve, 40));
+
+    const effectLayers = [
+      document.getElementById('wallpaper-blur'),
+      document.getElementById('search-focus-overlay'),
+    ].filter(Boolean);
+    const previousBackgrounds = effectLayers.map((layer) => layer.style.backgroundImage);
+    let stalePreviewDisposals = 0;
+    const effects = createWallpaperEffects({
+      createPreviews: () => Promise.resolve({
+        apps: 'blob:stale-app-preview',
+        focus: 'blob:stale-focus-preview',
+        dispose: () => { stalePreviewDisposals += 1; },
+      }),
+    });
+    effects.sync({ url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==' });
+    effects.dispose();
+    await Promise.resolve();
+    await Promise.resolve();
+    const stalePreviewApplied = effectLayers.some((layer) =>
+      layer.style.backgroundImage.includes('stale-'));
+    effectLayers.forEach((layer, index) => {
+      layer.style.backgroundImage = previousBackgrounds[index];
+    });
+
     return {
       attempts,
       retryValue: retryValue.value,
       retryStatus: registry.getStatus('retryable').status,
       cancelledDialogOpen: dialog.open,
+      stalePreviewDisposals,
+      stalePreviewApplied,
     };
   });
   assert(
@@ -140,6 +170,10 @@ try {
   );
   assert(!lifecycleSafety.cancelledDialogOpen,
     'closing a dialog while its stylesheet loads must cancel the pending open');
+  assert(
+    lifecycleSafety.stalePreviewDisposals === 1 && !lifecycleSafety.stalePreviewApplied,
+    `disposed wallpaper effects must reject late previews: ${JSON.stringify(lifecycleSafety)}`,
+  );
   const baseline = await page.evaluate(() => {
     const navigation = performance.getEntriesByType('navigation')[0];
     const resources = performance.getEntriesByType('resource');
@@ -261,6 +295,11 @@ try {
       && rapidRouteState.revealPending === false,
     `rapid navigation must settle on only the newest page: ${JSON.stringify(rapidRouteState)}`,
   );
+  await page.waitForFunction(() => !document.body.classList.contains('page-transitioning'));
+  assert(
+    !(await page.locator('main.app').getAttribute('aria-busy')),
+    'page transition cancellation must clear busy state',
+  );
   await page.locator('.dock-tab[data-page="home"]').click();
   await page.waitForFunction(() => !document.body.classList.contains('page-apps-active'));
 
@@ -280,6 +319,11 @@ try {
   assert(
     suggestionState.hidden === false && suggestionState.text.includes('7'),
     `calculator suggestion should render: ${JSON.stringify(suggestionState)} errors=${errors.join(' | ')}`,
+  );
+  assert(
+    await page.evaluate(() => performance.getEntriesByType('resource')
+      .some((entry) => entry.name.endsWith('/js/smart-input.js'))),
+    'the first query should activate search intelligence',
   );
   await search.fill('a');
   await search.fill('ab');
