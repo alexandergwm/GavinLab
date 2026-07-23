@@ -84,8 +84,11 @@ const pageRouter = createPageRouter({
     applyPageClasses(nextPage);
     refreshDock();
   },
-  prepare({ nextPage }) {
-    return preparePage(nextPage, getPageContext());
+  async prepare({ nextPage }) {
+    await Promise.all([
+      preparePage(nextPage, getPageContext()),
+      nextPage === 'apps' ? wallpaper?.prepareWallpaperEffects?.() : null,
+    ]);
   },
   async afterPaint({ fromPage, nextPage }) {
     if (nextPage === 'apps') wallpaper?.syncAppsBlurWallpaper?.();

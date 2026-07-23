@@ -6,6 +6,7 @@ import {
   onBootUiSettled,
   markBootGlassStable,
   prefersReducedMotion,
+  BOOT_UI_FADE_MS,
 } from './boot-ui.js';
 
 try {
@@ -21,7 +22,6 @@ try {
 
 document.body.classList.remove('wallpaper-boot', 'boot-priming-ui');
 document.getElementById('boot-critical-hide')?.remove();
-document.getElementById('boot-cover')?.remove();
 
 const markUiSettled = () => {
   if (!performance.getEntriesByName('gavinhub:ui-settled').length) {
@@ -36,13 +36,32 @@ function finishBootAwakening() {
 }
 
 function watchBootGlassStable() {
+  let openingReady = false;
+  let effectsReady = document.body.classList.contains('wallpaper-effects-ready');
+  let effectsFallbackTimer = 0;
+
   const finishBootSequence = () => {
+    if (!openingReady || !effectsReady) return;
+    window.clearTimeout(effectsFallbackTimer);
     markBootGlassStable();
     finishBootAwakening();
   };
+  const markEffectsReady = () => {
+    effectsReady = true;
+    finishBootSequence();
+  };
+  const markOpeningReady = () => {
+    openingReady = true;
+    finishBootSequence();
+  };
+
+  if (!effectsReady) {
+    document.addEventListener('wallpaper-effects-ready', markEffectsReady, { once: true });
+    effectsFallbackTimer = window.setTimeout(markEffectsReady, 1400);
+  }
 
   if (prefersReducedMotion()) {
-    onBootUiSettled(finishBootSequence);
+    onBootUiSettled(markOpeningReady);
     return;
   }
 
@@ -53,7 +72,7 @@ function watchBootGlassStable() {
       if (done) return;
       done = true;
       dock?.removeEventListener('animationend', onAnim);
-      finishBootSequence();
+      markOpeningReady();
     };
     const onAnim = (e) => {
       if (e.target !== dock) return;
@@ -62,7 +81,7 @@ function watchBootGlassStable() {
       }
     };
     dock?.addEventListener('animationend', onAnim);
-    window.setTimeout(finish, 800);
+    window.setTimeout(finish, BOOT_UI_FADE_MS + 160);
   });
 }
 

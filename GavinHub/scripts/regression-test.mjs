@@ -67,6 +67,8 @@ assert(!baseCss.includes('transition:\n    filter var(--transition-search-focus)
   'full-screen wallpaper filters must not animate during search focus');
 assert(!baseCss.includes('body.search-focused:not(.page-blur-active) .wallpaper-img'),
   'search focus should use a composited overlay instead of filtering the wallpaper');
+assert(!baseCss.includes('boot-awakening:not(.boot-glass-stable) .dock'),
+  'startup must not expose a temporary low-quality glass state');
 const homeCss = await readFile(join(root, 'css/home.css'), 'utf8');
 assert(!/\.search-engine-badge\s*\{[^}]*transition:[^}]*width/s.test(homeCss),
   'search focus must not animate the engine badge width');
@@ -88,6 +90,7 @@ page.on('request', (request) => {
 });
 await page.addInitScript(() => {
   window.__longTasks = [];
+  window.__bootVisualFrames = [];
   new PerformanceObserver((list) => {
     window.__longTasks.push(...list.getEntries().map((entry) => entry.duration));
   }).observe({ type: 'longtask', buffered: true });
@@ -95,6 +98,24 @@ await page.addInitScript(() => {
     configurable: true,
     value: { saveData: true },
   });
+  const startedAt = performance.now();
+  const sampleBootVisuals = () => {
+    const searchBox = document.getElementById('search-box');
+    const dock = document.getElementById('dock');
+    const appsLayer = document.getElementById('wallpaper-blur');
+    const focusLayer = document.getElementById('search-focus-overlay');
+    if (searchBox && dock) {
+      window.__bootVisualFrames.push({
+        searchVisible: getComputedStyle(document.getElementById('search-form')).visibility !== 'hidden',
+        searchGlass: getComputedStyle(searchBox).backdropFilter,
+        dockGlass: getComputedStyle(dock).backdropFilter,
+        appsBackground: appsLayer?.style.backgroundImage || '',
+        focusBackground: focusLayer?.style.backgroundImage || '',
+      });
+    }
+    if (performance.now() - startedAt < 1600) requestAnimationFrame(sampleBootVisuals);
+  };
+  requestAnimationFrame(sampleBootVisuals);
 });
 
 try {
@@ -107,6 +128,41 @@ try {
   await page.waitForFunction(() => document.body.classList.contains('app-ready'), null, {
     timeout: 8000,
   });
+  await page.waitForFunction(() => document.body.classList.contains('boot-glass-stable'), null, {
+    timeout: 3000,
+  });
+  await page.waitForFunction(() => document.body.classList.contains('search-focused'), null, {
+    timeout: 3000,
+  });
+  const bootEffectState = await page.evaluate(() => ({
+    effectsReady: document.body.classList.contains('wallpaper-effects-ready'),
+    appsLayer: document.getElementById('wallpaper-blur')?.style.backgroundImage || '',
+    focusLayer: document.getElementById('search-focus-overlay')?.style.backgroundImage || '',
+  }));
+  assert(
+    bootEffectState.effectsReady
+      && bootEffectState.appsLayer.includes('blob:')
+      && bootEffectState.focusLayer.includes('blob:'),
+    `search focus must wait for final wallpaper effects: ${JSON.stringify(bootEffectState)}`,
+  );
+  const bootVisualState = await page.evaluate(() => {
+    const visibleFrames = window.__bootVisualFrames.filter((frame) => frame.searchVisible);
+    const unique = (key) => [...new Set(visibleFrames.map((frame) => frame[key]).filter(Boolean))];
+    return {
+      searchGlass: unique('searchGlass'),
+      dockGlass: unique('dockGlass'),
+      appsBackground: unique('appsBackground'),
+      focusBackground: unique('focusBackground'),
+    };
+  });
+  assert(
+    bootVisualState.searchGlass.length === 1 && bootVisualState.dockGlass.length === 1,
+    `visible glass quality must remain constant during startup: ${JSON.stringify(bootVisualState)}`,
+  );
+  assert(
+    bootVisualState.appsBackground.length <= 1 && bootVisualState.focusBackground.length <= 1,
+    `effect layers must not expose provisional backgrounds: ${JSON.stringify(bootVisualState)}`,
+  );
   const settingsLoadedAtStartup = await page.evaluate(() => performance.getEntriesByType('resource')
     .some((entry) => entry.name.endsWith('/js/settings-ui.js')));
   assert(!settingsLoadedAtStartup, 'settings module should not load on the home startup path');
@@ -279,6 +335,10 @@ try {
   await page.waitForFunction(() => document.body.classList.contains('page-apps-active'));
   await page.waitForFunction(() =>
     document.querySelector('.page-panel.page-apps')?.getBoundingClientRect().height > 0);
+  assert(
+    await page.locator('#wallpaper-blur').evaluate((layer) => layer.style.backgroundImage.includes('blob:')),
+    'apps navigation should reveal a final preview instead of a provisional wallpaper',
+  );
   assert(await page.locator('.page-panel[data-page="apps"]').evaluate((el) => el.classList.contains('active')),
     'apps page should activate');
   assert(await page.locator('.shortcut-item:not(.shortcut-add)').count() >= 10,

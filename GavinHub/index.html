@@ -29,13 +29,13 @@
       position: absolute; inset: 0; width: 100%; height: 100%;
       object-fit: cover; object-position: center;
       opacity: 0; backface-visibility: hidden;
-      transition: opacity 1s cubic-bezier(0.25, 0.8, 0.25, 1);
+      transition: opacity 0.56s cubic-bezier(0.25, 0.8, 0.25, 1);
     }
     #wallpaper-img.wallpaper-show { opacity: 1; }
     body.boot-awakening .scene-vignette { opacity: 0; }
     body.boot-awakening.boot-vignette-visible .scene-vignette {
       opacity: 0.88;
-      transition: opacity 0.9s cubic-bezier(0.25, 0.8, 0.25, 1) 0s;
+      transition: opacity 0.56s cubic-bezier(0.25, 0.8, 0.25, 1) 0s;
     }
   </style>
   <script>
@@ -118,10 +118,8 @@
         if (img) img.hidden = true;
         requestAnimationFrame(function () {
           requestAnimationFrame(function () {
-            window.setTimeout(function () {
-              document.body.classList.add('boot-vignette-visible', 'boot-ui-settled', 'boot-done');
-              document.dispatchEvent(new CustomEvent('boot-ui-settled'));
-            }, 80);
+            document.body.classList.add('boot-vignette-visible', 'boot-ui-settled', 'boot-done');
+            document.dispatchEvent(new CustomEvent('boot-ui-settled'));
           });
         });
         return;
@@ -139,7 +137,7 @@
         document.dispatchEvent(new CustomEvent('boot-ui-settled'));
       }
       function scheduleBootUiReveal() {
-        window.setTimeout(settleBootUi, 80);
+        settleBootUi();
       }
       function awaken() {
         if (awakenScheduled) return;
@@ -255,7 +253,7 @@
         id="search-engine-badge"
         class="search-engine-badge"
         type="button"
-        aria-label="选择搜索引擎"
+        aria-label="选择搜索引擎：Google"
         aria-haspopup="menu"
         aria-expanded="false"
         aria-controls="search-engine-menu"

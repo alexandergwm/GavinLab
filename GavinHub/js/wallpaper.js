@@ -79,8 +79,12 @@ const blobUrlCache = new Map();
 let preloadedWallpaper = null;
 let preloadIdleHandle = null;
 let preloadGeneration = 0;
-let currentWallpaper = { ...DEFAULT_WALLPAPER };
+const storedBootWallpaper = loadLastWallpaperMeta();
+let currentWallpaper = isValidCachedWallpaperMeta(storedBootWallpaper)
+  ? { ...storedBootWallpaper, type: storedBootWallpaper.type || 'image' }
+  : { ...DEFAULT_WALLPAPER };
 let initialWallpaperRevealed = document.body.classList.contains('boot-done');
+let wallpaperEffectsReadyPromise = Promise.resolve(false);
 const wallpaperEffects = createWallpaperEffects({
   createPreviews: createWallpaperEffectPreviews,
 });
@@ -190,7 +194,6 @@ function finishBootReveal() {
   if (initialWallpaperRevealed) return;
   initialWallpaperRevealed = true;
   document.getElementById('boot-critical-hide')?.remove();
-  document.getElementById('boot-cover')?.remove();
   document.body.classList.remove('wallpaper-boot', 'boot-priming-ui');
 }
 
@@ -582,27 +585,44 @@ function getBlurWallpaperUrl(data) {
 
 /** 同步模糊层壁纸 — 应用页依赖此层，不可 idle 延迟 */
 function syncBlurWallpaperLayer(data = currentWallpaper) {
-  if (!data) return;
+  if (!data) return Promise.resolve(false);
 
   if (data.type === 'gradient' && data.css) {
-    wallpaperEffects.sync({ type: 'gradient', css: data.css });
-    return;
+    return wallpaperEffects.sync({ type: 'gradient', css: data.css });
   }
 
   const url = getBlurWallpaperUrl(data);
-  wallpaperEffects.sync({ type: 'image', url });
+  return wallpaperEffects.sync({ type: 'image', url });
+}
+
+function markInitialWallpaperEffectsReady() {
+  if (document.body.classList.contains('wallpaper-effects-ready')) return;
+  document.body.classList.add('wallpaper-effects-ready');
+  performance.mark?.('gavinhub:effects-ready');
+  document.dispatchEvent(new CustomEvent('wallpaper-effects-ready'));
+}
+
+function trackWallpaperEffects(promise) {
+  wallpaperEffectsReadyPromise = Promise.resolve(promise).finally(markInitialWallpaperEffectsReady);
+  return wallpaperEffectsReadyPromise;
 }
 
 export function syncAppsBlurWallpaper() {
   const data = getCurrentWallpaper();
   const paintedUrl = getPaintedWallpaperUrl();
-  syncBlurWallpaperLayer(
-    paintedUrl && data?.type !== 'gradient' ? { ...data, url: paintedUrl } : data,
+  return trackWallpaperEffects(
+    syncBlurWallpaperLayer(
+      paintedUrl && data?.type !== 'gradient' ? { ...data, url: paintedUrl } : data,
+    ),
   );
 }
 
 function scheduleBlurWallpaper(data) {
-  syncBlurWallpaperLayer(data);
+  return trackWallpaperEffects(syncBlurWallpaperLayer(data));
+}
+
+export function prepareWallpaperEffects() {
+  return wallpaperEffectsReadyPromise;
 }
 
 function revokeBlobUrl(cacheKey) {
@@ -920,9 +940,7 @@ export async function adaptTextToWallpaper(data) {
   }
 }
 
-/**
- * 首屏：resolve 最终 URL → 黑纱下 apply → 仅淡出遮罩，UI 遮罩消失后显现
- */
+/** 首屏解析最终 URL 后，与 UI 共用一次显现时间轴。 */
 async function applyWallpaperWithInitialReveal(data, opts = {}) {
   if (initialWallpaperRevealed) {
     applyWallpaper(data, opts);
@@ -940,8 +958,7 @@ export function applyWallpaper(data, {
   forceRepaint = false,
   preserveUrl = false,
 } = {}) {
-  // 兜底：如果首屏还没有通过 reveal 路径解除 boot 状态，这里也确保解除，避免 UI 一直被压暗
-  // 但如果正在进行图片首屏 reveal（cover 仍存在且未标记 revealed），不要抢先移除黑纱
+  // 兜底解除历史启动标记，避免异常数据让 UI 一直保持启动状态。
   if (!initialWallpaperRevealed) {
     finishBootReveal();
   }
@@ -970,11 +987,7 @@ export function applyWallpaper(data, {
   if (!skipRepaint) {
     setBackgroundImage(wallpaper, currentWallpaper, { instantReveal, force: forceRepaint });
   }
-  if (immediateBlur) {
-    setBackgroundImage(document.getElementById('wallpaper-blur'), currentWallpaper);
-  } else {
-    scheduleBlurWallpaper(currentWallpaper);
-  }
+  scheduleBlurWallpaper(currentWallpaper);
   if (!skipAdapt) {
     scheduleAdaptTextToWallpaper(currentWallpaper, { immediate: adaptImmediate });
   }

@@ -1,11 +1,12 @@
 const DEFAULT_CACHE_SIZE = 4;
+const PREVIEW_WAIT_MS = 800;
 
 export function createWallpaperEffects({
   createPreviews,
   maxCacheSize = DEFAULT_CACHE_SIZE,
 } = {}) {
   const previewCache = new Map();
-  let previewRequestUrl = '';
+  const previewRequests = new Map();
   let activeImageUrl = '';
   let generation = 0;
 
@@ -34,58 +35,82 @@ export function createWallpaperEffects({
     }
   }
 
-  function requestPreviews(url, layers) {
+  function requestPreviews(url) {
     const cached = previewCache.get(url);
-    if (cached) {
-      applyPreviews(cached, layers);
-      return;
-    }
-    if (!createPreviews || previewRequestUrl === url) return;
+    if (cached) return Promise.resolve(cached);
+    if (!createPreviews) return Promise.resolve(null);
+    const pending = previewRequests.get(url);
+    if (pending) return pending.bounded;
 
-    previewRequestUrl = url;
     const requestGeneration = generation;
-    void createPreviews(url).then((previews) => {
+    const previewPromise = createPreviews(url).then((previews) => {
       if (requestGeneration !== generation) {
         previews?.dispose?.();
-        return;
+        return null;
       }
       rememberPreviews(url, previews);
-      if (activeImageUrl === url) applyPreviews(previews, getLayers());
-    }).catch(() => {
-      /* Full-resolution backgrounds remain visible when preview generation fails. */
-    }).finally(() => {
-      if (previewRequestUrl === url) previewRequestUrl = '';
+      return previews;
+    }).catch(() => null);
+    let timeoutId = 0;
+    const bounded = Promise.race([
+      previewPromise,
+      new Promise((resolve) => {
+        timeoutId = window.setTimeout(() => resolve(null), PREVIEW_WAIT_MS);
+      }),
+    ]).finally(() => window.clearTimeout(timeoutId));
+    previewRequests.set(url, { bounded });
+    void previewPromise.finally(() => {
+      previewRequests.delete(url);
     });
+    return bounded;
+  }
+
+  function applyImageFallback(url, layers) {
+    for (const layer of Object.values(layers).filter(Boolean)) {
+      layer.style.backgroundImage = url ? `url("${url}")` : '';
+      layer.style.backgroundColor = url ? 'transparent' : '';
+    }
+  }
+
+  async function syncImage(url, layers) {
+    if (!url) {
+      applyImageFallback('', layers);
+      return false;
+    }
+
+    const previews = await requestPreviews(url);
+    if (activeImageUrl !== url) return false;
+    if (previews) {
+      applyPreviews(previews, getLayers());
+      return true;
+    }
+    applyImageFallback(url, getLayers());
+    return false;
   }
 
   function sync({ type = 'image', css = '', url = '' } = {}) {
     const layers = getLayers();
     const elements = Object.values(layers).filter(Boolean);
-    if (!elements.length) return;
+    if (!elements.length) return Promise.resolve(false);
 
     if (type === 'gradient' && css) {
       activeImageUrl = '';
-      previewRequestUrl = '';
       for (const layer of elements) {
         layer.style.backgroundImage = css;
         layer.style.backgroundColor = '';
       }
-      return;
+      return Promise.resolve(true);
     }
 
     activeImageUrl = url;
-    for (const layer of elements) {
-      layer.style.backgroundImage = url ? `url("${url}")` : '';
-      layer.style.backgroundColor = url ? 'transparent' : '';
-    }
-    if (url) requestPreviews(url, layers);
+    return syncImage(url, layers);
   }
 
   function dispose() {
     generation += 1;
     for (const previews of previewCache.values()) previews.dispose?.();
     previewCache.clear();
-    previewRequestUrl = '';
+    previewRequests.clear();
     activeImageUrl = '';
   }
 

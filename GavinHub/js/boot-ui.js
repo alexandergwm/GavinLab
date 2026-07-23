@@ -1,9 +1,9 @@
-/** 启动阶段 UI 苏醒 — 对齐青柠：壁纸先淡入，UI 稍后错落「醒来」 */
+/** 启动阶段 UI 苏醒：整页同帧出现，完成后再进入搜索聚焦。 */
 
-export const BOOT_WALLPAPER_FADE_MS = 1000;
-export const BOOT_UI_REVEAL_DELAY_MS = 80;
-export const BOOT_UI_FADE_MS = 550;
-export const BOOT_VIGNETTE_FADE_MS = 900;
+export const BOOT_WALLPAPER_FADE_MS = 560;
+export const BOOT_UI_REVEAL_DELAY_MS = 0;
+export const BOOT_UI_FADE_MS = 560;
+export const BOOT_VIGNETTE_FADE_MS = 560;
 export const BOOT_VIGNETTE_DELAY_MS = 0;
 export const BOOT_SEARCH_FOCUS_DELAY_MS = 0;
 export const BOOT_REVEAL_EASE = 'cubic-bezier(0.25, 0.8, 0.25, 1)';

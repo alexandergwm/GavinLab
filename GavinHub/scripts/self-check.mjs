@@ -93,6 +93,7 @@ for (const f of ['js/lifecycle.js', 'js/page-router.js', 'js/dialog-ui.js', 'js/
 assert(app.includes("from './page-router.js'"), 'app.js should use the cancellable page router');
 assert(app.includes('waitForTransition'), 'page transitions should settle through the lifecycle layer');
 assert(app.includes('page-transitioning'), 'page transitions should expose a unified visual state');
+assert(app.includes('prepareWallpaperEffects'), 'apps navigation should wait for final wallpaper effects');
 assert(app.includes('STARTUP_SYNC_BUDGET_MS'), 'app.js should cap sync work on the critical startup path');
 assert(app.includes('Promise.all([initCore(), searchReady])'), 'search and core startup should run in parallel');
 assert(app.includes('getCurrentPage: () => pageRouter.getCurrentPage()'), 'keyboard routing should use the live router state');
@@ -179,6 +180,14 @@ assert(wpImage.includes('URL.revokeObjectURL'), 'wallpaper effect previews shoul
 assert(wpEffects.includes('export function createWallpaperEffects'), 'wallpaper effects should expose its controller');
 assert(wpEffects.includes('previewCache'), 'wallpaper effects should own preview caching');
 assert(wpEffects.includes('dispose'), 'wallpaper effects should expose memory cleanup');
+assert(wpEffects.includes('PREVIEW_WAIT_MS'), 'wallpaper effects should bound preview readiness');
+assert(wp.includes('wallpaper-effects-ready'), 'wallpaper should publish effect readiness');
+
+const bootUi = read('js/boot-ui.js');
+assert(bootUi.includes('BOOT_WALLPAPER_FADE_MS = 560'), 'wallpaper reveal should use the unified boot timeline');
+assert(bootUi.includes('BOOT_UI_FADE_MS = 560'), 'UI reveal should use the unified boot timeline');
+assert(bootUi.includes('BOOT_VIGNETTE_FADE_MS = 560'), 'vignette reveal should use the unified boot timeline');
+assert(read('js/boot.js').includes("'wallpaper-effects-ready'"), 'search focus should wait for wallpaper effects');
 
 const background = read('js/background.js');
 assert(background.includes('chrome.tabs.update'), 'NTP handoff should reuse the existing tab');
