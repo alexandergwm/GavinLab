@@ -27,12 +27,14 @@ const settingsApi = {
 };
 
 async function openWallpaperLibrary() {
+  if (!wallpaper) return false;
   const lib = await pageModules.wallpaperLibrary(wallpaperLibraryApi);
   lib?.open?.();
+  return Boolean(lib);
 }
 
 const wallpaperLibraryApi = {
-  getCurrentWallpaper: () => wallpaper.getCurrentWallpaper(),
+  getCurrentWallpaper: () => wallpaper?.getCurrentWallpaper?.() || null,
   applySelectedWallpaper: async (data) => {
     settingsStore.set({ wallpaperSource: 'library', wallpaperId: data.id || '' });
     document.getElementById('wallpaper-source').value = 'library';
@@ -97,7 +99,6 @@ const pageRouter = createPageRouter({
       wallpaper?.adaptTextToWallpaper?.(currentWallpaper);
     }
     if (nextPage === 'home') {
-      if (fromPage === 'apps') await nextPaint(3);
       scheduleInitialSearchFocus();
     }
   },
@@ -145,10 +146,28 @@ export { focusSearchInput, scheduleInitialSearchFocus };
 
 function initGlobalKeyboard() {
   initKeyboard({
-    getCurrentPage: () => tabPage,
+    getCurrentPage: () => pageRouter.getCurrentPage(),
     onSwitchPage: switchPage,
     focusSearch: focusSearchInput,
     handleEscape: (...args) => handleSearchEscape(...args),
+  });
+}
+
+function initLazyFeatureActions() {
+  const settingsButton = document.getElementById('settings-btn');
+  settingsButton?.addEventListener('click', async () => {
+    if (settingsButton.dataset.loading === '1') return;
+    settingsButton.dataset.loading = '1';
+    settingsButton.setAttribute('aria-busy', 'true');
+    try {
+      const controller = await pageModules.settings(settingsApi);
+      controller?.open?.();
+    } catch (error) {
+      console.error('[GavinHub] settings failed to open', error);
+    } finally {
+      delete settingsButton.dataset.loading;
+      settingsButton.removeAttribute('aria-busy');
+    }
   });
 }
 
@@ -186,6 +205,21 @@ function initContextMenu() {
     const next = PAGE_CYCLE[(idx + 1) % PAGE_CYCLE.length];
     switchPage(next);
   });
+}
+
+function prewarmSecondaryFeatures() {
+  let cancelIdle = null;
+  const timer = window.setTimeout(() => {
+    if (document.hidden) return;
+    cancelIdle = runWhenIdle(
+      () => preloadPageModule('apps', getPageContext()),
+      { timeout: 500, fallbackDelay: 80 },
+    );
+  }, 180);
+  window.addEventListener('pagehide', () => {
+    window.clearTimeout(timer);
+    cancelIdle?.();
+  }, { once: true });
 }
 
 function refreshSyncedUi() {
@@ -258,9 +292,11 @@ async function initCore() {
   initDialogController();
   modules.weatherUi?.initWeather?.();
   initGlobalKeyboard();
+  initLazyFeatureActions();
   initSearchFocusHooks(() => pageRouter.getCurrentPage());
   initContextMenu();
   preloadPageModule(pageRouter.getCurrentPage(), getPageContext());
+  prewarmSecondaryFeatures();
 
   applyPageClasses(pageRouter.getCurrentPage());
   refreshDock();

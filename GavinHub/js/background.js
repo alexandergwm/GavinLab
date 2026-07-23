@@ -1,7 +1,6 @@
-/** 新标签页焦点修复
- *
- * Chromium 的 NTP 覆盖页会强制把焦点留在地址栏，页面 focus() 无效。
- * 因此在同一位置打开普通扩展页 index.html，再关闭 NTP 壳页。
+/**
+ * Chromium NTP focus handoff. Navigating the existing tab to a regular
+ * extension page releases address-bar focus without creating a second tab.
  */
 
 const NTP = /^(chrome|edge):\/\/newtab\/?$/i;
@@ -20,30 +19,18 @@ function shouldSwapNtpTab(tab) {
 }
 
 function swapNtpToFocusablePage(tabId) {
-  if (!tabId || busy.has(tabId)) return;
+  if (!tabId || busy.has(tabId)) return false;
   busy.add(tabId);
 
   const indexUrl = chrome.runtime.getURL('index.html');
-
-  chrome.tabs.get(tabId, (tab) => {
+  chrome.tabs.update(tabId, { url: indexUrl, active: true }, (tab) => {
     if (chrome.runtime.lastError) {
       busy.delete(tabId);
       return;
     }
-
-    const insertIndex = typeof tab?.index === 'number' ? tab.index : undefined;
-    chrome.tabs.create({ url: indexUrl, active: true, index: insertIndex }, (created) => {
-      if (chrome.runtime.lastError) {
-        busy.delete(tabId);
-        return;
-      }
-      chrome.tabs.remove(tabId, () => {
-        busy.delete(tabId);
-        void chrome.runtime.lastError;
-      });
-      if (created?.id) setTimeout(() => busy.delete(created.id), 1500);
-    });
+    setTimeout(() => busy.delete(tab?.id || tabId), 1200);
   });
+  return true;
 }
 
 function maybeSwapNtpTab(tab) {
@@ -65,7 +52,8 @@ chrome.tabs.onActivated.addListener(({ tabId }) => {
   });
 });
 
-chrome.runtime.onMessage.addListener((message, sender) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type !== 'gavinhub-open-index') return;
-  swapNtpToFocusablePage(sender.tab?.id);
+  const accepted = swapNtpToFocusablePage(sender.tab?.id);
+  sendResponse({ accepted });
 });

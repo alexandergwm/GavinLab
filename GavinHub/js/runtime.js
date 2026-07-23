@@ -1,12 +1,8 @@
-/**
- * 运行时：页面路由 + 懒加载模块注册表。
- * 扩展新页面时：在 PAGE_SPECS 追加条目，并在 app 的 switchPage 中调用 onPageEnter。
- */
+import { createFeatureRegistry } from './feature-registry.js';
+
+/** 页面运行时：页面定义与功能加载保持分离。 */
 
 export const PAGE_CYCLE = ['home', 'apps'];
-
-/** @type {Map<string, { mod: any, promise: Promise<any> | null }>} */
-const modules = new Map();
 
 /** @type {Array<(page: string, ctx: object) => void | Promise<void>>} */
 const pageEnterHooks = [];
@@ -26,64 +22,54 @@ async function runPageEnterHooks(page, ctx) {
   }
 }
 
-/**
- * @param {string} id 模块唯一 id
- * @param {() => Promise<any>} loader dynamic import
- * @param {(mod: any, ctx?: object) => any} [bootstrap] 首次加载初始化
- */
-export async function loadModule(id, loader, bootstrap, ctx = {}) {
-  let entry = modules.get(id);
-  if (!entry) {
-    entry = { mod: null, promise: null };
-    modules.set(id, entry);
-  }
-  if (entry.mod) return entry.mod;
-  if (!entry.promise) {
-    entry.promise = loader()
-      .then((mod) => {
-        entry.mod = bootstrap ? bootstrap(mod, ctx) ?? mod : mod;
-        entry.promise = null;
-        return entry.mod;
-      })
-      .catch((error) => {
-        entry.promise = null;
-        throw error;
-      });
-  }
-  return entry.promise;
-}
+const features = createFeatureRegistry({
+  calendar: {
+    load: () => import('./calendar.js'),
+    setup(module) {
+      module.initCalendarApp();
+      return module;
+    },
+  },
+  apps: {
+    load: () => import('./shortcut-ui.js'),
+    setup(module, context) {
+      module.initShortcutsUI(context);
+      return module;
+    },
+  },
+  settings: {
+    load: () => import('./settings-ui.js'),
+    setup: (module, context) => module.initSettingsUI(context),
+  },
+  'wallpaper-library': {
+    load: () => import('./wallpaper-library.js'),
+    setup: (module, context) => module.initWallpaperLibrary(context),
+  },
+});
 
 export const pageModules = {
   calendar() {
-    return loadModule('calendar', () => import('./calendar.js'), (m) => {
-      m.initCalendarApp();
-      return m;
-    });
+    return features.load('calendar');
   },
   apps(ctx) {
-    return loadModule('apps', () => import('./shortcut-ui.js'), (m, c) => {
-      m.initShortcutsUI(c);
-      return m;
-    }, ctx);
+    return features.load('apps', ctx);
   },
   settings(api) {
-    return loadModule('settings', () => import('./settings-ui.js'), (m, c) => {
-      m.initSettingsUI(c);
-      return m;
-    }, api);
+    return features.load('settings', api);
   },
   wallpaperLibrary(api) {
-    return loadModule('wallpaper-library', () => import('./wallpaper-library.js'), (m, c) => {
-      return m.initWallpaperLibrary(c);
-    }, api);
+    return features.load('wallpaper-library', api);
   },
 };
+
+export function getFeatureStatus(id) {
+  return features.getStatus(id);
+}
 
 /** 在视觉切换前准备页面模块，避免解析和首轮渲染挤占动画帧。 */
 export async function preparePage(page, ctx = {}) {
   if (page === 'apps') {
     await pageModules.apps(ctx);
-    await pageModules.settings(ctx.settingsApi);
   }
 }
 
@@ -95,5 +81,6 @@ export async function onPageEnter(page, ctx = {}) {
 
 /** 按 localStorage 记录恢复上次页面时预加载 */
 export function preloadPageModule(page, ctx = {}) {
-  if (page === 'apps') pageModules.apps(ctx).catch(() => {});
+  if (page === 'apps') return features.preload('apps', ctx);
+  return Promise.resolve(null);
 }

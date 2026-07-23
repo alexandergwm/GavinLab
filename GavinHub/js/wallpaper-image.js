@@ -112,11 +112,23 @@ export async function loadImageForAnalysis(url) {
   return img;
 }
 
-/** Build tiny, pre-softened layers once so UI transitions only animate opacity. */
+function canvasToObjectUrl(canvas, quality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error('preview encode failed'));
+        return;
+      }
+      resolve(URL.createObjectURL(blob));
+    }, 'image/jpeg', quality);
+  });
+}
+
+/** Build lightweight layers asynchronously so transitions only animate opacity. */
 export async function createWallpaperEffectPreviews(url) {
   const loaded = await loadAnalysisSource(url, { maxWidth: 960 });
   try {
-    const render = (targetWidth, quality) => {
+    const render = async (targetWidth, quality, filter) => {
       const width = Math.min(targetWidth, loaded.width);
       const height = Math.max(1, Math.round(width * loaded.height / loaded.width));
       const canvas = document.createElement('canvas');
@@ -126,12 +138,21 @@ export async function createWallpaperEffectPreviews(url) {
       if (!ctx) return '';
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
+      ctx.filter = filter;
       ctx.drawImage(loaded.source, 0, 0, width, height);
-      return canvas.toDataURL('image/jpeg', quality);
+      return canvasToObjectUrl(canvas, quality);
     };
+    const [apps, focus] = await Promise.all([
+      render(300, 0.72, 'brightness(84%) saturate(96%)'),
+      render(900, 0.8, 'brightness(94%) saturate(104%)'),
+    ]);
     return {
-      apps: render(300, 0.72),
-      focus: render(900, 0.8),
+      apps,
+      focus,
+      dispose() {
+        URL.revokeObjectURL(apps);
+        URL.revokeObjectURL(focus);
+      },
     };
   } finally {
     loaded.dispose?.();

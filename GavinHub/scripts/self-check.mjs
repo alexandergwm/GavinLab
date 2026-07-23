@@ -17,8 +17,8 @@ function assert(cond, msg) {
 for (const f of ['css/base.css', 'css/home.css', 'css/apps.css', 'css/feed.css', 'css/dialogs.css']) {
   assert(existsSync(join(root, f)), `missing ${f}`);
 }
-
 const html = read('index.html');
+assert(html.includes('data-lazy-style="dialogs"'), 'dialog stylesheet should be non-blocking');
 assert(html.includes('js/boot.js'), 'index.html should load boot.js');
 for (const part of ['css/base.css', 'css/home.css', 'css/apps.css', 'css/dialogs.css']) {
   assert(html.includes(part), `index.html should link ${part}`);
@@ -52,12 +52,22 @@ const runtime = read('js/runtime.js');
 assert(runtime.includes('export const pageModules'), 'runtime.js should export pageModules');
 assert(runtime.includes('export function registerPageEnterHook'), 'runtime.js should export registerPageEnterHook');
 
-for (const f of ['js/lifecycle.js', 'js/page-router.js', 'js/dialog-ui.js']) {
+for (const f of ['js/lifecycle.js', 'js/page-router.js', 'js/dialog-ui.js', 'js/feature-registry.js', 'js/style-registry.js']) {
   assert(existsSync(join(root, f)), `missing architecture module ${f}`);
 }
 assert(app.includes("from './page-router.js'"), 'app.js should use the cancellable page router');
 assert(app.includes('STARTUP_SYNC_BUDGET_MS'), 'app.js should cap sync work on the critical startup path');
 assert(app.includes('Promise.all([initCore(), searchReady])'), 'search and core startup should run in parallel');
+assert(app.includes('getCurrentPage: () => pageRouter.getCurrentPage()'), 'keyboard routing should use the live router state');
+assert(!app.includes('getCurrentPage: () => tabPage'), 'keyboard routing must not reference removed tabPage state');
+assert(app.includes('initLazyFeatureActions'), 'settings should load through a lightweight action boundary');
+
+const featureRegistry = read('js/feature-registry.js');
+assert(featureRegistry.includes('export function createFeatureRegistry'), 'feature registry should expose its factory');
+assert(runtime.includes("features.load('settings'"), 'settings should use the feature registry');
+const preparePageBody = runtime.slice(runtime.indexOf('export async function preparePage'), runtime.indexOf('/** 进入页面时'));
+assert(!preparePageBody.includes('pageModules.settings'), 'apps navigation must not initialize settings before the transition');
+assert(read('js/dialog-ui.js').includes("ensureStyle('dialogs')"), 'dialogs should activate styling before opening');
 
 const settingsUi = read('js/settings-ui.js');
 assert(settingsUi.includes('export function initSettingsUI'), 'settings-ui.js should export initSettingsUI');
@@ -86,6 +96,8 @@ assert(search.includes("from './search-suggestions-ui.js'"), 'search.js should i
 assert(search.includes('BLOCKING_SMART_IDS'), 'search.js should use BLOCKING_SMART_IDS');
 assert(!search.includes('function createSuggestionNode'), 'search.js should not define createSuggestionNode locally');
 assert(search.includes("from './keys.js'"), 'search.js should use keys.js');
+assert(search.includes("from './lazy-search-quote.js'"), 'search should defer quote and weather parsing');
+assert(!search.includes("from './quote.js'"), 'search must not load quote data on its critical path');
 assert(!search.includes('isNonChinese'), 'search.js should not contain dead isNonChinese');
 assert(!search.includes('ai-login-hint-seen'), 'search.js should use KEYS.aiLoginHint');
 
@@ -105,10 +117,17 @@ assert(keys.includes('export const BLOCKING_SMART_IDS'), 'keys.js should export 
 
 const wp = read('js/wallpaper.js');
 const wpTheme = read('js/wallpaper-theme.js');
+const wpImage = read('js/wallpaper-image.js');
 assert(wp.includes('export async function loadWallpaper'), 'wallpaper.js missing loadWallpaper');
 assert(wp.includes('analyzeWallpaperTheme'), 'wallpaper.js should delegate text theme analysis');
 assert(wpTheme.includes('viewportRegionToImageRegion'), 'wallpaper-theme.js should map viewport regions');
 assert(wp.includes('fetchNextBingWallpaper'), 'wallpaper.js should use fetchNextBingWallpaper');
+assert(wpImage.includes('canvas.toBlob'), 'wallpaper effect previews should encode asynchronously');
+assert(wpImage.includes('URL.revokeObjectURL'), 'wallpaper effect previews should expose memory cleanup');
+
+const background = read('js/background.js');
+assert(background.includes('chrome.tabs.update'), 'NTP handoff should reuse the existing tab');
+assert(!background.includes('chrome.tabs.create'), 'NTP handoff must not create a visible second tab');
 
 const feed = read('js/feed.js');
 assert(!feed.includes('MOCK_ITEMS'), 'feed.js should not contain MOCK_ITEMS');
@@ -116,6 +135,7 @@ assert(feed.includes("from './keys.js'"), 'feed.js should use keys.js');
 
 assert(!existsSync(join(root, 'js/greeting.js')), 'greeting.js should be removed');
 assert(read('js/quote.js').includes('function getGreetingText'), 'quote.js should inline getGreetingText');
+assert(read('js/lazy-search-quote.js').includes("import('./quote.js')"), 'quote should load through its lazy facade');
 
 const jsFiles = readdirSync(join(root, 'js')).filter((f) => f.endsWith('.js'));
 assert(existsSync(join(root, 'newtab.html')), 'missing newtab.html (NTP shell)');

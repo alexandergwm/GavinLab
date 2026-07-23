@@ -84,6 +84,11 @@ const effectPreviewCache = new Map();
 let effectPreviewRequestKey = '';
 let effectLayerUrl = '';
 
+window.addEventListener('pagehide', () => {
+  for (const previews of effectPreviewCache.values()) previews.dispose?.();
+  effectPreviewCache.clear();
+}, { once: true });
+
 const BOOT_ADAPT_AFTER_UI_MS = 180;
 
 function canRunBackgroundImageWork() {
@@ -627,7 +632,9 @@ function syncEffectWallpaperPreviews(url, wallpaperBlur, searchFocusLayer) {
   void createWallpaperEffectPreviews(url).then((previews) => {
     effectPreviewCache.set(url, previews);
     while (effectPreviewCache.size > 4) {
-      effectPreviewCache.delete(effectPreviewCache.keys().next().value);
+      const oldestKey = effectPreviewCache.keys().next().value;
+      effectPreviewCache.get(oldestKey)?.dispose?.();
+      effectPreviewCache.delete(oldestKey);
     }
     if (effectLayerUrl !== url) return;
     applyEffectPreviews(previews, wallpaperBlur, searchFocusLayer);

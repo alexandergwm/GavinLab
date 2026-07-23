@@ -200,7 +200,6 @@ body {
 .wallpaper-blur {
   z-index: 1;
   opacity: 0;
-  filter: brightness(0.84) saturate(0.96);
   transform: translateZ(0) scale(1.012);
   transition: none;
   pointer-events: none;
@@ -304,7 +303,6 @@ body.search-focused:not(.page-blur-active) .scene-vignette {
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
-  filter: brightness(0.94) saturate(1.04);
   transform: translateZ(0) scale(1.006);
   opacity: 0;
   visibility: hidden;

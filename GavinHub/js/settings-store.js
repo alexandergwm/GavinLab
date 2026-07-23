@@ -6,6 +6,9 @@ export function createSettingsStore() {
   let state = loadSettings();
   const listeners = new Set();
 
+  const changedEntries = (partial) => Object.entries(partial)
+    .filter(([key, value]) => !Object.is(state[key], value));
+
   const notify = () => {
     for (const listener of listeners) {
       try {
@@ -19,8 +22,11 @@ export function createSettingsStore() {
   return {
     get: () => state,
     set(partial) {
-      state = { ...state, ...partial };
-      const persistPartial = { ...partial };
+      const changes = Object.fromEntries(changedEntries(partial));
+      if (!Object.keys(changes).length) return state;
+
+      state = { ...state, ...changes };
+      const persistPartial = { ...changes };
       for (const key of TAB_SESSION_KEYS) delete persistPartial[key];
       if (Object.keys(persistPartial).length) {
         const persisted = saveSettings(persistPartial);

@@ -31,6 +31,23 @@ const LAST_WALLPAPER_KEY = KEYS.wallpaperLast;
 const RECENT_WALLPAPER_KEY = KEYS.wallpaperRecent;
 const RECENT_WALLPAPER_MAX = 30;
 
+function safeSetItem(key, value) {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function safeGetItem(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
 const DEFAULT_SETTINGS = {
   searchEngine: 'google',
   searchMode: 'normal',
@@ -210,7 +227,7 @@ function readPersistedSettings() {
     }
     stripTabSessionFields(settings);
     if (dirty) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      safeSetItem(STORAGE_KEY, JSON.stringify(settings));
     }
     return settings;
   } catch {
@@ -230,7 +247,7 @@ export function saveSettings(partial) {
   const next = { ...current, ...partial };
   delete next.githubUsername;
   stripTabSessionFields(next);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  safeSetItem(STORAGE_KEY, JSON.stringify(next));
   if (Object.keys(partial).some((key) => SYNCED_SETTING_FIELDS.has(key))) {
     scheduleSyncForKey(STORAGE_KEY);
   }
@@ -287,7 +304,7 @@ export function getWallpaperFavorites() {
 }
 
 function saveWallpaperFavorites(list) {
-  localStorage.setItem(FAVORITES_KEY, JSON.stringify(list));
+  safeSetItem(FAVORITES_KEY, JSON.stringify(list));
   return list;
 }
 
@@ -359,7 +376,7 @@ export function loadWallpaperRotation() {
 export function saveWallpaperRotation(partial) {
   const current = loadWallpaperRotation();
   const next = { ...current, ...partial };
-  localStorage.setItem(ROTATION_KEY, JSON.stringify(next));
+  safeSetItem(ROTATION_KEY, JSON.stringify(next));
   const settingsPatch = {};
   if ('interval' in partial) settingsPatch.wallpaperRotation = next.interval;
   if ('weekSourceIndex' in partial) settingsPatch.wallpaperRotationIndex = next.weekSourceIndex;
@@ -401,7 +418,7 @@ export function recordRecentWallpaper(wallpaper, maxRecent = RECENT_WALLPAPER_MA
   const url = wallpaper.url || '';
   const next = [{ id, url, at: Date.now() }, ...loadRecentWallpaperIds().filter((item) => item.id !== id && item.url !== url)];
   const trimmed = next.slice(0, maxRecent);
-  localStorage.setItem(RECENT_WALLPAPER_KEY, JSON.stringify(trimmed));
+  safeSetItem(RECENT_WALLPAPER_KEY, JSON.stringify(trimmed));
   return trimmed;
 }
 
@@ -434,7 +451,7 @@ export function saveLastWallpaperMeta(wallpaper) {
     textTheme: wallpaper.textTheme || undefined,
     luminance: wallpaper.luminance ?? wallpaper.min ?? undefined,
   };
-  localStorage.setItem(LAST_WALLPAPER_KEY, JSON.stringify(meta));
+  safeSetItem(LAST_WALLPAPER_KEY, JSON.stringify(meta));
   return meta;
 }
 
@@ -449,15 +466,17 @@ export function readJson(key, fallback) {
 }
 
 export function writeJson(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
+  const written = safeSetItem(key, JSON.stringify(value));
+  if (!written) return false;
   scheduleSyncForKey(key);
+  return true;
 }
 
 export function readString(key, fallback = '') {
-  const raw = localStorage.getItem(key);
+  const raw = safeGetItem(key);
   return raw == null ? fallback : raw;
 }
 
 export function writeString(key, value) {
-  localStorage.setItem(key, value);
+  return safeSetItem(key, value);
 }

@@ -15,7 +15,7 @@ import {
   writeString,
 } from './storage.js';
 import { KEYS } from './keys.js';
-import { initSearchQuote } from './quote.js';
+import { initLazySearchQuote } from './lazy-search-quote.js';
 import { buildCurrencySuggestion, parseCurrencyInput } from './currency.js';
 import { buildSmartSuggestions, resolveSmartAction } from './smart-input.js';
 import { fetchQueryCompletions } from './search-suggest.js';
@@ -913,7 +913,7 @@ export function initSearch({ getSettings: settingsGetter, onSettingsChange: sett
     badgeLabelEl = badgeEl.querySelector('.search-badge-label');
   }
 
-  searchQuote = initSearchQuote(document.getElementById('search-quote'));
+  searchQuote = initLazySearchQuote(document.getElementById('search-quote'));
 
   listEl.addEventListener('mouseleave', () => {
     if (areSuggestionsVisible()) resetActiveSuggestion();

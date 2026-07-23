@@ -13,6 +13,7 @@ import { updateSearchEngineBadge, refreshSearchSuggestions } from './search.js';
 import { closeDialog as closeModal, openDialog as openModal } from './dialog-ui.js';
 
 let inited = false;
+let settingsController = null;
 let syncTabsBound = false;
 const SYNC_TAB_KEY = 'startpage-sync-ui-tab';
 const FILE_TAB_KEY = 'startpage-sync-file-tab';
@@ -227,12 +228,11 @@ function syncWallpaperRotationHint() {
  * }} api
  */
 export function initSettingsUI(api) {
-  if (inited) return;
+  if (inited) return settingsController;
   inited = true;
 
   const dialog = document.getElementById('settings-dialog');
   const form = document.getElementById('settings-form');
-  const btn = document.getElementById('settings-btn');
   const engineSelect = document.getElementById('search-engine');
   const wallpaperSelect = document.getElementById('wallpaper-source');
   const rotationSelect = document.getElementById('wallpaper-rotation');
@@ -260,14 +260,14 @@ export function initSettingsUI(api) {
     if (greetingCheckbox) greetingCheckbox.checked = settings.showGreeting !== false;
   };
 
-  btn?.addEventListener('click', () => {
+  const open = () => {
     syncForm();
     syncGithubFormFromStorage();
     setGithubSyncStatus('');
     restoreSyncTabs();
     void refreshSyncStatus();
     openModal(dialog);
-  });
+  };
 
   engineSelect?.addEventListener('change', () => {
     api.setSettings({ searchEngine: engineSelect.value });
@@ -348,4 +348,7 @@ export function initSettingsUI(api) {
   });
 
   bindSyncTabs();
+
+  settingsController = { open, sync: syncForm };
+  return settingsController;
 }

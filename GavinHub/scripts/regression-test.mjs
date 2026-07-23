@@ -67,6 +67,10 @@ assert(!baseCss.includes('transition:\n    filter var(--transition-search-focus)
   'full-screen wallpaper filters must not animate during search focus');
 assert(!baseCss.includes('body.search-focused:not(.page-blur-active) .wallpaper-img'),
   'search focus should use a composited overlay instead of filtering the wallpaper');
+assert(!/\.wallpaper-blur\s*\{[^}]*filter:/s.test(baseCss),
+  'apps wallpaper effects should be baked into the preview bitmap');
+assert(!/\.search-focus-overlay\s*\{[^}]*filter:/s.test(baseCss),
+  'focus wallpaper effects should be baked into the preview bitmap');
 
 page.on('pageerror', (err) => errors.push(err.message));
 page.on('request', (request) => {
@@ -96,6 +100,46 @@ try {
   await page.waitForFunction(() => document.body.classList.contains('app-ready'), null, {
     timeout: 8000,
   });
+  const settingsLoadedAtStartup = await page.evaluate(() => performance.getEntriesByType('resource')
+    .some((entry) => entry.name.endsWith('/js/settings-ui.js')));
+  assert(!settingsLoadedAtStartup, 'settings module should not load on the home startup path');
+  const lifecycleSafety = await page.evaluate(async () => {
+    const [{ createFeatureRegistry }, dialogs] = await Promise.all([
+      import('./js/feature-registry.js'),
+      import('./js/dialog-ui.js'),
+    ]);
+    let attempts = 0;
+    const registry = createFeatureRegistry({
+      retryable: {
+        load: async () => {
+          attempts += 1;
+          if (attempts === 1) throw new Error('expected test failure');
+          return { value: 42 };
+        },
+      },
+    });
+    await registry.load('retryable').catch(() => null);
+    const retryValue = await registry.load('retryable');
+
+    const dialog = document.getElementById('weather-dialog');
+    dialogs.openDialog(dialog);
+    dialogs.closeDialog(dialog);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    return {
+      attempts,
+      retryValue: retryValue.value,
+      retryStatus: registry.getStatus('retryable').status,
+      cancelledDialogOpen: dialog.open,
+    };
+  });
+  assert(
+    lifecycleSafety.attempts === 2
+      && lifecycleSafety.retryValue === 42
+      && lifecycleSafety.retryStatus === 'ready',
+    `failed feature loads should remain retryable: ${JSON.stringify(lifecycleSafety)}`,
+  );
+  assert(!lifecycleSafety.cancelledDialogOpen,
+    'closing a dialog while its stylesheet loads must cancel the pending open');
   const baseline = await page.evaluate(() => {
     const navigation = performance.getEntriesByType('navigation')[0];
     const resources = performance.getEntriesByType('resource');
@@ -164,9 +208,17 @@ try {
     'apps page should activate');
   assert(await page.locator('.shortcut-item:not(.shortcut-add)').count() >= 10,
     'corrupted shortcut storage should fall back to defaults');
+  const settingsLoadedOnApps = await page.evaluate(() => performance.getEntriesByType('resource')
+    .some((entry) => entry.name.endsWith('/js/settings-ui.js')));
+  assert(!settingsLoadedOnApps, 'settings module should remain lazy after entering apps');
 
   await page.locator('#settings-btn').click();
   await page.waitForSelector('#settings-dialog[open]');
+  assert(
+    await page.evaluate(() => performance.getEntriesByType('resource')
+      .some((entry) => entry.name.endsWith('/js/settings-ui.js'))),
+    'settings action should load its feature module on demand',
+  );
   const githubField = await page.evaluate(() => ({
     hidden: document.getElementById('github-gist-field')?.hidden,
     readOnly: document.getElementById('github-sync-gist-id')?.readOnly,
@@ -178,6 +230,12 @@ try {
 
   await page.evaluate(() => localStorage.removeItem('startpage-shortcuts'));
   await page.locator('.dock-tab[data-page="home"]').click();
+  await page.waitForFunction(() => !document.body.classList.contains('page-apps-active'));
+
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.press('2');
+  await page.waitForFunction(() => document.body.classList.contains('page-apps-active'));
+  await page.keyboard.press('1');
   await page.waitForFunction(() => !document.body.classList.contains('page-apps-active'));
   assert(await page.locator('.page-panel[data-page="home"]').evaluate((el) => el.classList.contains('active')),
     'home page should reactivate');

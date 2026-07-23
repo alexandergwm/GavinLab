@@ -33,7 +33,7 @@ npm run package:extension
 
 Chromium / Edge **官方规定**：`chrome_url_overrides` 的新标签页焦点永远在地址栏，页面里的 `focus()` / `autofocus` 无效。
 
-GavinHub 用 background 关掉 NTP 壳页，再打开普通扩展页 `index.html`，这样中间搜索框才能拿到光标。
+GavinHub 用 background 在同一个标签内把 NTP 壳页接管为普通扩展页 `index.html`，既让中间搜索框拿到光标，也避免关闭旧标签、创建新标签带来的闪动。
 
 **副作用**：地址栏会显示 `chrome-extension://…/index.html`（这是唯一可靠方案的代价）。
 
@@ -58,7 +58,7 @@ GavinHub 用 background 关掉 NTP 壳页，再打开普通扩展页 `index.html
 
 | 权限 | 用途 |
 |------|------|
-| `tabs` | 新标签页焦点修复：关掉 NTP 壳页并打开可聚焦的普通扩展页 |
+| `tabs` | 新标签页焦点修复：在同一标签内切换到可聚焦的普通扩展页 |
 | `host_permissions`（`http(s)://*/*`） | 壁纸、天气、RSS、arXiv、GitHub 等网络请求 |
 
 ## 卸载

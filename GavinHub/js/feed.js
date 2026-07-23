@@ -3,6 +3,7 @@ import { loadGithubHome } from './github-home.js';
 import { KEYS, SESSION_KEYS } from './keys.js';
 import { readJson, writeJson } from './storage.js';
 import { corsProxyUrls, escapeHtml, extractProxiedBody, fetchWithTimeout, formatRelativeTime } from './util.js';
+import { closeDialog, openDialog } from './dialog-ui.js';
 
 const PROXY_TIMEOUT = 12000;
 const ITEMS_PER_FEED = 3;
@@ -809,10 +810,10 @@ function initRssSettings() {
   openBtn?.addEventListener('click', () => {
     renderRssSettingsPanel();
     rssSettingsDirty = false;
-    dialog?.showModal();
+    openDialog(dialog);
   });
 
-  dialog?.querySelector('.modal-close')?.addEventListener('click', () => dialog.close());
+  dialog?.querySelector('.modal-close')?.addEventListener('click', () => closeDialog(dialog));
 
   dialog?.addEventListener('close', () => {
     if (rssSettingsDirty) {
