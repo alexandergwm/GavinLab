@@ -20,31 +20,45 @@ export function focusSearchInput({ allowDuringBoot = false } = {}) {
   if (!isHomeActive()) return false;
   if (!allowDuringBoot && searchFormHidden()) return false;
 
+  // activeElement can already be the input while Chromium still owns the real
+  // keyboard focus in the omnibox. Ask the document to claim it before testing.
+  if (!document.hasFocus()) {
+    try {
+      window.focus();
+    } catch {
+      // A later window focus event will retry the handoff.
+    }
+  }
   try {
     input.focus({ preventScroll: true });
   } catch {
     input.focus();
   }
-  const focused = document.activeElement === input;
+  const focused = document.hasFocus() && document.activeElement === input;
   if (focused && !performance.getEntriesByName('gavinhub:search-focused').length) {
     performance.mark?.('gavinhub:search-focused');
   }
   return focused;
 }
 
-const FOCUS_RETRY_DELAYS = [0, 40, 120, 260];
+const FOCUS_RETRY_DELAYS = [0, 40, 100, 180, 320, 520, 800];
 
 let focusSchedulePending = false;
 let focusAttemptGeneration = 0;
 let focusRetryTimer = 0;
+let initialFocusArmed = true;
 
 function runInitialFocusAttempts() {
   if (!isHomeActive()) return;
+  initialFocusArmed = true;
   const generation = ++focusAttemptGeneration;
 
   const attempt = (index) => {
     if (generation !== focusAttemptGeneration || !isHomeActive()) return;
-    if (focusSearchInput({ allowDuringBoot: true })) return;
+    if (focusSearchInput({ allowDuringBoot: true })) {
+      initialFocusArmed = false;
+      return;
+    }
     const nextDelay = FOCUS_RETRY_DELAYS[index + 1];
     if (nextDelay == null) return;
     focusRetryTimer = window.setTimeout(() => attempt(index + 1), nextDelay);
@@ -86,6 +100,7 @@ function toggleSearchGlassRefresh() {
 /** 离开主页前立即收起搜索栏，避免 opacity 动画 + backdrop-filter 叠加重算掉帧 */
 export function dismissSearchForPageLeave() {
   focusAttemptGeneration += 1;
+  initialFocusArmed = false;
   window.clearTimeout(focusRetryTimer);
   document.body.classList.remove('search-focused');
   const box = document.getElementById('search-box');
@@ -121,6 +136,21 @@ export function hardRefreshSearchGlass() {
 
 export function initSearchFocusHooks(getCurrentPage) {
   const shouldFocusHome = () => getCurrentPage?.() === 'home';
+  let pointerFocusIntent = false;
+
+  window.addEventListener('pointerdown', () => {
+    pointerFocusIntent = true;
+    window.setTimeout(() => {
+      pointerFocusIntent = false;
+    }, 0);
+  }, { capture: true, passive: true });
+
+  // If Edge releases its address bar focus after the extension page commits,
+  // finish the pending handoff immediately. Do not override an intentional click.
+  window.addEventListener('focus', () => {
+    if (!initialFocusArmed || pointerFocusIntent || !shouldFocusHome()) return;
+    runInitialFocusAttempts();
+  }, { passive: true });
 
   window.addEventListener('pageshow', () => {
     if (!shouldFocusHome()) return;

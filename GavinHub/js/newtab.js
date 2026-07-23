@@ -1,19 +1,22 @@
-/** 主动唤醒后台页；收到接管确认后立即停止重试。 */
-let attempts = 0;
-let retryTimer = 0;
+/**
+ * Let the committed NTP shell navigate itself. This avoids racing a tabs.update
+ * against Chromium's initial address-bar focus assignment. The worker is only a
+ * fallback for browsers that block the same-origin replacement unexpectedly.
+ */
+const indexUrl = new URL(chrome.runtime.getURL('index.html'));
+indexUrl.searchParams.set('source', 'newtab');
 
-function requestFocusablePage() {
-  attempts += 1;
-  chrome.runtime.sendMessage({ type: 'gavinhub-open-index' }, (response) => {
+function requestBackgroundFallback() {
+  chrome.runtime.sendMessage({ type: 'gavinhub-open-index' }, () => {
     void chrome.runtime.lastError;
-    if (response?.accepted) {
-      clearTimeout(retryTimer);
-      return;
-    }
-    if (attempts < 6) {
-      retryTimer = window.setTimeout(requestFocusablePage, Math.min(80 * (2 ** attempts), 500));
-    }
   });
 }
 
-requestFocusablePage();
+const fallbackTimer = window.setTimeout(requestBackgroundFallback, 240);
+
+try {
+  window.location.replace(indexUrl.href);
+} catch {
+  window.clearTimeout(fallbackTimer);
+  requestBackgroundFallback();
+}

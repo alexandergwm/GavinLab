@@ -89,11 +89,15 @@ function verifyPackage(outRoot) {
     throw new Error(`missing service worker: ${manifest.background.service_worker}`);
   }
   if (manifest.chrome_url_overrides.newtab !== 'newtab.html') {
-    throw new Error('newtab override must be newtab.html so background.js can swap to a focusable page');
+    throw new Error('newtab override must be newtab.html so it can navigate to a focusable page');
+  }
+  const newtabSource = readFileSync(join(outRoot, 'js/newtab.js'), 'utf8');
+  if (!newtabSource.includes('window.location.replace')) {
+    throw new Error('newtab.js must perform the primary same-tab focus handoff');
   }
   const backgroundSource = readFileSync(join(outRoot, manifest.background.service_worker), 'utf8');
   if (!backgroundSource.includes('swapNtpToFocusablePage')) {
-    throw new Error('background.js must swap NTP tabs for search focus');
+    throw new Error('background.js must retain the NTP handoff fallback');
   }
   const jsCount = readdirSync(join(outRoot, 'js')).filter((f) => f.endsWith('.js')).length;
   if (jsCount < 31) throw new Error(`expected >=31 js modules, got ${jsCount}`);

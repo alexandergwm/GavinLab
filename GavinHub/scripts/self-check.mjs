@@ -192,6 +192,8 @@ assert(read('js/boot.js').includes("'wallpaper-effects-ready'"), 'search focus s
 const background = read('js/background.js');
 assert(background.includes('chrome.tabs.update'), 'NTP handoff should reuse the existing tab');
 assert(!background.includes('chrome.tabs.create'), 'NTP handoff must not create a visible second tab');
+assert(read('js/newtab.js').includes('window.location.replace'), 'NTP shell should navigate itself before using the worker fallback');
+assert(read('js/search-focus.js').includes('document.hasFocus()'), 'search focus should verify document-level keyboard focus');
 
 const feed = read('js/feed.js');
 assert(!feed.includes('MOCK_ITEMS'), 'feed.js should not contain MOCK_ITEMS');
@@ -205,7 +207,7 @@ const jsFiles = readdirSync(join(root, 'js')).filter((f) => f.endsWith('.js'));
 assert(existsSync(join(root, 'newtab.html')), 'missing newtab.html (NTP shell)');
 assert(existsSync(join(root, 'js/background.js')), 'missing background.js (search focus)');
 assert(existsSync(join(root, 'js/newtab.js')), 'missing newtab.js (NTP handshake)');
-assert(read('newtab.html').includes('js/newtab.js'), 'newtab shell should actively wake the background worker');
+assert(read('newtab.html').includes('js/newtab.js'), 'newtab shell should run the focus handoff');
 const manifest = JSON.parse(read('manifest.json'));
 const newtabOverride = manifest.chrome_url_overrides?.newtab;
 assert(

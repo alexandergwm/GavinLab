@@ -55,7 +55,11 @@ try {
   await indexPage.waitForSelector('#clock', { state: 'visible', timeout: 8000 });
   await indexPage.waitForSelector('#search-input', { state: 'visible', timeout: 8000 });
   await indexPage.waitForFunction(() => document.body.classList.contains('boot-ui-settled'), null, { timeout: 8000 });
-  await indexPage.waitForFunction(() => document.activeElement?.id === 'search-input', null, { timeout: 8000 });
+  await indexPage.waitForFunction(
+    () => document.hasFocus() && document.activeElement?.id === 'search-input',
+    null,
+    { timeout: 8000 },
+  );
   if (errors.length) throw new Error(errors.join('\n'));
   console.log(`EXTENSION SMOKE OK: ${extensionId}`);
 } finally {
