@@ -13,6 +13,7 @@ import {
   letterColorSeed,
   prefetchMissingShortcutIcons,
 } from './shortcuts.js';
+import { closeDialog as closeModal, openDialog as openModal } from './dialog-ui.js';
 
 let activeShortcutId = null;
 let iconManuallySet = false;
@@ -134,7 +135,7 @@ function openDialog(mode, shortcut = null) {
     ? { icon: shortcut.icon, name: shortcut?.name, color: shortcut?.color }
     : letterPreviewProps(shortcut?.name || '', shortcut?.color, shortcut?.url));
 
-  dialog.showModal();
+  openModal(dialog);
   if (!shortcut?.icon && url?.value) autoFetchIcon(true);
   else if (shortcut) {
     renderPreview(shortcut.icon
@@ -145,8 +146,8 @@ function openDialog(mode, shortcut = null) {
   requestAnimationFrame(() => (mode === 'create' ? url : name)?.focus());
 }
 
-function closeDialog() {
-  getEls().dialog?.close();
+function closeShortcutDialog() {
+  closeModal(getEls().dialog);
 }
 
 function hideMenu() {
@@ -210,7 +211,7 @@ function bindDialog(refresh, onDockChange) {
     };
 
     upsertShortcut(item);
-    closeDialog();
+    closeShortcutDialog();
     refresh();
     onDockChange?.();
   });
@@ -245,10 +246,6 @@ function bindDialog(refresh, onDockChange) {
     await autoFetchIcon(true);
   });
 
-  els.dialog?.querySelector('.modal-close')?.addEventListener('click', closeDialog);
-  els.dialog?.addEventListener('click', (e) => {
-    if (e.target === els.dialog) closeDialog();
-  });
 }
 
 function bindMenu(refresh, onDockChange) {

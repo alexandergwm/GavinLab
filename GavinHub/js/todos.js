@@ -150,23 +150,28 @@ export function expandTodoInstance(item, dateKey) {
   };
 }
 
-export function getExpandedTodosOnDate(dateKey) {
+function expandTodosOnDate(items, dateKey) {
   const result = [];
-  for (const item of loadTodos()) {
+  for (const item of items) {
     if (!occursOnDate(item, dateKey)) continue;
     result.push(item.recurrence ? expandTodoInstance(item, dateKey) : item);
   }
   return result;
 }
 
+export function getExpandedTodosOnDate(dateKey) {
+  return expandTodosOnDate(loadTodos(), dateKey);
+}
+
 export function getExpandedTodosInWeek(weekStartKey) {
   const ws = parseDateKey(weekStartKey);
+  const items = loadTodos();
   const seen = new Map();
   for (let i = 0; i < 7; i += 1) {
     const d = new Date(ws);
     d.setDate(d.getDate() + i);
     const key = toDateKey(d);
-    for (const todo of getExpandedTodosOnDate(key)) {
+    for (const todo of expandTodosOnDate(items, key)) {
       const uid = todo._instanceDate ? `${todo._masterId}@${todo._instanceDate}` : String(todo.id);
       if (!seen.has(uid)) seen.set(uid, { ...todo, _uid: uid });
     }
@@ -208,8 +213,9 @@ export function addTodo({ text, startDate, endDate, category, recurrence, weekda
 }
 
 export function moveTodo(id, newStartDate, weekStartKey) {
-  const item = loadTodos().find((t) => matchTodoId(t.id, id));
-  if (!item) return loadTodos();
+  const items = loadTodos();
+  const item = items.find((t) => matchTodoId(t.id, id));
+  if (!item) return items;
   const span = daySpan(item.startDate, item.endDate);
   let endDate = addDays(newStartDate, span - 1);
   if (weekStartKey) {
@@ -222,8 +228,9 @@ export function moveTodo(id, newStartDate, weekStartKey) {
 }
 
 export function resizeTodoEnd(id, newEndDate) {
-  const item = loadTodos().find((t) => matchTodoId(t.id, id));
-  if (!item) return loadTodos();
+  const items = loadTodos();
+  const item = items.find((t) => matchTodoId(t.id, id));
+  if (!item) return items;
   const end = parseDateKey(newEndDate) >= parseDateKey(item.startDate) ? newEndDate : item.startDate;
   return updateTodo(id, { endDate: end });
 }

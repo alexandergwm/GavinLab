@@ -7,7 +7,13 @@ export function createSettingsStore() {
   const listeners = new Set();
 
   const notify = () => {
-    for (const listener of listeners) listener(state);
+    for (const listener of listeners) {
+      try {
+        listener(state);
+      } catch (error) {
+        console.warn('[GavinHub] settings listener failed', error);
+      }
+    }
   };
 
   return {

@@ -46,7 +46,7 @@ export function loadImageElement(url, crossOrigin, { minWidth = 400 } = {}) {
 }
 
 /** 文字自适应专用：低分辨率解码，减少 UHD 全图解码开销 */
-export async function loadAnalysisSource(url) {
+export async function loadAnalysisSource(url, { maxWidth = ANALYSIS_MAX_WIDTH } = {}) {
   const isLocal = url.startsWith('blob:') || url.startsWith('data:') || !/^https?:/i.test(url);
   if (isLocal) {
     const img = await loadImageElement(url, false);
@@ -63,7 +63,7 @@ export async function loadAnalysisSource(url) {
     const blob = await res.blob();
     if (typeof createImageBitmap === 'function') {
       const bmp = await createImageBitmap(blob, {
-        resizeWidth: ANALYSIS_MAX_WIDTH,
+        resizeWidth: maxWidth,
         resizeQuality: 'low',
       });
       return {
@@ -110,6 +110,32 @@ export async function loadImageForAnalysis(url) {
     img.onerror = reject;
   });
   return img;
+}
+
+/** Build tiny, pre-softened layers once so UI transitions only animate opacity. */
+export async function createWallpaperEffectPreviews(url) {
+  const loaded = await loadAnalysisSource(url, { maxWidth: 960 });
+  try {
+    const render = (targetWidth, quality) => {
+      const width = Math.min(targetWidth, loaded.width);
+      const height = Math.max(1, Math.round(width * loaded.height / loaded.width));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d', { alpha: false });
+      if (!ctx) return '';
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(loaded.source, 0, 0, width, height);
+      return canvas.toDataURL('image/jpeg', quality);
+    };
+    return {
+      apps: render(300, 0.72),
+      focus: render(900, 0.8),
+    };
+  } finally {
+    loaded.dispose?.();
+  }
 }
 
 export async function isWallpaperUrlReachable(url, timeoutMs = IMAGE_PROBE_TIMEOUT_MS) {

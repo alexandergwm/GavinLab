@@ -11,6 +11,9 @@ import {
   getWeatherTips,
 } from './weather.js';
 import { escapeHtml } from './util.js';
+import { openDialog } from './dialog-ui.js';
+
+let weatherUiInitialized = false;
 
 function renderWeatherSourceAttribution(location) {
   const labelEl = document.getElementById('weather-source-label');
@@ -158,12 +161,16 @@ function bindWeatherRefresh() {
 
 function openWeatherDialog() {
   const dialog = document.getElementById('weather-dialog');
+  if (!dialog) return;
   const data = getCachedWeather();
   if (data) {
     renderWeatherSourceAttribution(data.location);
     renderWeatherModal(data);
+  } else {
+    const body = document.getElementById('weather-body');
+    if (body) body.innerHTML = '<p class="weather-empty">正在获取天气…</p>';
   }
-  dialog.showModal();
+  openDialog(dialog);
   /* 打开时按 TTL 刷新，过期则拉新数据 */
   void loadWeather().then((fresh) => {
     if (!dialog?.open || !fresh) return;
@@ -173,23 +180,29 @@ function openWeatherDialog() {
   }).catch(() => {});
 }
 
-export async function initWeather() {
+export function initWeather() {
+  if (weatherUiInitialized) return;
+  weatherUiInitialized = true;
+
   const trigger = document.getElementById('weather-trigger');
-  const dialog = document.getElementById('weather-dialog');
   const summary = document.getElementById('weather-summary');
-
-  if (summary) summary.textContent = '加载中…';
-
-  try {
-    const data = await loadWeather();
-    renderWeatherBar(data);
-  } catch {
-    if (summary) summary.textContent = '天气加载失败';
-  }
+  const cached = getCachedWeather();
 
   trigger?.addEventListener('click', openWeatherDialog);
   bindWeatherRefresh();
-  dialog?.addEventListener('click', (e) => {
-    if (e.target === dialog) dialog.close();
+
+  if (cached) {
+    renderWeatherBar(cached);
+    renderWeatherSourceAttribution(cached.location);
+  } else if (summary) {
+    summary.textContent = '天气';
+  }
+
+  void loadWeather().then((data) => {
+    renderWeatherBar(data);
+    renderWeatherSourceAttribution(data.location);
+    if (document.getElementById('weather-dialog')?.open) renderWeatherModal(data);
+  }).catch(() => {
+    if (!cached && summary) summary.textContent = '天气不可用';
   });
 }

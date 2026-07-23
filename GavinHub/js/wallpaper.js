@@ -45,6 +45,7 @@ import {
   isWallpaperUrlReachable,
   loadImageElement,
   measureBlobWidth,
+  createWallpaperEffectPreviews,
   MIN_CACHE_WIDTH,
 } from './wallpaper-image.js';
 import { analyzeWallpaperTheme, LIGHT_TEXT_LUMINANCE } from './wallpaper-theme.js';
@@ -79,6 +80,9 @@ let preloadIdleHandle = null;
 let preloadGeneration = 0;
 let currentWallpaper = { ...DEFAULT_WALLPAPER };
 let initialWallpaperRevealed = document.body.classList.contains('boot-done');
+const effectPreviewCache = new Map();
+let effectPreviewRequestKey = '';
+let effectLayerUrl = '';
 
 const BOOT_ADAPT_AFTER_UI_MS = 180;
 
@@ -576,25 +580,70 @@ function getBlurWallpaperUrl(data) {
 /** 同步模糊层壁纸 — 应用页依赖此层，不可 idle 延迟 */
 function syncBlurWallpaperLayer(data = currentWallpaper) {
   const wallpaperBlur = document.getElementById('wallpaper-blur');
-  if (!wallpaperBlur || !data) return;
+  const searchFocusLayer = document.getElementById('search-focus-overlay');
+  const layers = [wallpaperBlur, searchFocusLayer].filter(Boolean);
+  if (!layers.length || !data) return;
 
   if (data.type === 'gradient' && data.css) {
-    wallpaperBlur.style.backgroundImage = data.css;
-    wallpaperBlur.style.backgroundColor = '';
+    effectPreviewRequestKey = '';
+    effectLayerUrl = '';
+    for (const layer of layers) {
+      layer.style.backgroundImage = data.css;
+      layer.style.backgroundColor = '';
+    }
     return;
   }
 
   const url = getBlurWallpaperUrl(data);
+  effectLayerUrl = url;
   if (!url) {
-    wallpaperBlur.style.backgroundImage = '';
+    for (const layer of layers) layer.style.backgroundImage = '';
     return;
   }
-  wallpaperBlur.style.backgroundImage = `url("${url}")`;
-  wallpaperBlur.style.backgroundColor = 'transparent';
+  for (const layer of layers) {
+    layer.style.backgroundImage = `url("${url}")`;
+    layer.style.backgroundColor = 'transparent';
+  }
+  syncEffectWallpaperPreviews(url, wallpaperBlur, searchFocusLayer);
+}
+
+function applyEffectPreviews(previews, wallpaperBlur, searchFocusLayer) {
+  if (previews?.apps && wallpaperBlur) {
+    wallpaperBlur.style.backgroundImage = `url("${previews.apps}")`;
+  }
+  if (previews?.focus && searchFocusLayer) {
+    searchFocusLayer.style.backgroundImage = `url("${previews.focus}")`;
+  }
+}
+
+function syncEffectWallpaperPreviews(url, wallpaperBlur, searchFocusLayer) {
+  const cached = effectPreviewCache.get(url);
+  if (cached) {
+    applyEffectPreviews(cached, wallpaperBlur, searchFocusLayer);
+    return;
+  }
+  if (effectPreviewRequestKey === url) return;
+  effectPreviewRequestKey = url;
+  void createWallpaperEffectPreviews(url).then((previews) => {
+    effectPreviewCache.set(url, previews);
+    while (effectPreviewCache.size > 4) {
+      effectPreviewCache.delete(effectPreviewCache.keys().next().value);
+    }
+    if (effectLayerUrl !== url) return;
+    applyEffectPreviews(previews, wallpaperBlur, searchFocusLayer);
+  }).catch(() => {
+    /* The full-resolution layer remains a safe fallback for CORS failures. */
+  }).finally(() => {
+    if (effectPreviewRequestKey === url) effectPreviewRequestKey = '';
+  });
 }
 
 export function syncAppsBlurWallpaper() {
-  syncBlurWallpaperLayer(getCurrentWallpaper());
+  const data = getCurrentWallpaper();
+  const paintedUrl = getPaintedWallpaperUrl();
+  syncBlurWallpaperLayer(
+    paintedUrl && data?.type !== 'gradient' ? { ...data, url: paintedUrl } : data,
+  );
 }
 
 function scheduleBlurWallpaper(data) {

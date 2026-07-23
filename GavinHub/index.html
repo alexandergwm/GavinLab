@@ -38,6 +38,7 @@
     var theme = 'on-dark';
     var tone = 'light';
     var preloadUrl = '';
+    var hasUsableWallpaper = false;
     try {
       var raw = localStorage.getItem('startpage-wallpaper-last');
       if (raw) {
@@ -49,8 +50,12 @@
         if (meta && meta.type !== 'gradient' && meta.url && !/^blob:/i.test(meta.url)) {
           preloadUrl = meta.url;
         }
+        hasUsableWallpaper = !!(
+          (meta && meta.type === 'gradient' && meta.css)
+          || (meta && meta.url && !/^blob:/i.test(meta.url))
+        );
       }
-      window.__BOOT_WALLPAPER_READY = !!raw;
+      window.__BOOT_WALLPAPER_READY = hasUsableWallpaper;
     } catch (e) { window.__BOOT_WALLPAPER_READY = false; }
     if (preloadUrl) {
       try {
@@ -117,7 +122,14 @@
         return;
       }
       if (!img) return;
+      var settled = false;
+      var awakenScheduled = false;
+      var fallbackStarted = url === DEFAULT;
+      var fallbackTimer = 0;
       function settleBootUi() {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(fallbackTimer);
         document.body.classList.add('boot-vignette-visible', 'boot-ui-settled', 'boot-done');
         document.dispatchEvent(new CustomEvent('boot-ui-settled'));
       }
@@ -125,6 +137,9 @@
         window.setTimeout(settleBootUi, 80);
       }
       function awaken() {
+        if (awakenScheduled) return;
+        awakenScheduled = true;
+        window.clearTimeout(fallbackTimer);
         requestAnimationFrame(function () {
           requestAnimationFrame(function () {
             img.classList.add('wallpaper-show');
@@ -132,10 +147,29 @@
           });
         });
       }
-      img.addEventListener('load', awaken, { once: true });
+      function useFallback() {
+        if (settled || (img.complete && img.naturalWidth > 0)) return;
+        window.__BOOT_WALLPAPER_READY = false;
+        if (!fallbackStarted) {
+          fallbackStarted = true;
+          awakenScheduled = false;
+          window.__BOOT_WALLPAPER_URL = DEFAULT;
+          window.__BOOT_WALLPAPER_KEY = 'default';
+          img.src = DEFAULT;
+          return;
+        }
+        settleBootUi();
+      }
+      img.addEventListener('load', awaken);
+      img.addEventListener('error', useFallback);
       img.src = url;
       if (img.complete && img.naturalWidth > 0) awaken();
-    } catch (e2) { /* ignore */ }
+      fallbackTimer = window.setTimeout(useFallback, 450);
+    } catch (e2) {
+      window.__BOOT_WALLPAPER_READY = false;
+      document.body.classList.add('boot-vignette-visible', 'boot-ui-settled', 'boot-done');
+      document.dispatchEvent(new CustomEvent('boot-ui-settled'));
+    }
   })();
   </script>
   <script>(function(){try{document.body.setAttribute('data-text-theme',document.documentElement.getAttribute('data-text-theme')||'on-dark');document.body.setAttribute('data-text-tone',document.documentElement.getAttribute('data-text-tone')||'light');document.getElementById('boot-critical-hide')?.remove();}catch(e){}})();</script>

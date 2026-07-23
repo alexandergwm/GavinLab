@@ -18,7 +18,11 @@ export function registerPageEnterHook(fn) {
 
 async function runPageEnterHooks(page, ctx) {
   for (const fn of pageEnterHooks) {
-    await fn(page, ctx);
+    try {
+      await fn(page, ctx);
+    } catch (error) {
+      console.warn('[GavinHub] page enter hook failed', error);
+    }
   }
 }
 
@@ -35,11 +39,16 @@ export async function loadModule(id, loader, bootstrap, ctx = {}) {
   }
   if (entry.mod) return entry.mod;
   if (!entry.promise) {
-    entry.promise = loader().then((mod) => {
-      entry.mod = bootstrap ? bootstrap(mod, ctx) ?? mod : mod;
-      entry.promise = null;
-      return entry.mod;
-    });
+    entry.promise = loader()
+      .then((mod) => {
+        entry.mod = bootstrap ? bootstrap(mod, ctx) ?? mod : mod;
+        entry.promise = null;
+        return entry.mod;
+      })
+      .catch((error) => {
+        entry.promise = null;
+        throw error;
+      });
   }
   return entry.promise;
 }
@@ -70,12 +79,17 @@ export const pageModules = {
   },
 };
 
-/** 进入页面时的标准懒加载流程 */
-export async function onPageEnter(page, ctx = {}) {
+/** 在视觉切换前准备页面模块，避免解析和首轮渲染挤占动画帧。 */
+export async function preparePage(page, ctx = {}) {
   if (page === 'apps') {
     await pageModules.apps(ctx);
     await pageModules.settings(ctx.settingsApi);
   }
+}
+
+/** 进入页面时的标准懒加载流程 */
+export async function onPageEnter(page, ctx = {}) {
+  await preparePage(page, ctx);
   await runPageEnterHooks(page, ctx);
 }
 

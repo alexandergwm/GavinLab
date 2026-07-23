@@ -25,22 +25,33 @@ export function focusSearchInput({ allowDuringBoot = false } = {}) {
   } catch {
     input.focus();
   }
-  return document.activeElement === input;
+  const focused = document.activeElement === input;
+  if (focused && !performance.getEntriesByName('gavinhub:search-focused').length) {
+    performance.mark?.('gavinhub:search-focused');
+  }
+  return focused;
 }
 
-const FOCUS_RETRY_DELAYS = [16, 80, 200, 420];
+const FOCUS_RETRY_DELAYS = [0, 40, 120, 260];
 
 let focusSchedulePending = false;
+let focusAttemptGeneration = 0;
+let focusRetryTimer = 0;
 
 function runInitialFocusAttempts() {
   if (!isHomeActive()) return;
+  const generation = ++focusAttemptGeneration;
 
-  const tryFocus = () => focusSearchInput({ allowDuringBoot: true });
-  tryFocus();
-  requestAnimationFrame(() => requestAnimationFrame(tryFocus));
-  for (const ms of FOCUS_RETRY_DELAYS) {
-    setTimeout(tryFocus, ms);
-  }
+  const attempt = (index) => {
+    if (generation !== focusAttemptGeneration || !isHomeActive()) return;
+    if (focusSearchInput({ allowDuringBoot: true })) return;
+    const nextDelay = FOCUS_RETRY_DELAYS[index + 1];
+    if (nextDelay == null) return;
+    focusRetryTimer = window.setTimeout(() => attempt(index + 1), nextDelay);
+  };
+
+  window.clearTimeout(focusRetryTimer);
+  attempt(0);
 }
 
 export function scheduleInitialSearchFocus() {
@@ -74,6 +85,8 @@ function toggleSearchGlassRefresh() {
 
 /** 离开主页前立即收起搜索栏，避免 opacity 动画 + backdrop-filter 叠加重算掉帧 */
 export function dismissSearchForPageLeave() {
+  focusAttemptGeneration += 1;
+  window.clearTimeout(focusRetryTimer);
   document.body.classList.remove('search-focused');
   const box = document.getElementById('search-box');
   const input = document.getElementById('search-input');

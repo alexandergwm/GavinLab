@@ -23,6 +23,14 @@ document.body.classList.remove('wallpaper-boot', 'boot-priming-ui');
 document.getElementById('boot-critical-hide')?.remove();
 document.getElementById('boot-cover')?.remove();
 
+const markUiSettled = () => {
+  if (!performance.getEntriesByName('gavinhub:ui-settled').length) {
+    performance.mark?.('gavinhub:ui-settled');
+  }
+};
+if (document.body.classList.contains('boot-ui-settled')) markUiSettled();
+else document.addEventListener('boot-ui-settled', markUiSettled, { once: true });
+
 function finishBootAwakening() {
   document.body.classList.remove('boot-awakening');
 }

@@ -1,3 +1,5 @@
+import { closeDialog, openDialog } from './dialog-ui.js';
+
 const PAGE_KEYS = { 1: 'home', 2: 'apps' };
 
 function isTypingContext() {
@@ -18,16 +20,12 @@ export function initKeyboard({ getCurrentPage, onSwitchPage, focusSearch, handle
   const helpDialog = document.getElementById('shortcuts-dialog');
 
   function showHelp() {
-    helpDialog?.showModal();
+    openDialog(helpDialog);
   }
 
   function hideHelp() {
-    helpDialog?.close();
+    closeDialog(helpDialog);
   }
-
-  helpDialog?.addEventListener('click', (e) => {
-    if (e.target === helpDialog) hideHelp();
-  });
 
   document.addEventListener('keydown', (e) => {
     if (e.isComposing || e.keyCode === 229) return;

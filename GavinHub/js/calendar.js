@@ -3,6 +3,7 @@ import { getHolidayInfo, isMakeupWorkday } from './holidays.js';
 import { escapeHtml } from './util.js';
 import { KEYS } from './keys.js';
 import { readJson, writeJson } from './storage.js';
+import { closeDialog, openDialog } from './dialog-ui.js';
 import {
   loadGoals,
   addGoal,
@@ -706,7 +707,7 @@ function openTodoDetail(todoId, instanceDate = null) {
   const categoryInput = dialog.querySelector(`input[name="todo-detail-category"][value="${todo.category}"]`);
   if (categoryInput) categoryInput.checked = true;
 
-  dialog.showModal();
+  openDialog(dialog);
   requestAnimationFrame(() => document.getElementById('todo-detail-title')?.focus());
 }
 
@@ -743,7 +744,7 @@ function initTodoDetailDialog() {
     } else {
       updateTodo(id, patch);
     }
-    dialog.close();
+    closeDialog(dialog);
     renderCalendar();
   });
 
@@ -758,14 +759,10 @@ function initTodoDetailDialog() {
     } else {
       removeTodo(id);
     }
-    dialog.close();
+    closeDialog(dialog);
     renderCalendar();
   });
 
-  dialog.querySelector('.todo-detail-close')?.addEventListener('click', () => dialog.close());
-  dialog.addEventListener('click', (e) => {
-    if (e.target === dialog) dialog.close();
-  });
 }
 
 function getGridMetrics(gridEl) {
@@ -1123,7 +1120,7 @@ function openCalendarDialog() {
   viewMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   viewMode = 'week';
   renderCalendar();
-  dialog?.showModal();
+  openDialog(dialog);
 }
 
 export { openCalendarDialog };
@@ -1199,7 +1196,7 @@ export function initCalendarApp() {
   document.getElementById('calendar-dialog')?.addEventListener('click', (e) => {
     const dialog = document.getElementById('calendar-dialog');
     if (e.target === dialog) {
-      dialog.close();
+      closeDialog(dialog);
       return;
     }
     const week = document.getElementById('week-calendar');

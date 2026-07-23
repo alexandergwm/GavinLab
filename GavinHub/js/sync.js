@@ -83,6 +83,7 @@ function setLocalSyncAt(ts) {
 
 let applyingRemote = false;
 let pushTimer = null;
+const localPushVersions = new Set();
 
 function storageSet(obj) {
   return new Promise((resolve, reject) => {
@@ -288,15 +289,20 @@ export async function pullSyncOnStartup() {
 async function pushToSync({ force = false } = {}) {
   if (!hasChromeSync() || applyingRemote) return false;
 
+  let pushVersion = 0;
   try {
     const payload = buildSyncPayload();
     if (!force && !localHasUserData() && isEmptyPayload(payload)) return false;
 
+    pushVersion = payload.updatedAt;
+    localPushVersions.add(pushVersion);
     await storageSetSyncChunked(payload);
-    setLocalSyncAt(payload.updatedAt);
+    setLocalSyncAt(pushVersion);
+    window.setTimeout(() => localPushVersions.delete(pushVersion), 5000);
     lastSyncError = '';
     return true;
   } catch (err) {
+    if (pushVersion) localPushVersions.delete(pushVersion);
     lastSyncError = err?.code === 'too-large'
       ? '数据过大，Edge 账号同步失败，请改用「文件」或「GitHub」同步'
       : (err?.message || 'Edge 同步失败');
@@ -322,6 +328,8 @@ export function initSyncListener(onApplied) {
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'sync' || !changes[SYNC_ROOT_KEY]) return;
+    const changedAt = Number(changes[SYNC_ROOT_KEY].newValue?.updatedAt) || 0;
+    if (changedAt && localPushVersions.has(changedAt)) return;
     void (async () => {
       try {
         const remote = await storageGetSync();

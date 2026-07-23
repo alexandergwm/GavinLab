@@ -52,6 +52,13 @@ const runtime = read('js/runtime.js');
 assert(runtime.includes('export const pageModules'), 'runtime.js should export pageModules');
 assert(runtime.includes('export function registerPageEnterHook'), 'runtime.js should export registerPageEnterHook');
 
+for (const f of ['js/lifecycle.js', 'js/page-router.js', 'js/dialog-ui.js']) {
+  assert(existsSync(join(root, f)), `missing architecture module ${f}`);
+}
+assert(app.includes("from './page-router.js'"), 'app.js should use the cancellable page router');
+assert(app.includes('STARTUP_SYNC_BUDGET_MS'), 'app.js should cap sync work on the critical startup path');
+assert(app.includes('Promise.all([initCore(), searchReady])'), 'search and core startup should run in parallel');
+
 const settingsUi = read('js/settings-ui.js');
 assert(settingsUi.includes('export function initSettingsUI'), 'settings-ui.js should export initSettingsUI');
 

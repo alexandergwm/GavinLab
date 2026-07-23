@@ -10,6 +10,7 @@ import {
   WALLPAPER_SOURCE_ORDER,
 } from './wallpaper.js';
 import { updateSearchEngineBadge, refreshSearchSuggestions } from './search.js';
+import { closeDialog as closeModal, openDialog as openModal } from './dialog-ui.js';
 
 let inited = false;
 let syncTabsBound = false;
@@ -180,7 +181,7 @@ async function runGithubSync(api) {
     }
     setGithubSyncStatus(statusText, false);
     if (result.reloaded) {
-      document.getElementById('settings-dialog')?.close();
+      closeModal('settings-dialog');
       api.onDataImported?.();
     }
   } catch (err) {
@@ -265,7 +266,7 @@ export function initSettingsUI(api) {
     setGithubSyncStatus('');
     restoreSyncTabs();
     void refreshSyncStatus();
-    dialog?.showModal();
+    openModal(dialog);
   });
 
   engineSelect?.addEventListener('change', () => {
@@ -330,7 +331,7 @@ export function initSettingsUI(api) {
       const text = await file.text();
       const sync = await import('./sync.js');
       sync.importSyncBundle(text);
-      dialog?.close();
+      closeModal(dialog);
       api.onDataImported?.();
     } catch {
       window.alert('导入失败：文件格式不正确或版本不兼容');

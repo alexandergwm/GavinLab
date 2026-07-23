@@ -1,3 +1,5 @@
+import { closeDialog, openDialog } from './dialog-ui.js';
+
 const DB_NAME = 'wallpaper-db';
 const STORE_NAME = 'wallpapers';
 const CACHE_STORE = 'wallpaper-cache';
@@ -266,14 +268,14 @@ export function initWallpaperLibrary({ getCurrentWallpaper, applySelectedWallpap
     for (const item of currentItems) {
       grid.append(createThumb(item, async (selected) => {
         await applySelectedWallpaper(selected);
-        dialog.close();
+        closeDialog(dialog);
         onFavoriteChange?.();
       }));
     }
   };
 
   const open = () => {
-    dialog.showModal();
+    openDialog(dialog);
     renderGrid();
   };
 

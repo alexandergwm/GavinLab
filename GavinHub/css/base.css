@@ -16,7 +16,7 @@
   --glass-search-bg-hover: rgba(255, 255, 255, 0.16);
   --glass-search-bg-focus: rgba(255, 255, 255, 0.3);
   --glass-search-blur: blur(22px) saturate(150%);
-  --glass-search-blur-focus: blur(32px) saturate(185%);
+  --glass-search-blur-focus: var(--glass-search-blur);
   --glass-search-border: rgba(255, 255, 255, 0.1);
   --glass-search-border-hover: rgba(255, 255, 255, 0.18);
   --glass-search-border-focus: rgba(255, 255, 255, 0.3);
@@ -186,10 +186,7 @@ body {
   object-position: center;
   opacity: 0;
   backface-visibility: hidden;
-  transition:
-    filter var(--transition-search-focus),
-    opacity var(--boot-wallpaper-duration) var(--boot-reveal-ease),
-    transform var(--transition-search-focus);
+  transition: opacity var(--boot-wallpaper-duration) var(--boot-reveal-ease);
 }
 
 .wallpaper-img.wallpaper-show {
@@ -203,11 +200,14 @@ body {
 .wallpaper-blur {
   z-index: 1;
   opacity: 0;
-  filter: blur(28px) saturate(1.1);
-  transform: scale(1.05);
+  filter: brightness(0.84) saturate(0.96);
+  transform: translateZ(0) scale(1.012);
   transition: none;
   pointer-events: none;
-  background-color: #323232;
+  background-color: transparent;
+  backface-visibility: hidden;
+  contain: strict;
+  will-change: opacity;
 }
 
 body.page-blur-active .wallpaper-blur,
@@ -300,22 +300,24 @@ body.search-focused:not(.page-blur-active) .scene-vignette {
   position: fixed;
   inset: 0;
   z-index: 1;
-  background: rgba(8, 10, 18, 0.08);
-  backdrop-filter: blur(0) saturate(100%);
-  -webkit-backdrop-filter: blur(0) saturate(100%);
+  background-color: transparent;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  filter: brightness(0.94) saturate(1.04);
+  transform: translateZ(0) scale(1.006);
   opacity: 0;
   visibility: hidden;
   transition:
     opacity var(--transition-search-focus),
-    backdrop-filter var(--transition-search-focus),
-    -webkit-backdrop-filter var(--transition-search-focus),
     visibility var(--transition-search-focus);
   pointer-events: none;
+  backface-visibility: hidden;
+  contain: strict;
+  will-change: opacity;
 }
 
 body.search-focused .search-focus-overlay {
-  backdrop-filter: blur(5px) saturate(108%);
-  -webkit-backdrop-filter: blur(5px) saturate(108%);
   opacity: 1;
   visibility: visible;
 }
@@ -462,11 +464,6 @@ body.boot-awakening.boot-ui-settled .dock {
   .wallpaper-img {
     transition: none;
   }
-}
-
-body.search-focused:not(.page-blur-active) .wallpaper-img {
-  filter: blur(3px) brightness(0.96);
-  transform: scale(1.032);
 }
 
 body.search-focused .clock-trigger,

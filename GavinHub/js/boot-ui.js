@@ -5,7 +5,7 @@ export const BOOT_UI_REVEAL_DELAY_MS = 80;
 export const BOOT_UI_FADE_MS = 550;
 export const BOOT_VIGNETTE_FADE_MS = 900;
 export const BOOT_VIGNETTE_DELAY_MS = 0;
-export const BOOT_SEARCH_FOCUS_DELAY_MS = 80;
+export const BOOT_SEARCH_FOCUS_DELAY_MS = 0;
 export const BOOT_REVEAL_EASE = 'cubic-bezier(0.25, 0.8, 0.25, 1)';
 
 export function prefersReducedMotion() {
@@ -27,12 +27,14 @@ export function signalBootGlassStable() {
 export function markBootGlassStable() {
   if (document.body.classList.contains('boot-glass-stable')) return;
   document.body.classList.add('boot-glass-stable');
+  performance.mark?.('gavinhub:glass-stable');
   signalBootGlassStable();
 }
 
 export function settleBootUiClasses() {
   if (document.body.classList.contains('boot-ui-settled')) return;
   document.body.classList.add('boot-vignette-visible', 'boot-ui-settled', 'boot-done');
+  performance.mark?.('gavinhub:ui-settled');
   signalBootUiSettled();
 }
 

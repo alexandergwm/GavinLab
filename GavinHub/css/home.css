@@ -36,8 +36,6 @@
     border-color 0.62s cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow 0.72s cubic-bezier(0.16, 1, 0.3, 1),
     transform 0.62s cubic-bezier(0.16, 1, 0.3, 1),
-    backdrop-filter 0.82s cubic-bezier(0.16, 1, 0.3, 1),
-    -webkit-backdrop-filter 0.82s cubic-bezier(0.16, 1, 0.3, 1),
     border-radius 0.44s cubic-bezier(0.16, 1, 0.3, 1);
 }
 

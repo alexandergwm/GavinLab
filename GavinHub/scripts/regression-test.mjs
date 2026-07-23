@@ -63,6 +63,10 @@ assert(baseCss.includes('--boot-ui-delay-dock: 0s;'),
   'dock reveal must remain synchronized with the rest of the startup UI');
 assert(!dialogsCss.includes('allow-discrete'),
   'native dialogs must not use discrete close transitions that flash in Edge');
+assert(!baseCss.includes('transition:\n    filter var(--transition-search-focus)'),
+  'full-screen wallpaper filters must not animate during search focus');
+assert(!baseCss.includes('body.search-focused:not(.page-blur-active) .wallpaper-img'),
+  'search focus should use a composited overlay instead of filtering the wallpaper');
 
 page.on('pageerror', (err) => errors.push(err.message));
 page.on('request', (request) => {
@@ -89,12 +93,20 @@ try {
     timeout: 8000,
   });
   await page.waitForSelector('#search-engine-badge[aria-label]', { timeout: 8000 });
+  await page.waitForFunction(() => document.body.classList.contains('app-ready'), null, {
+    timeout: 8000,
+  });
   const baseline = await page.evaluate(() => {
     const navigation = performance.getEntriesByType('navigation')[0];
     const resources = performance.getEntriesByType('resource');
+    const mark = (name) => Math.round(performance.getEntriesByName(name)[0]?.startTime || 0);
     return {
       domContentLoadedMs: Math.round(navigation.domContentLoadedEventEnd),
       bootSettledMs: Math.round(performance.now()),
+      appReadyMs: mark('gavinhub:app-ready'),
+      uiSettledMs: mark('gavinhub:ui-settled'),
+      glassStableMs: mark('gavinhub:glass-stable'),
+      searchFocusedMs: mark('gavinhub:search-focused'),
       localResources: resources.filter((entry) => entry.name.startsWith(location.origin)).length,
       longTasks: window.__longTasks.length,
       maxLongTaskMs: Math.round(Math.max(0, ...window.__longTasks)),
@@ -105,7 +117,12 @@ try {
   assert(await page.locator('#search-input').isVisible(), 'search should be visible');
   assert(await page.locator('#dock').isVisible(), 'dock should be visible');
 
-  for (const dialogId of ['calendar-dialog', 'weather-dialog']) {
+  await page.locator('#weather-trigger').click();
+  await page.waitForSelector('#weather-dialog[open]', { timeout: 1000 });
+  await page.locator('#weather-dialog .modal-close').click();
+  await page.waitForFunction(() => !document.getElementById('weather-dialog')?.open);
+
+  for (const dialogId of ['calendar-dialog']) {
     await page.evaluate((id) => document.getElementById(id)?.showModal(), dialogId);
     await page.locator(`#${dialogId} .modal-close`).first().click();
     await page.waitForFunction((id) => !document.getElementById(id)?.open, dialogId);
@@ -168,6 +185,26 @@ try {
     timeout: 8000,
   });
   await page.waitForFunction(() => !document.body.classList.contains('search-reveal-pending'));
+
+  await page.evaluate(() => {
+    document.querySelector('.dock-tab[data-page="apps"]')?.click();
+    document.querySelector('.dock-tab[data-page="home"]')?.click();
+    document.querySelector('.dock-tab[data-page="apps"]')?.click();
+  });
+  await page.waitForFunction(() => document.body.classList.contains('page-apps-active'));
+  const rapidRouteState = await page.evaluate(() => ({
+    activePanels: document.querySelectorAll('.page-panel.active').length,
+    activePage: document.querySelector('.page-panel.active')?.dataset.page,
+    revealPending: document.body.classList.contains('search-reveal-pending'),
+  }));
+  assert(
+    rapidRouteState.activePanels === 1
+      && rapidRouteState.activePage === 'apps'
+      && rapidRouteState.revealPending === false,
+    `rapid navigation must settle on only the newest page: ${JSON.stringify(rapidRouteState)}`,
+  );
+  await page.locator('.dock-tab[data-page="home"]').click();
+  await page.waitForFunction(() => !document.body.classList.contains('page-apps-active'));
 
   const search = page.locator('#search-input');
   await search.focus();
@@ -258,6 +295,30 @@ try {
         && Math.abs(frame.center - frame.viewport / 2) < 1),
     `desktop dock should stay centered throughout startup: ${JSON.stringify(desktopDockFrames.slice(0, 4))}`,
   );
+
+  await page.evaluate(() => {
+    localStorage.setItem('startpage-wallpaper-last', JSON.stringify({
+      id: 'broken-boot-wallpaper',
+      type: 'image',
+      url: 'https://invalid.example.test/broken-wallpaper.jpg',
+      textTheme: 'on-dark',
+    }));
+  });
+  const brokenBootStartedAt = Date.now();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => document.body.classList.contains('boot-ui-settled'), null, {
+    timeout: 2000,
+  });
+  const brokenBoot = await page.evaluate(() => ({
+    ready: window.__BOOT_WALLPAPER_READY,
+    src: document.getElementById('wallpaper-img')?.getAttribute('src') || '',
+    naturalWidth: document.getElementById('wallpaper-img')?.naturalWidth || 0,
+  }));
+  assert(
+    Date.now() - brokenBootStartedAt < 1800 && brokenBoot.ready === false,
+    `broken cached wallpaper must fall back without trapping startup: ${JSON.stringify(brokenBoot)}`,
+  );
+  await page.evaluate(() => localStorage.removeItem('startpage-wallpaper-last'));
 
   await page.setViewportSize({ width: 430, height: 900 });
   await page.reload({ waitUntil: 'domcontentloaded' });

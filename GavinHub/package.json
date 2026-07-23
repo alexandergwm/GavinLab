@@ -6,9 +6,10 @@
   "scripts": {
     "self-check": "node scripts/self-check.mjs",
     "adapt-check": "node scripts/adapt-check.mjs",
+    "perf:audit": "node scripts/perf-audit.mjs",
     "test:regression": "node scripts/regression-test.mjs",
     "test:extension": "node scripts/extension-smoke.mjs",
-    "check": "npm run self-check && npm run test:regression && npm run package:extension && npm run test:extension",
+    "check": "npm run self-check && npm run test:regression && npm run perf:audit && npm run package:extension && npm run test:extension",
     "package:extension": "node scripts/package-extension.mjs"
   },
   "devDependencies": {
