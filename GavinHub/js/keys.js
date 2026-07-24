@@ -33,4 +33,6 @@ export const SESSION_KEYS = {
 };
 
 /** 命中后不再请求搜索引擎联想的智能建议 id */
-export const BLOCKING_SMART_IDS = ['url', 'doi', 'weather', 'calc', 'base', 'datasize'];
+export const BLOCKING_SMART_IDS = [
+  'url', 'doi', 'arxiv', 'scholar', 'weather', 'calc', 'base', 'datasize',
+];

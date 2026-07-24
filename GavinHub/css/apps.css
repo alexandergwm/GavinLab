@@ -434,17 +434,26 @@ body.page-apps-active .header-actions {
   transition: color 0.4s;
 }
 
+body.page-apps-active .shortcut-label,
+body.page-blur-active .shortcut-label,
 body[data-text-theme='on-dark'] .shortcut-label {
   color: rgba(255, 255, 255, 0.92);
 }
 
-body[data-text-theme='on-light'] .shortcut-label {
+body[data-text-theme='on-light']:not(.page-apps-active):not(.page-blur-active) .shortcut-label {
   font-weight: 500;
   color: rgba(45, 55, 72, 0.92);
 }
 
 body[data-text-theme='on-mixed'] .shortcut-label {
   color: rgba(255, 255, 255, 0.92);
+}
+
+body.page-apps-active .shortcut-label,
+body.page-blur-active .shortcut-label {
+  color: rgba(255, 255, 255, 0.92) !important;
+  font-weight: 400;
+  transition: none;
 }
 
 .shortcut-add .shortcut-icon {

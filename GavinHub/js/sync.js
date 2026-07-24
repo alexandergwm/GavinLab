@@ -28,6 +28,7 @@ const SYNC_SETTINGS_FIELDS = ['baseCurrency', 'showGreeting'];
 let lastSyncError = '';
 let applyingRemote = false;
 let pushTimer = null;
+let stopPeriodicSync = null;
 const localPushVersions = new Set();
 
 function hasChromeSync() {
@@ -381,6 +382,68 @@ export function scheduleSyncPush() {
   if (applyingRemote || !hasChromeSync()) return;
   clearTimeout(pushTimer);
   pushTimer = setTimeout(() => void pushToSync(), 900);
+}
+
+/** 可见标签页定时拉取；串行执行，隐藏时暂停并在重新可见且到期后补一次。 */
+export function startPeriodicSync({
+  intervalMs = 5 * 60 * 1000,
+  runImmediately = false,
+  onApplied,
+  extraSync,
+  syncTask = pullSyncOnStartup,
+} = {}) {
+  stopPeriodicSync?.();
+  let stopped = false;
+  let running = false;
+  let timer = 0;
+  let lastRunAt = Date.now();
+
+  const schedule = (delay = intervalMs) => {
+    window.clearTimeout(timer);
+    if (!stopped) timer = window.setTimeout(run, Math.max(20, delay));
+  };
+
+  const run = async () => {
+    if (stopped) return;
+    if (document.hidden || running) {
+      schedule();
+      return;
+    }
+    running = true;
+    lastRunAt = Date.now();
+    try {
+      const result = await syncTask();
+      if (result?.applied) onApplied?.(result);
+      await extraSync?.();
+    } catch (error) {
+      console.warn('[GavinHub] periodic sync failed', error);
+    } finally {
+      running = false;
+      schedule();
+    }
+  };
+
+  const onVisibilityChange = () => {
+    if (document.hidden || running) return;
+    const elapsed = Date.now() - lastRunAt;
+    if (elapsed >= intervalMs) void run();
+    else schedule(intervalMs - elapsed);
+  };
+
+  document.addEventListener('visibilitychange', onVisibilityChange, { passive: true });
+  if (runImmediately) void run();
+  else schedule();
+
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    window.clearTimeout(timer);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    if (stopPeriodicSync === stop) stopPeriodicSync = null;
+  };
+  stopPeriodicSync = stop;
+  window.addEventListener('pagehide', stop, { once: true });
+  return stop;
 }
 
 let onRemoteApplied = null;

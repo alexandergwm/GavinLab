@@ -192,6 +192,27 @@ body[data-text-theme='on-light'] .dock-tab.active {
   box-shadow: var(--icon-shadow-hover);
 }
 
+.dock.is-reordering {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.dock-item.is-dragging {
+  opacity: 1;
+  cursor: grabbing;
+}
+
+.dock-item.is-dragging .shortcut-icon--dock {
+  transform: scale(1.08);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
+}
+
+.dock-placeholder {
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px dashed rgba(255, 255, 255, 0.34) !important;
+}
+
 /* Edge sidebar / narrow panel. */
 :is(body.layout-sidebar, html.layout-sidebar body) {
   --dock-rail-width: 64px;

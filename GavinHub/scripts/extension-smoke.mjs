@@ -83,6 +83,32 @@ try {
   ) {
     throw new Error(`credential migration failed: ${JSON.stringify(credentialMigration)}`);
   }
+  const syncRoundTrip = await indexPage.evaluate(async () => {
+    const storage = await import('./js/storage.js');
+    storage.writeJson('startpage-shortcuts', [{
+      id: 'sync-extension-test',
+      type: 'link',
+      name: 'Sync Test',
+      url: 'https://example.com',
+    }]);
+    await new Promise((resolve) => setTimeout(resolve, 1400));
+    const root = (await chrome.storage.sync.get('gavinhubSync')).gavinhubSync;
+    const keys = Array.from({ length: root?.chunks || 0 }, (_, index) => `gavinhubSync_c${index}`);
+    const chunks = await chrome.storage.sync.get(keys);
+    const payload = JSON.parse(keys.map((key) => chunks[key] || '').join(''));
+    return {
+      version: payload.v,
+      shortcutId: payload['startpage-shortcuts']?.[0]?.id,
+      revision: payload.revisions?.['startpage-shortcuts'],
+    };
+  });
+  if (
+    syncRoundTrip.version !== 2
+    || syncRoundTrip.shortcutId !== 'sync-extension-test'
+    || !(syncRoundTrip.revision > 0)
+  ) {
+    throw new Error(`storage.sync round trip failed: ${JSON.stringify(syncRoundTrip)}`);
+  }
   if (errors.length) throw new Error(errors.join('\n'));
   console.log(`EXTENSION SMOKE OK: ${extensionId}`);
 } finally {

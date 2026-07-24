@@ -206,6 +206,20 @@ export function saveDock(dock) {
   writeJson(DOCK_KEY, dock);
 }
 
+export function reorderDock(orderedIds = []) {
+  const dock = loadDock();
+  const byId = new Map(dock.map((item) => [item.id, item]));
+  const ordered = orderedIds.map((id) => byId.get(id)).filter(Boolean);
+  for (const item of dock) {
+    if (!orderedIds.includes(item.id)) ordered.push(item);
+  }
+  if (ordered.map((item) => item.id).join('|') === dock.map((item) => item.id).join('|')) {
+    return dock;
+  }
+  saveDock(ordered);
+  return ordered;
+}
+
 export function normalizeUrl(url) {
   const trimmed = (url || '').trim();
   if (!trimmed) return '';

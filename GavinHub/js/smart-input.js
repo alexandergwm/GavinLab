@@ -8,6 +8,7 @@ const DOI_PREFIX_RE = /^doi:\s*(10\.\S+)$/i;
 const DOI_BARE_RE = /^(10\.\d{4,9}\/\S+)$/i;
 const WEATHER_RE = /^(.+?)天气$/;
 const CALC_CHARS_RE = /^[\d\s+\-*/().,%^]+$/;
+const ACADEMIC_PREFIX_RE = /^(arxiv|gs|sc|scholar)\s+(.+)$/i;
 
 function normalizeUrl(raw) {
   const trimmed = raw.trim();
@@ -32,6 +33,22 @@ export function parseDoi(raw) {
 
 export function getDoiUrl(doi) {
   return `https://doi.org/${encodeURIComponent(doi)}`;
+}
+
+export function parseAcademicSearch(raw) {
+  const match = raw.trim().match(ACADEMIC_PREFIX_RE);
+  if (!match) return null;
+  const query = match[2].trim();
+  if (!query) return null;
+  const provider = match[1].toLowerCase() === 'arxiv' ? 'arxiv' : 'scholar';
+  return { provider, query };
+}
+
+export function getAcademicSearchUrl(provider, query) {
+  if (provider === 'arxiv') {
+    return `https://arxiv.org/search/?query=${encodeURIComponent(query)}&searchtype=all&abstracts=show&order=-announced_date_first&size=50`;
+  }
+  return `https://scholar.google.com/scholar?q=${encodeURIComponent(query)}`;
 }
 
 export function parseWeatherQuery(raw) {
@@ -302,6 +319,20 @@ export function buildSmartSuggestions(query, { getMapUrl, mapProvider }) {
       type: '📄 论文',
       text: `打开 DOI：${doi}`,
       url: getDoiUrl(doi),
+      priority: 2,
+      action: 'open',
+    });
+    return items;
+  }
+
+  const academic = parseAcademicSearch(trimmed);
+  if (academic) {
+    const isArxiv = academic.provider === 'arxiv';
+    items.push({
+      id: isArxiv ? 'arxiv' : 'scholar',
+      type: isArxiv ? 'arXiv' : 'Google Scholar',
+      text: academic.query,
+      url: getAcademicSearchUrl(academic.provider, academic.query),
       priority: 2,
       action: 'open',
     });

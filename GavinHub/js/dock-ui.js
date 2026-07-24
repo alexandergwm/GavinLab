@@ -1,4 +1,5 @@
-import { loadDock, removeFromDock } from './shortcuts.js';
+import { loadDock, removeFromDock, reorderDock } from './shortcuts.js';
+import { bindDockReorder } from './dock-reorder.js';
 
 let activeDockId = null;
 
@@ -97,4 +98,10 @@ function bindMenu(onDockChange) {
 export function initDockUI({ onDockChange } = {}) {
   bindDockContextMenu();
   bindMenu(onDockChange);
+  bindDockReorder(document.getElementById('dock'), {
+    onCommit(ids) {
+      reorderDock(ids);
+      onDockChange?.();
+    },
+  });
 }

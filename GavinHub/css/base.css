@@ -352,6 +352,14 @@ body.boot-awakening .search-box {
   transition: none !important;
 }
 
+/* 启动只保留整页显现，文字颜色与阴影不在可见阶段二次补间。 */
+body.boot-awakening .clock,
+body.boot-awakening .clock-trigger,
+body.boot-awakening .meta-line,
+body.boot-awakening .meta-part {
+  transition: none !important;
+}
+
 body.boot-awakening .search-box:focus-within .search-engine-badge,
 body.boot-awakening .search-box:focus-within .search-input,
 body.boot-awakening .search-box:focus-within .search-submit {
@@ -446,10 +454,24 @@ body.boot-awakening.boot-ui-settled .dock {
 }
 
 body.search-focused .clock-trigger,
-body.search-focused .meta-line,
-body.search-focused .dock {
+body.search-focused .meta-line {
   opacity: 0.55;
   transition: opacity var(--transition-search-focus);
+}
+
+body.search-focused .dock {
+  --meta-color: rgba(255, 255, 255, 0.9);
+  opacity: 0.84;
+  background: rgba(38, 34, 44, 0.46);
+  border-color: rgba(255, 255, 255, 0.26);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 16px 46px rgba(0, 0, 0, 0.3);
+  transition:
+    background 0.36s ease,
+    border-color 0.36s ease,
+    box-shadow 0.36s ease,
+    opacity var(--transition-search-focus);
 }
 
 body.search-focused .search-form {
@@ -474,9 +496,10 @@ body.page-apps-active .wallpaper-blur {
   opacity: 1;
 }
 
-/* 应用页背景模糊后，暗色壁纸仍用亮色文字；亮/混合壁纸沿用 data-text-theme */
-body.page-blur-active[data-text-theme='on-dark'],
-body.page-apps-active[data-text-theme='on-dark'] {
+/* 应用页的预览层固定偏暗，统一亮色文字，避免壁纸分析完成时黑白跳变。 */
+body.page-blur-active,
+body.page-apps-active {
+  --text-primary: #fff;
   --stage-color: #fff;
   --stage-shadow: none;
   --meta-color: rgba(255, 255, 255, 0.92);
@@ -547,6 +570,19 @@ body.page-apps-active[data-text-theme='on-dark'] {
   text-shadow: var(--meta-shadow);
   line-height: 1.5;
   transition: color 0.28s ease, text-shadow 0.28s ease, opacity 0.4s ease;
+}
+
+#weather-trigger {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-start;
+  width: 104px;
+  white-space: nowrap;
+}
+
+#weather-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .meta-part {

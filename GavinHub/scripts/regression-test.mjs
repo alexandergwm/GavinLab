@@ -104,13 +104,21 @@ await page.addInitScript(() => {
     const dock = document.getElementById('dock');
     const appsLayer = document.getElementById('wallpaper-blur');
     const focusLayer = document.getElementById('search-focus-overlay');
+    const clock = document.getElementById('clock');
+    const dateText = document.getElementById('date-text');
+    const weatherText = document.getElementById('weather-summary');
     if (searchBox && dock) {
+      const clockStyle = clock ? getComputedStyle(clock) : null;
       window.__bootVisualFrames.push({
         searchVisible: getComputedStyle(document.getElementById('search-form')).visibility !== 'hidden',
         searchGlass: getComputedStyle(searchBox).backdropFilter,
         dockGlass: getComputedStyle(dock).backdropFilter,
         appsBackground: appsLayer?.style.backgroundImage || '',
         focusBackground: focusLayer?.style.backgroundImage || '',
+        clockColor: clockStyle?.color || '',
+        clockFont: clockStyle ? `${clockStyle.fontFamily}|${clockStyle.fontSize}|${clockStyle.fontWeight}` : '',
+        dateText: dateText?.textContent || '',
+        weatherText: weatherText?.textContent || '',
       });
     }
     if (performance.now() - startedAt < 1600) requestAnimationFrame(sampleBootVisuals);
@@ -156,6 +164,10 @@ try {
       dockGlass: unique('dockGlass'),
       appsBackground: unique('appsBackground'),
       focusBackground: unique('focusBackground'),
+      clockColor: unique('clockColor'),
+      clockFont: unique('clockFont'),
+      dateText: unique('dateText'),
+      weatherText: unique('weatherText'),
     };
   });
   assert(
@@ -165,6 +177,13 @@ try {
   assert(
     bootVisualState.appsBackground.length <= 1 && bootVisualState.focusBackground.length <= 1,
     `effect layers must not expose provisional backgrounds: ${JSON.stringify(bootVisualState)}`,
+  );
+  assert(
+    bootVisualState.clockColor.length === 1
+      && bootVisualState.clockFont.length === 1
+      && bootVisualState.dateText.every(Boolean)
+      && !bootVisualState.weatherText.includes('加载中…'),
+    `visible startup typography must stay stable: ${JSON.stringify(bootVisualState)}`,
   );
   const settingsLoadedAtStartup = await page.evaluate(() => performance.getEntriesByType('resource')
     .some((entry) => entry.name.endsWith('/js/settings-ui.js')));
@@ -326,6 +345,19 @@ try {
     const savedToken = localStorage.getItem('startpage-github-token');
     localStorage.removeItem('startpage-github-token');
     const sync = await import('./js/sync.js');
+    let periodicRuns = 0;
+    let periodicApplied = 0;
+    const stopPeriodic = sync.startPeriodicSync({
+      intervalMs: 30,
+      runImmediately: true,
+      syncTask: async () => ({ applied: ++periodicRuns === 1 }),
+      onApplied: () => { periodicApplied += 1; },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 85));
+    stopPeriodic();
+    const smart = await import('./js/smart-input.js');
+    const arxiv = smart.buildSmartSuggestions('arxiv graph neural network', {});
+    const scholar = smart.buildSmartSuggestions('gs graph neural network', {});
     const local = {
       v: 2,
       updatedAt: 200,
@@ -360,6 +392,10 @@ try {
       mergedShortcut: merged['startpage-shortcuts']?.[0]?.id,
       syncVersion: sync.exportSyncBundle().v,
       emptyIsNewer,
+      periodicRuns,
+      periodicApplied,
+      arxivUrl: arxiv[0]?.url,
+      scholarUrl: scholar[0]?.url,
     };
   });
   assert(syncSafety.mutationAt > 100, 'local sync timestamp should advance after a synced data change');
@@ -368,8 +404,30 @@ try {
     syncSafety.mergedTodo === 'local todo'
       && syncSafety.mergedShortcut === 'remote shortcut'
       && syncSafety.syncVersion === 2
-      && syncSafety.emptyIsNewer === false,
+      && syncSafety.emptyIsNewer === false
+      && syncSafety.periodicRuns >= 2
+      && syncSafety.periodicApplied === 1
+      && syncSafety.arxivUrl?.startsWith('https://arxiv.org/search/')
+      && syncSafety.scholarUrl?.startsWith('https://scholar.google.com/scholar'),
     `sync should merge each dataset independently: ${JSON.stringify(syncSafety)}`,
+  );
+
+  const beforeDockDrag = await page.evaluate(async () => {
+    const { loadDock } = await import('./js/shortcuts.js');
+    return loadDock().map((item) => item.id);
+  });
+  const dockA = await page.locator('.dock-link[data-dock-id]').nth(0).boundingBox();
+  const dockB = await page.locator('.dock-link[data-dock-id]').nth(1).boundingBox();
+  await page.mouse.move(dockA.x + dockA.width / 2, dockA.y + dockA.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(dockB.x + dockB.width * 0.82, dockB.y + dockB.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForTimeout(320);
+  const afterDockDrag = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('startpage-dock') || '[]').map((item) => item.id));
+  assert(
+    afterDockDrag[1] === beforeDockDrag[0],
+    `dock drag should persist the new order: ${JSON.stringify({ beforeDockDrag, afterDockDrag })}`,
   );
 
   await page.evaluate(() => {
@@ -388,6 +446,30 @@ try {
     'apps page should activate');
   assert(await page.locator('.shortcut-item:not(.shortcut-add)').count() >= 10,
     'corrupted shortcut storage should fall back to defaults');
+  const appsTextTheme = await page.locator('.shortcut-label').first().evaluate((label) => ({
+    color: getComputedStyle(label).color,
+    weight: getComputedStyle(label).fontWeight,
+  }));
+  assert(
+    appsTextTheme.color === 'rgba(255, 255, 255, 0.92)',
+    `apps labels should keep one light theme: ${JSON.stringify(appsTextTheme)}`,
+  );
+
+  const beforeShortcutDrag = await page.evaluate(() =>
+    [...document.querySelectorAll('.shortcut-item:not(.shortcut-add)')].map((item) => item.dataset.id));
+  const shortcutA = await page.locator('.shortcut-item:not(.shortcut-add)').nth(0).boundingBox();
+  const shortcutB = await page.locator('.shortcut-item:not(.shortcut-add)').nth(1).boundingBox();
+  await page.mouse.move(shortcutA.x + shortcutA.width / 2, shortcutA.y + shortcutA.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(shortcutB.x + shortcutB.width * 0.82, shortcutB.y + shortcutB.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForTimeout(420);
+  const afterShortcutDrag = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('startpage-shortcuts') || '[]').map((item) => item.id));
+  assert(
+    afterShortcutDrag[1] === beforeShortcutDrag[0],
+    `shortcut drag should persist the new order: ${JSON.stringify({ beforeShortcutDrag, afterShortcutDrag })}`,
+  );
   const settingsLoadedOnApps = await page.evaluate(() => performance.getEntriesByType('resource')
     .some((entry) => entry.name.endsWith('/js/settings-ui.js')));
   assert(!settingsLoadedOnApps, 'settings module should remain lazy after entering apps');

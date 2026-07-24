@@ -14,13 +14,11 @@ import {
   readString,
   writeString,
 } from './storage.js';
-import { KEYS } from './keys.js';
+import { BLOCKING_SMART_IDS, KEYS } from './keys.js';
 import { initLazySearchQuote } from './lazy-search-quote.js';
 import { getSearchIntelligence } from './search-intelligence.js';
 import { fetchQueryCompletions } from './search-suggest.js';
 import { createSuggestionNode, activateSuggestionItem } from './search-suggestions-ui.js';
-
-const BLOCKING_SMART_IDS = ['url', 'doi', 'weather', 'calc', 'base', 'datasize'];
 const BLOCKS_COMPLETIONS = new Set(BLOCKING_SMART_IDS);
 
 const GITHUB_ICON = 'https://github.githubassets.com/favicons/favicon.svg';

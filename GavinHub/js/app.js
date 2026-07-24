@@ -96,7 +96,10 @@ const pageRouter = createPageRouter({
     ]);
   },
   async afterPaint({ fromPage, nextPage }) {
-    if (nextPage === 'apps') wallpaper?.syncAppsBlurWallpaper?.();
+    if (nextPage === 'apps') {
+      wallpaper?.syncAppsBlurWallpaper?.();
+      void wallpaper?.settleDeferredWallpaperTheme?.();
+    }
     if (fromPage === 'apps' && nextPage === 'home') {
       document.body.classList.remove('search-reveal-pending');
       await nextPaint();
@@ -107,8 +110,8 @@ const pageRouter = createPageRouter({
   },
   async afterChange({ fromPage, nextPage }) {
     const currentWallpaper = wallpaper?.getCurrentWallpaper?.();
-    if (currentWallpaper && fromPage === 'apps') {
-      wallpaper?.adaptTextToWallpaper?.(currentWallpaper);
+    if (currentWallpaper && nextPage === 'apps') {
+      void wallpaper?.adaptTextToWallpaper?.(currentWallpaper);
     }
     if (nextPage === 'home') {
       scheduleInitialSearchFocus();
@@ -287,6 +290,16 @@ function refreshSyncedUi() {
   }).catch(() => {});
 }
 
+async function runGithubAutoSync() {
+  const github = await import('./github-sync.js');
+  const config = await github.loadGithubSyncConfig();
+  if (!config.token || !config.gistId) return;
+  const result = await github.syncWithGithub(config);
+  if (!result.reloaded) return;
+  settingsStore.reload();
+  refreshSyncedUi();
+}
+
 async function initCore() {
   const syncModulePromise = import('./sync.js').catch((error) => {
     console.error('[GavinHub] sync module failed to load', error);
@@ -314,12 +327,21 @@ async function initCore() {
   wallpaper?.syncSearchFocusWallpaper?.();
   if (syncGate.settled && syncGate.value?.result?.applied) settingsStore.reload();
 
+  const onSyncedDataApplied = () => {
+    settingsStore.reload();
+    const refresh = () => runWhenIdle(refreshSyncedUi, { timeout: 500, fallbackDelay: 40 });
+    if (document.body.classList.contains('boot-glass-stable')) refresh();
+    else document.addEventListener('boot-glass-stable', refresh, { once: true });
+  };
+  let periodicSyncRegistered = false;
   const registerSyncListener = (syncMod) => {
-    syncMod?.initSyncListener?.(() => {
-      settingsStore.reload();
-      const refresh = () => runWhenIdle(refreshSyncedUi, { timeout: 500, fallbackDelay: 40 });
-      if (document.body.classList.contains('boot-glass-stable')) refresh();
-      else document.addEventListener('boot-glass-stable', refresh, { once: true });
+    syncMod?.initSyncListener?.(onSyncedDataApplied);
+    if (!syncMod || periodicSyncRegistered) return;
+    periodicSyncRegistered = true;
+    syncMod.startPeriodicSync?.({
+      intervalMs: 5 * 60 * 1000,
+      onApplied: onSyncedDataApplied,
+      extraSync: runGithubAutoSync,
     });
   };
 

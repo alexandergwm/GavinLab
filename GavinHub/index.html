@@ -20,6 +20,9 @@
   <link href="css/weather.css" data-lazy-style="weather">
   <style id="boot-critical-hide">
     .search-suggestions, .search-quote { display: none !important; }
+    body.boot-awakening:not(.boot-ui-settled) .stage,
+    body.boot-awakening:not(.boot-ui-settled) #search-form,
+    body.boot-awakening:not(.boot-ui-settled) #dock { visibility: hidden !important; }
   </style>
   <!-- 壁纸关键样式必须在 CSS 文件到达前生效，否则首帧会闪 -->
   <style id="boot-wallpaper-critical">
@@ -229,9 +232,10 @@
         <button id="date-trigger" class="meta-part" type="button" aria-label="打开日历">
           <span id="date-text"></span>
         </button><span class="meta-sep"> · </span><button id="weather-trigger" class="meta-part" type="button" aria-label="查看天气">
-          <span id="weather-icon" class="weather-icon"></span><span id="weather-summary">加载中…</span>
+          <span id="weather-icon" class="weather-icon"></span><span id="weather-summary">天气</span>
         </button>
       </p>
+      <script>(function(){try{var n=new Date(),md=new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric'}).format(n),wd=new Intl.DateTimeFormat('en-US',{weekday:'short'}).format(n),d=document.getElementById('date-text');if(d)d.textContent=md+', '+wd;}catch(e){}})();</script>
 
       <div class="panel-stack">
         <section class="page-panel page-home active" data-page="home">

@@ -37,7 +37,6 @@ import {
 } from './search-focus.js';
 import {
   settleBootUiClasses,
-  onBootUiSettled,
   BOOT_UI_REVEAL_DELAY_MS,
 } from './boot-ui.js';
 import {
@@ -94,21 +93,21 @@ const wallpaperEffects = createWallpaperEffects({
 
 window.addEventListener('pagehide', wallpaperEffects.dispose, { once: true });
 
-const BOOT_ADAPT_AFTER_UI_MS = 180;
+let bootThemeAdaptPending = false;
 
 function canRunBackgroundImageWork() {
   return !document.hidden && !navigator.connection?.saveData;
 }
 
 function deferAdaptAfterBoot() {
-  const run = () => {
-    scheduleAdaptTextToWallpaper(getCurrentWallpaper(), { immediate: true });
-  };
-  if (!document.body.classList.contains('boot-ui-settled')) {
-    onBootUiSettled(() => window.setTimeout(run, BOOT_ADAPT_AFTER_UI_MS));
-  } else {
-    window.setTimeout(run, BOOT_ADAPT_AFTER_UI_MS);
-  }
+  bootThemeAdaptPending = true;
+}
+
+/** 在固定亮色的应用页内完成启动壁纸分析，返回首页时不再发生可见跳色。 */
+export function settleDeferredWallpaperTheme() {
+  if (!bootThemeAdaptPending) return Promise.resolve(false);
+  bootThemeAdaptPending = false;
+  return adaptTextToWallpaper(getCurrentWallpaper()).then(() => true);
 }
 
 async function enhanceBootWallpaperAsync(payload) {

@@ -285,11 +285,11 @@ function bindMenu(refresh, onDockChange) {
 }
 
 function bindDragReorder(grid, refresh) {
-  const LONG_PRESS_MS = 400;
+  const LONG_PRESS_MS = 320;
   const MOVE_CANCEL_PX = 10;
+  const MOUSE_START_PX = 5;
   const FLIP_MS = 250;
   const FLIP_EASE = 'cubic-bezier(0.2, 0, 0, 1)';
-  const GRID_COLS = 5;
 
   let session = null;
   let suppressClick = false;
@@ -365,13 +365,11 @@ function bindDragReorder(grid, refresh) {
   }
 
   function getInsertIndex(clientX, clientY) {
-    const siblings = getLayoutSiblings();
+    const siblings = getLayoutSiblings()
+      .filter((item) => !item.classList.contains('shortcut-placeholder'));
     if (!siblings.length) return 0;
 
     for (let i = 0; i < siblings.length; i += 1) {
-      if (siblings[i].classList.contains('shortcut-placeholder')) {
-        return i;
-      }
       const rect = siblings[i].getBoundingClientRect();
       if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
         continue;
@@ -394,9 +392,10 @@ function bindDragReorder(grid, refresh) {
 
     const relX = clientX - gridRect.left;
     const relY = clientY - gridRect.top + grid.scrollTop;
-    const col = Math.max(0, Math.min(GRID_COLS - 1, Math.floor(relX / cellW)));
+    const gridCols = Math.max(1, getComputedStyle(grid).gridTemplateColumns.split(' ').length);
+    const col = Math.max(0, Math.min(gridCols - 1, Math.floor(relX / cellW)));
     const row = Math.max(0, Math.floor(relY / cellH));
-    const index = row * GRID_COLS + col;
+    const index = row * gridCols + col;
 
     return Math.max(0, Math.min(index, siblings.length));
   }
@@ -483,16 +482,38 @@ function bindDragReorder(grid, refresh) {
     cleanupDragStyles();
   }
 
+  function activateSession(clientX, clientY) {
+    if (!session || session.active) return;
+    if (session.timer) {
+      clearTimeout(session.timer);
+      session.timer = null;
+    }
+    session.active = true;
+    session.fromIndex = getShortcutItems().indexOf(session.item);
+    session.insertIndex = session.fromIndex;
+
+    const placeholder = createPlaceholder();
+    session.placeholder = placeholder;
+    floatItem(session.item, session.startX, session.startY);
+    grid.insertBefore(placeholder, session.item);
+    session.item.classList.add('is-dragging');
+    grid.classList.add('is-reordering');
+    moveFloatedItem(session.item, clientX, clientY);
+  }
+
   function onMove(e) {
     if (!session || e.pointerId !== session.pointerId) return;
 
     if (!session.active) {
       const dx = e.clientX - session.startX;
       const dy = e.clientY - session.startY;
-      if (Math.hypot(dx, dy) > MOVE_CANCEL_PX) {
+      const distance = Math.hypot(dx, dy);
+      if (session.pointerType === 'mouse' || session.pointerType === 'pen') {
+        if (distance >= MOUSE_START_PX) activateSession(e.clientX, e.clientY);
+      } else if (distance > MOVE_CANCEL_PX) {
         clearSession();
       }
-      return;
+      if (!session?.active) return;
     }
 
     e.preventDefault();
@@ -537,6 +558,7 @@ function bindDragReorder(grid, refresh) {
         cleanupDragStyles();
         moveShortcut(fromId, toIndex);
         refresh();
+        window.setTimeout(() => { suppressClick = false; }, 80);
       }, FLIP_MS);
       return;
     }
@@ -571,6 +593,7 @@ function bindDragReorder(grid, refresh) {
       item,
       id: item.dataset.id,
       pointerId,
+      pointerType: e.pointerType || 'mouse',
       startX,
       startY,
       active: false,
@@ -582,21 +605,12 @@ function bindDragReorder(grid, refresh) {
     document.addEventListener('pointerup', onUp);
     document.addEventListener('pointercancel', onUp);
 
-    session.timer = setTimeout(() => {
-      if (!session || session.pointerId !== pointerId) return;
-      session.timer = null;
-      session.active = true;
-      session.fromIndex = getShortcutItems().indexOf(session.item);
-      session.insertIndex = session.fromIndex;
-
-      const placeholder = createPlaceholder();
-      session.placeholder = placeholder;
-      grid.insertBefore(placeholder, session.item);
-
-      floatItem(session.item, session.startX, session.startY);
-      session.item.classList.add('is-dragging');
-      grid.classList.add('is-reordering');
-    }, LONG_PRESS_MS);
+    if (session.pointerType !== 'mouse' && session.pointerType !== 'pen') {
+      session.timer = setTimeout(() => {
+        if (!session || session.pointerId !== pointerId) return;
+        activateSession(session.startX, session.startY);
+      }, LONG_PRESS_MS);
+    }
   });
 
   grid.addEventListener('click', (e) => {
