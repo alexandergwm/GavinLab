@@ -209,8 +209,31 @@ body[data-text-theme='on-light'] .dock-tab.active {
 
 .dock-placeholder {
   pointer-events: none;
-  background: rgba(255, 255, 255, 0.08) !important;
-  border: 1px dashed rgba(255, 255, 255, 0.34) !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.dock.is-external-drop-target {
+  background: rgba(48, 44, 54, 0.62);
+  border-color: rgba(255, 255, 255, 0.38);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 18px 52px rgba(0, 0, 0, 0.34),
+    0 0 0 4px rgba(255, 255, 255, 0.08);
+}
+
+.dock-external-placeholder {
+  width: 0;
+  opacity: 0;
+  transition:
+    width 0.16s cubic-bezier(0.2, 0, 0, 1),
+    opacity 0.12s ease;
+}
+
+.dock-external-placeholder.is-visible {
+  width: 46px;
+  opacity: 1;
 }
 
 /* Edge sidebar / narrow panel. */
@@ -236,6 +259,18 @@ body[data-text-theme='on-light'] .dock-tab.active {
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: none;
+}
+
+:is(body.layout-sidebar, html.layout-sidebar body) .dock-external-placeholder {
+  width: 46px;
+  height: 0;
+  transition:
+    height 0.16s cubic-bezier(0.2, 0, 0, 1),
+    opacity 0.12s ease;
+}
+
+:is(body.layout-sidebar, html.layout-sidebar body) .dock-external-placeholder.is-visible {
+  height: 46px;
 }
 
 :is(body.layout-sidebar, html.layout-sidebar body) .dock::-webkit-scrollbar {

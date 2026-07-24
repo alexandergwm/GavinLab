@@ -455,22 +455,27 @@ export function deleteShortcut(id) {
   return { shortcuts, dock };
 }
 
-export function addShortcutToDock(shortcut) {
+export function addShortcutToDock(shortcut, { index } = {}) {
   const dock = loadDock();
-  if (dock.some((d) => d.type === 'link' && d.id === shortcut.id)) {
+  const existingIndex = dock.findIndex((d) => d.type === 'link' && d.id === shortcut.id);
+  if (existingIndex >= 0 && index == null) {
     return { dock, added: false };
   }
 
-  dock.push({
+  const item = existingIndex >= 0 ? dock.splice(existingIndex, 1)[0] : {
     id: shortcut.id,
     type: 'link',
     url: shortcut.url,
     icon: shortcut.icon || '',
     letter: shortcut.letter,
     color: shortcut.color,
-  });
+  };
+  const insertAt = index == null
+    ? dock.length
+    : Math.max(0, Math.min(Number(index) || 0, dock.length));
+  dock.splice(insertAt, 0, item);
   saveDock(dock);
-  return { dock, added: true };
+  return { dock, added: existingIndex < 0, moved: existingIndex >= 0 };
 }
 
 export function removeFromDock(id) {

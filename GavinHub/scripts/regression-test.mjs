@@ -470,6 +470,41 @@ try {
     afterShortcutDrag[1] === beforeShortcutDrag[0],
     `shortcut drag should persist the new order: ${JSON.stringify({ beforeShortcutDrag, afterShortcutDrag })}`,
   );
+
+  const dockDropItem = page.locator('.shortcut-item[data-id="gavin"]');
+  const dockDropSource = await dockDropItem.boundingBox();
+  const dockDropTarget = await page.locator('#dock').boundingBox();
+  await page.mouse.move(
+    dockDropSource.x + dockDropSource.width / 2,
+    dockDropSource.y + dockDropSource.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    dockDropTarget.x + dockDropTarget.width - 16,
+    dockDropTarget.y + dockDropTarget.height / 2,
+    { steps: 14 },
+  );
+  const activeDockDrop = await page.evaluate(() => ({
+    draggingId: document.querySelector('.shortcut-item.is-dragging')?.dataset.id,
+    targetActive: document.getElementById('dock')?.classList.contains('is-external-drop-target'),
+    hasSlot: Boolean(document.querySelector('#dock .dock-external-placeholder')),
+  }));
+  assert(
+    activeDockDrop.draggingId === 'gavin'
+      && activeDockDrop.targetActive
+      && activeDockDrop.hasSlot,
+    `dragging over dock should keep a floating item and open a slot: ${JSON.stringify(activeDockDrop)}`,
+  );
+  await page.mouse.up();
+  await page.waitForTimeout(360);
+  const dockDropResult = await page.evaluate(() => ({
+    dockIds: JSON.parse(localStorage.getItem('startpage-dock') || '[]').map((item) => item.id),
+    appStillPresent: Boolean(document.querySelector('.shortcut-item[data-id="gavin"]')),
+  }));
+  assert(
+    dockDropResult.dockIds.includes('gavin') && dockDropResult.appStillPresent,
+    `dropping an app onto dock should add without removing it from apps: ${JSON.stringify(dockDropResult)}`,
+  );
   const settingsLoadedOnApps = await page.evaluate(() => performance.getEntriesByType('resource')
     .some((entry) => entry.name.endsWith('/js/settings-ui.js')));
   assert(!settingsLoadedOnApps, 'settings module should remain lazy after entering apps');

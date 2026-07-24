@@ -284,15 +284,16 @@ function bindMenu(refresh, onDockChange) {
   window.addEventListener('resize', hideMenu);
 }
 
-function bindDragReorder(grid, refresh) {
+function bindDragReorder(grid, refresh, onDockChange) {
   const LONG_PRESS_MS = 320;
   const MOVE_CANCEL_PX = 10;
   const MOUSE_START_PX = 5;
-  const FLIP_MS = 250;
+  const FLIP_MS = 180;
   const FLIP_EASE = 'cubic-bezier(0.2, 0, 0, 1)';
 
   let session = null;
   let suppressClick = false;
+  let dragFrame = 0;
 
   function getShortcutItems() {
     return [...grid.querySelectorAll('.shortcut-item:not(.shortcut-add):not(.shortcut-placeholder)')];
@@ -304,6 +305,7 @@ function bindDragReorder(grid, refresh) {
 
   function flipAnimate(elements, mutate) {
     const first = new Map(elements.map((el) => [el, el.getBoundingClientRect()]));
+    elements.forEach((el) => el._reorderAnimation?.cancel());
     mutate();
     elements.forEach((el) => {
       const prev = first.get(el);
@@ -312,17 +314,82 @@ function bindDragReorder(grid, refresh) {
       const dx = prev.left - next.left;
       const dy = prev.top - next.top;
       if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
-      el.style.transform = `translate(${dx}px, ${dy}px)`;
-      el.style.transition = 'none';
-    });
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        elements.forEach((el) => {
-          el.style.transition = `transform ${FLIP_MS}ms ${FLIP_EASE}`;
-          el.style.transform = '';
-        });
+      el._reorderAnimation = el.animate([
+        { transform: `translate3d(${dx}px, ${dy}px, 0)` },
+        { transform: 'translate3d(0, 0, 0)' },
+      ], {
+        duration: FLIP_MS,
+        easing: FLIP_EASE,
       });
+      el._reorderAnimation.addEventListener('finish', () => {
+        delete el._reorderAnimation;
+      }, { once: true });
     });
+  }
+
+  function getDock() {
+    return document.getElementById('dock');
+  }
+
+  function dockContainsPoint(clientX, clientY) {
+    const dock = getDock();
+    if (!dock) return false;
+    const rect = dock.getBoundingClientRect();
+    const pad = 18;
+    return clientX >= rect.left - pad && clientX <= rect.right + pad
+      && clientY >= rect.top - pad && clientY <= rect.bottom + pad;
+  }
+
+  function getDockInsertIndex(clientX, clientY) {
+    const dock = getDock();
+    if (!dock) return 0;
+    const vertical = getComputedStyle(dock).flexDirection === 'column';
+    const links = [...dock.querySelectorAll('.dock-link[data-dock-id]')];
+    for (let i = 0; i < links.length; i += 1) {
+      const rect = links[i].getBoundingClientRect();
+      const before = vertical
+        ? clientY < rect.top + rect.height / 2
+        : clientX < rect.left + rect.width / 2;
+      if (before) return i;
+    }
+    return links.length;
+  }
+
+  function updateDockDropTarget(clientX, clientY) {
+    if (!session) return false;
+    const dock = getDock();
+    const overDock = dockContainsPoint(clientX, clientY);
+    session.overDock = overDock;
+    if (!dock || !overDock) {
+      session.dockPlaceholder?.remove();
+      session.dockPlaceholder = null;
+      dock?.classList.remove('is-external-drop-target');
+      return false;
+    }
+
+    const index = getDockInsertIndex(clientX, clientY);
+    let placeholder = session.dockPlaceholder;
+    if (!placeholder) {
+      placeholder = document.createElement('div');
+      placeholder.className = 'dock-item dock-link dock-placeholder dock-external-placeholder';
+      placeholder.setAttribute('aria-hidden', 'true');
+      session.dockPlaceholder = placeholder;
+    }
+    const links = [...dock.querySelectorAll('.dock-link[data-dock-id]')];
+    const reference = links[index] || null;
+    if (!placeholder.isConnected || placeholder.nextSibling !== reference) {
+      dock.insertBefore(placeholder, reference);
+    }
+    session.dockInsertIndex = index;
+    dock.classList.add('is-external-drop-target');
+    requestAnimationFrame(() => placeholder.classList.add('is-visible'));
+    return true;
+  }
+
+  function clearDockDropTarget(active) {
+    active?.dockPlaceholder?.remove();
+    if (active) active.dockPlaceholder = null;
+    getDock()?.classList.remove('is-external-drop-target');
   }
 
   function createPlaceholder() {
@@ -424,6 +491,8 @@ function bindDragReorder(grid, refresh) {
   function cleanupDragStyles() {
     grid.classList.remove('is-reordering');
     grid.querySelectorAll('.shortcut-item:not(.shortcut-add)').forEach((el) => {
+      el._reorderAnimation?.cancel();
+      delete el._reorderAnimation;
       el.style.transition = '';
       el.style.transform = '';
     });
@@ -451,6 +520,9 @@ function bindDragReorder(grid, refresh) {
   function clearSession(animateBack = false) {
     if (!session) return;
 
+    cancelAnimationFrame(dragFrame);
+    dragFrame = 0;
+
     if (session.timer) {
       clearTimeout(session.timer);
     }
@@ -459,8 +531,10 @@ function bindDragReorder(grid, refresh) {
     document.removeEventListener('pointerup', session.onUp);
     document.removeEventListener('pointercancel', session.onUp);
 
-    const { item, placeholder, active } = session;
+    const current = session;
+    const { item, placeholder, active } = current;
     session = null;
+    clearDockDropTarget(current);
 
     if (!active && !placeholder) return;
 
@@ -501,6 +575,25 @@ function bindDragReorder(grid, refresh) {
     moveFloatedItem(session.item, clientX, clientY);
   }
 
+  function updateDragPosition(clientX, clientY) {
+    if (!session?.active) return;
+    moveFloatedItem(session.item, clientX, clientY);
+    if (updateDockDropTarget(clientX, clientY)) return;
+    movePlaceholder(getInsertIndex(clientX, clientY));
+  }
+
+  function scheduleDragPosition(clientX, clientY) {
+    if (!session) return;
+    session.latestX = clientX;
+    session.latestY = clientY;
+    if (dragFrame) return;
+    dragFrame = requestAnimationFrame(() => {
+      dragFrame = 0;
+      if (!session) return;
+      updateDragPosition(session.latestX, session.latestY);
+    });
+  }
+
   function onMove(e) {
     if (!session || e.pointerId !== session.pointerId) return;
 
@@ -517,10 +610,7 @@ function bindDragReorder(grid, refresh) {
     }
 
     e.preventDefault();
-    moveFloatedItem(session.item, e.clientX, e.clientY);
-
-    const insertIndex = getInsertIndex(e.clientX, e.clientY);
-    movePlaceholder(insertIndex);
+    scheduleDragPosition(e.clientX, e.clientY);
   }
 
   function onUp(e) {
@@ -532,6 +622,35 @@ function bindDragReorder(grid, refresh) {
     }
 
     e.preventDefault();
+
+    cancelAnimationFrame(dragFrame);
+    dragFrame = 0;
+    updateDragPosition(e.clientX, e.clientY);
+
+    if (session.overDock && session.dockPlaceholder) {
+      const active = session;
+      const targetRect = active.dockPlaceholder.getBoundingClientRect();
+      suppressClick = true;
+      document.removeEventListener('pointermove', active.onMove);
+      document.removeEventListener('pointerup', active.onUp);
+      document.removeEventListener('pointercancel', active.onUp);
+      session = null;
+
+      animateFloatedItemTo(active.item, targetRect);
+      active.item.classList.remove('is-dragging');
+      window.setTimeout(() => {
+        const shortcut = loadShortcuts().find((item) => item.id === active.id);
+        if (shortcut) addShortcutToDock(shortcut, { index: active.dockInsertIndex });
+        clearDockDropTarget(active);
+        active.placeholder?.remove();
+        resetItemStyles(active.item);
+        cleanupDragStyles();
+        refresh();
+        onDockChange?.();
+        window.setTimeout(() => { suppressClick = false; }, 80);
+      }, FLIP_MS);
+      return;
+    }
 
     const fromId = session.id;
     const fromIndex = session.fromIndex;
@@ -638,7 +757,7 @@ export function initShortcutsUI({ onDockChange } = {}) {
     if (iconEl) renderIconInto(iconEl, item);
   };
 
-  bindDragReorder(grid, refresh);
+  bindDragReorder(grid, refresh, onDockChange);
   bindDialog(refresh, onDockChange);
   bindMenu(refresh, onDockChange);
   refresh();

@@ -474,7 +474,7 @@ body.page-blur-active .shortcut-label {
 }
 
 .shortcuts-grid.is-reordering .shortcut-item:not(.is-dragging) {
-  transition: transform 0.25s cubic-bezier(0.2, 0, 0, 1);
+  transition: none;
 }
 
 .shortcuts-grid.is-reordering .shortcut-item:hover .shortcut-icon {
@@ -487,11 +487,16 @@ body.page-blur-active .shortcut-label {
   z-index: 100;
   cursor: grabbing;
   transition: none;
+  filter: saturate(1.08);
 }
 
 .shortcut-item.is-dragging .shortcut-icon {
-  transform: scale(1.08);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+  transform: scale(1.1);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.26);
+}
+
+.shortcut-item.is-dragging .shortcut-label {
+  opacity: 0.76;
 }
 
 .shortcut-placeholder {
@@ -499,11 +504,10 @@ body.page-blur-active .shortcut-label {
 }
 
 .shortcut-placeholder .shortcut-icon {
-  background: rgba(74, 144, 217, 0.06);
-  border: 2px dashed rgba(74, 144, 217, 0.4);
+  background: transparent;
+  border: none;
   box-shadow: none;
   transform: none;
-  transition: border-color 0.2s, background 0.2s;
 }
 
 .shortcut-placeholder .shortcut-label {
