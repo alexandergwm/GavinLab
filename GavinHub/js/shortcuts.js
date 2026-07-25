@@ -562,6 +562,15 @@ function prepareImageIconContainer(container) {
   delete container.dataset.len;
 }
 
+function createIconImage({ lazy = false } = {}) {
+  const img = document.createElement('img');
+  img.alt = '';
+  img.draggable = false;
+  if (lazy) img.loading = 'lazy';
+  img.decoding = 'async';
+  return img;
+}
+
 function renderLetterAvatar(container, item) {
   container.innerHTML = '';
   container.classList.remove(
@@ -610,9 +619,7 @@ export function renderIconInto(container, item, pageUrl = item.url, options = {}
   if (iconSrc) {
     if (eager) {
       prepareImageIconContainer(container);
-      const img = document.createElement('img');
-      img.alt = '';
-      img.decoding = 'async';
+      const img = createIconImage();
       const toLetter = () => renderLetterAvatar(container, {
         ...item,
         letter: item.letter || deriveLetterLabel(item.name, item.url || pageUrl),
@@ -643,10 +650,7 @@ export function renderIconInto(container, item, pageUrl = item.url, options = {}
         if (cachedUrl) {
           usedCached = true;
           prepareImageIconContainer(container);
-          const img = document.createElement('img');
-          img.alt = '';
-          img.loading = 'lazy';
-          img.decoding = 'async';
+          const img = createIconImage({ lazy: true });
           img.src = cachedUrl;
           const finish = () => classifyIconImage(container, img, iconSrc);
           img.addEventListener('load', finish, { once: true });
@@ -665,10 +669,7 @@ export function renderIconInto(container, item, pageUrl = item.url, options = {}
         letter: item.letter || deriveLetterLabel(item.name, item.url || pageUrl),
         color: item.color || deriveLetterColor(letterColorSeed(item.name, item.url || pageUrl)),
       });
-      const img = document.createElement('img');
-      img.alt = '';
-      img.loading = 'lazy';
-      img.decoding = 'async';
+      const img = createIconImage({ lazy: true });
       bindIconWithFallback(img, iconSrc, toLetter, () => {
         classifyIconImage(container, img, iconSrc);
         ensureIconCached(iconSrc);

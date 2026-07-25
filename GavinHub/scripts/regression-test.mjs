@@ -488,6 +488,46 @@ try {
     `shortcut drag should persist the new order: ${JSON.stringify({ beforeShortcutDrag, afterShortcutDrag })}`,
   );
 
+  await page.waitForFunction(() => {
+    const img = document.querySelector('.shortcut-item[data-id="connected-papers"] img');
+    return Boolean(img?.complete && img.naturalWidth > 0);
+  });
+  const imageDragGuards = await page.locator('.shortcut-item[data-id="connected-papers"] img').evaluate((img) => ({
+    draggable: img.draggable,
+    pointerEvents: getComputedStyle(img).pointerEvents,
+    nativeDragPrevented: !img.dispatchEvent(new DragEvent('dragstart', {
+      bubbles: true,
+      cancelable: true,
+    })),
+  }));
+  assert(
+    imageDragGuards.draggable === false
+      && imageDragGuards.pointerEvents === 'none'
+      && imageDragGuards.nativeDragPrevented,
+    `image-backed shortcuts must not start native image dragging: ${JSON.stringify(imageDragGuards)}`,
+  );
+
+  const imageShortcut = await page.locator('.shortcut-item[data-id="connected-papers"]').boundingBox();
+  const imageTarget = await page.locator('.shortcut-item:not(.shortcut-add)').first().boundingBox();
+  await page.mouse.move(
+    imageShortcut.x + imageShortcut.width / 2,
+    imageShortcut.y + imageShortcut.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    imageTarget.x + imageTarget.width * 0.2,
+    imageTarget.y + imageTarget.height / 2,
+    { steps: 10 },
+  );
+  await page.mouse.up();
+  await page.waitForTimeout(420);
+  const imageShortcutOrder = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('startpage-shortcuts') || '[]').map((item) => item.id));
+  assert(
+    imageShortcutOrder[0] === 'connected-papers',
+    `image-backed shortcut drag should persist the new order: ${JSON.stringify(imageShortcutOrder)}`,
+  );
+
   const dockDropItem = page.locator('.shortcut-item[data-id="gavin"]');
   const dockDropSource = await dockDropItem.boundingBox();
   const dockDropTarget = await page.locator('#dock').boundingBox();

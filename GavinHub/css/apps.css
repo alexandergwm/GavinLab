@@ -356,6 +356,10 @@ body.page-apps-active .header-actions {
   object-position: center;
   border-radius: inherit;
   display: block;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
 }
 
 .shortcut-icon--round img {

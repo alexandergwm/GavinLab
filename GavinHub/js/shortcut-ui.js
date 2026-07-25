@@ -707,6 +707,10 @@ function bindDragReorder(grid, refresh, onDockChange) {
     }
   }, true);
 
+  grid.addEventListener('dragstart', (e) => {
+    if (e.target.closest('.shortcut-item:not(.shortcut-add)')) e.preventDefault();
+  }, true);
+
   grid.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
 
