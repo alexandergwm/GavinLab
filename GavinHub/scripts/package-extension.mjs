@@ -27,6 +27,8 @@ const INCLUDE = [
   'css/todo-dialog.css',
   'css/weather.css',
   'assets/default-wallpaper.jpg',
+  'assets/search-arxiv.png',
+  'assets/search-google-scholar.png',
 ];
 
 function copyIcons(outRoot) {
@@ -81,6 +83,9 @@ function verifyPackage(outRoot) {
   }
   if (!existsSync(join(outRoot, 'index.html'))) {
     throw new Error('missing index.html');
+  }
+  for (const asset of ['assets/search-arxiv.png', 'assets/search-google-scholar.png']) {
+    if (!existsSync(join(outRoot, asset))) throw new Error(`missing search icon: ${asset}`);
   }
   if (!manifest.background?.service_worker) {
     throw new Error('manifest missing background.service_worker (needed for search focus)');

@@ -607,34 +607,43 @@ try {
   );
   await search.fill('arxiv');
   await page.keyboard.press('Tab');
+  await page.waitForFunction(() => {
+    const icon = document.querySelector('.search-badge-icon');
+    return icon?.getAttribute('src')?.endsWith('assets/search-arxiv.png') && icon.naturalWidth > 0;
+  });
   const arxivMode = await page.evaluate(async () => {
     const storage = await import('./js/storage.js');
     return {
       mode: document.getElementById('search-box')?.dataset.searchMode,
-      badge: document.getElementById('search-engine-badge')?.textContent.trim(),
+      badgeIcon: document.querySelector('.search-badge-icon')?.getAttribute('src'),
       url: storage.getAcademicSearchUrl('arxiv', 'graph neural network'),
     };
   });
   assert(
     arxivMode.mode === 'arxiv'
-      && arxivMode.badge === 'arXiv'
+      && arxivMode.badgeIcon?.endsWith('assets/search-arxiv.png')
       && arxivMode.url.startsWith('https://arxiv.org/search/'),
     `arxiv + Tab should enter arXiv search mode: ${JSON.stringify(arxivMode)}`,
   );
   await page.keyboard.press('Escape');
   await search.fill('sc');
   await page.keyboard.press('Tab');
+  await page.waitForFunction(() => {
+    const icon = document.querySelector('.search-badge-icon');
+    return icon?.getAttribute('src')?.endsWith('assets/search-google-scholar.png')
+      && icon.naturalWidth > 0;
+  });
   const scholarMode = await page.evaluate(async () => {
     const storage = await import('./js/storage.js');
     return {
       mode: document.getElementById('search-box')?.dataset.searchMode,
-      badge: document.getElementById('search-engine-badge')?.textContent.trim(),
+      badgeIcon: document.querySelector('.search-badge-icon')?.getAttribute('src'),
       url: storage.getAcademicSearchUrl('scholar', 'graph neural network'),
     };
   });
   assert(
     scholarMode.mode === 'scholar'
-      && scholarMode.badge === 'Scholar'
+      && scholarMode.badgeIcon?.endsWith('assets/search-google-scholar.png')
       && scholarMode.url.startsWith('https://scholar.google.com/scholar'),
     `sc + Tab should enter Google Scholar mode: ${JSON.stringify(scholarMode)}`,
   );

@@ -25,6 +25,8 @@ const BLOCKS_COMPLETIONS = new Set(BLOCKING_SMART_IDS);
 const GITHUB_ICON = 'https://github.githubassets.com/favicons/favicon.svg';
 const ZHIHU_ICON = 'https://static.zhihu.com/heifetz/favicon.ico';
 const XHS_ICON = 'https://www.xiaohongshu.com/favicon.ico';
+const ARXIV_ICON = 'assets/search-arxiv.png';
+const GOOGLE_SCHOLAR_ICON = 'assets/search-google-scholar.png';
 
 /** 普通搜索引擎 favicon（优先清晰 32px 源，失败时走 gstatic fallback） */
 const SEARCH_ENGINE_SITES = {
@@ -650,12 +652,12 @@ function renderBadge() {
     return;
   }
   if (searchMode === 'arxiv') {
-    setBadgeContent({ label: 'arXiv', useIcon: false });
+    setBadgeContent({ icon: ARXIV_ICON, label: 'arXiv', useIcon: true });
     setBadgeAccessibility('arXiv 文献搜索');
     return;
   }
   if (searchMode === 'scholar') {
-    setBadgeContent({ label: 'Scholar', useIcon: false });
+    setBadgeContent({ icon: GOOGLE_SCHOLAR_ICON, label: 'Google Scholar', useIcon: true });
     setBadgeAccessibility('Google Scholar 搜索');
     return;
   }

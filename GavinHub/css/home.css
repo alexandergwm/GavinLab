@@ -125,6 +125,13 @@ body[data-text-theme='on-light'] .search-engine-badge.has-icon .search-badge-ico
   min-width: 18px;
 }
 
+.search-box[data-search-mode='arxiv'] .search-badge-icon,
+.search-box[data-search-mode='scholar'] .search-badge-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 2px;
+}
+
 .search-engine-badge.has-icon:not(.has-icon-label) .search-badge-label {
   display: none;
 }
