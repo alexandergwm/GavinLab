@@ -459,9 +459,26 @@ try {
     [...document.querySelectorAll('.shortcut-item:not(.shortcut-add)')].map((item) => item.dataset.id));
   const shortcutA = await page.locator('.shortcut-item:not(.shortcut-add)').nth(0).boundingBox();
   const shortcutB = await page.locator('.shortcut-item:not(.shortcut-add)').nth(1).boundingBox();
+  const shortcutDragX = shortcutB.x + shortcutB.width * 0.82;
+  const shortcutDragY = shortcutB.y + shortcutB.height / 2;
   await page.mouse.move(shortcutA.x + shortcutA.width / 2, shortcutA.y + shortcutA.height / 2);
   await page.mouse.down();
-  await page.mouse.move(shortcutB.x + shortcutB.width * 0.82, shortcutB.y + shortcutB.height / 2, { steps: 8 });
+  await page.mouse.move(shortcutDragX, shortcutDragY, { steps: 8 });
+  const liveShortcutDrag = await page.evaluate(({ x, y }) => {
+    const item = document.querySelector('.shortcut-item.is-dragging');
+    const rect = item?.getBoundingClientRect();
+    return {
+      parentIsBody: item?.parentElement === document.body,
+      deltaX: rect ? Math.abs(rect.left + rect.width / 2 - x) : 999,
+      deltaY: rect ? Math.abs(rect.top + rect.height / 2 - y) : 999,
+    };
+  }, { x: shortcutDragX, y: shortcutDragY });
+  assert(
+    liveShortcutDrag.parentIsBody
+      && liveShortcutDrag.deltaX < 3
+      && liveShortcutDrag.deltaY < 3,
+    `dragged shortcut must stay in the viewport coordinate system: ${JSON.stringify(liveShortcutDrag)}`,
+  );
   await page.mouse.up();
   await page.waitForTimeout(420);
   const afterShortcutDrag = await page.evaluate(() =>
@@ -588,6 +605,40 @@ try {
       .some((entry) => entry.name.endsWith('/js/smart-input.js'))),
     'the first query should activate search intelligence',
   );
+  await search.fill('arxiv');
+  await page.keyboard.press('Tab');
+  const arxivMode = await page.evaluate(async () => {
+    const storage = await import('./js/storage.js');
+    return {
+      mode: document.getElementById('search-box')?.dataset.searchMode,
+      badge: document.getElementById('search-engine-badge')?.textContent.trim(),
+      url: storage.getAcademicSearchUrl('arxiv', 'graph neural network'),
+    };
+  });
+  assert(
+    arxivMode.mode === 'arxiv'
+      && arxivMode.badge === 'arXiv'
+      && arxivMode.url.startsWith('https://arxiv.org/search/'),
+    `arxiv + Tab should enter arXiv search mode: ${JSON.stringify(arxivMode)}`,
+  );
+  await page.keyboard.press('Escape');
+  await search.fill('sc');
+  await page.keyboard.press('Tab');
+  const scholarMode = await page.evaluate(async () => {
+    const storage = await import('./js/storage.js');
+    return {
+      mode: document.getElementById('search-box')?.dataset.searchMode,
+      badge: document.getElementById('search-engine-badge')?.textContent.trim(),
+      url: storage.getAcademicSearchUrl('scholar', 'graph neural network'),
+    };
+  });
+  assert(
+    scholarMode.mode === 'scholar'
+      && scholarMode.badge === 'Scholar'
+      && scholarMode.url.startsWith('https://scholar.google.com/scholar'),
+    `sc + Tab should enter Google Scholar mode: ${JSON.stringify(scholarMode)}`,
+  );
+  await page.keyboard.press('Escape');
   await search.fill('a');
   await search.fill('ab');
   await search.fill('abc');

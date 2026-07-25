@@ -168,7 +168,9 @@ body[data-text-theme='on-light'] .search-engine-badge.has-icon:hover .search-bad
 .search-box[data-search-mode='map']:focus-within .search-engine-badge,
 .search-box[data-search-mode='gh']:focus-within .search-engine-badge,
 .search-box[data-search-mode='zh']:focus-within .search-engine-badge,
-.search-box[data-search-mode='xhs']:focus-within .search-engine-badge {
+.search-box[data-search-mode='xhs']:focus-within .search-engine-badge,
+.search-box[data-search-mode='arxiv']:focus-within .search-engine-badge,
+.search-box[data-search-mode='scholar']:focus-within .search-engine-badge {
   padding-left: 14px;
 }
 
@@ -195,7 +197,9 @@ body[data-text-theme='on-light'] .search-engine-badge.has-icon:hover .search-bad
 .search-box[data-search-mode='map']:focus-within .search-input,
 .search-box[data-search-mode='gh']:focus-within .search-input,
 .search-box[data-search-mode='zh']:focus-within .search-input,
-.search-box[data-search-mode='xhs']:focus-within .search-input {
+.search-box[data-search-mode='xhs']:focus-within .search-input,
+.search-box[data-search-mode='arxiv']:focus-within .search-input,
+.search-box[data-search-mode='scholar']:focus-within .search-input {
   padding-left: 8px;
 }
 

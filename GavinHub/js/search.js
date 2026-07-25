@@ -1,5 +1,6 @@
 import {
   getSearchUrl,
+  getAcademicSearchUrl,
   getSearchEngineLabel,
   getTranslateUrl,
   getAiUrl,
@@ -84,6 +85,18 @@ const MODE_LABELS = {
   gh: 'GitHub',
   zh: '知乎',
   xhs: '小红书',
+  arxiv: 'arXiv',
+  scholar: 'Google Scholar',
+};
+
+const MODE_ARIA_LABELS = {
+  ai: 'AI 助手',
+  map: '地图搜索',
+  gh: 'GitHub 搜索',
+  zh: '知乎搜索',
+  xhs: '小红书搜索',
+  arxiv: 'arXiv 文献搜索',
+  scholar: 'Google Scholar 搜索',
 };
 
 function normalizeModeInput(raw) {
@@ -97,6 +110,8 @@ const MODE_ALIASES = {
   gh: ['gh', 'github'],
   xhs: ['xhs', '小红书'],
   zh: ['zh', 'zhihu', '知乎'],
+  arxiv: ['arxiv', 'ax'],
+  scholar: ['sc', 'gs', 'scholar', 'google scholar', '谷歌学术'],
 };
 
 const TAB_TRIGGER_ALIAS_TO_MODE = new Map(
@@ -126,6 +141,12 @@ function getSubmitUrl(query) {
   }
   if (searchMode === 'xhs') {
     return getXhsUrl(query);
+  }
+  if (searchMode === 'arxiv') {
+    return getAcademicSearchUrl('arxiv', query);
+  }
+  if (searchMode === 'scholar') {
+    return getAcademicSearchUrl('scholar', query);
   }
   return getSearchUrl(searchEngine, query);
 }
@@ -258,6 +279,14 @@ async function executeSearch(query) {
     window.location.href = getXhsUrl(query);
     return;
   }
+  if (searchMode === 'arxiv') {
+    window.location.href = getAcademicSearchUrl('arxiv', query);
+    return;
+  }
+  if (searchMode === 'scholar') {
+    window.location.href = getAcademicSearchUrl('scholar', query);
+    return;
+  }
 
   const provider = getAiProvider(aiProvider);
   const url = provider.buildUrl(query);
@@ -370,7 +399,8 @@ function getMenuItems() {
       active: i === getSettings().mapProvider,
     }));
   }
-  if (searchMode === 'gh' || searchMode === 'zh' || searchMode === 'xhs') {
+  if (searchMode === 'gh' || searchMode === 'zh' || searchMode === 'xhs'
+    || searchMode === 'arxiv' || searchMode === 'scholar') {
     return [];
   }
   return SEARCH_ENGINE_ORDER.map((engine) => ({
@@ -391,17 +421,7 @@ function renderProviderMenu() {
   if (!menuEl) return;
 
   const { searchMode } = getSettings();
-  const ariaLabel = searchMode === 'ai'
-    ? 'AI 助手'
-    : searchMode === 'map'
-      ? '地图搜索'
-      : searchMode === 'gh'
-        ? 'GitHub 搜索'
-        : searchMode === 'zh'
-          ? '知乎搜索'
-          : searchMode === 'xhs'
-            ? '小红书搜索'
-            : '搜索引擎';
+  const ariaLabel = MODE_ARIA_LABELS[searchMode] || '搜索引擎';
   menuEl.setAttribute('aria-label', ariaLabel);
   menuEl.innerHTML = '';
   menuEl.classList.toggle('search-engine-menu--map-detail', searchMode === 'map');
@@ -471,6 +491,14 @@ function getModePlaceholder() {
   if (searchMode === 'xhs') {
     if (focused && !hasValue) return '输入关键词';
     return '小红书 搜索';
+  }
+  if (searchMode === 'arxiv') {
+    if (focused && !hasValue) return '输入论文标题、作者或关键词';
+    return 'arXiv 文献搜索';
+  }
+  if (searchMode === 'scholar') {
+    if (focused && !hasValue) return '输入论文标题、作者或关键词';
+    return 'Google Scholar 搜索';
   }
   if (hasValue) {
     const pendingMode = resolveModeAlias(inputEl.value);
@@ -621,6 +649,16 @@ function renderBadge() {
     setBadgeAccessibility('小红书');
     return;
   }
+  if (searchMode === 'arxiv') {
+    setBadgeContent({ label: 'arXiv', useIcon: false });
+    setBadgeAccessibility('arXiv 文献搜索');
+    return;
+  }
+  if (searchMode === 'scholar') {
+    setBadgeContent({ label: 'Scholar', useIcon: false });
+    setBadgeAccessibility('Google Scholar 搜索');
+    return;
+  }
 
   const engineLabel = getSearchEngineLabel(searchEngine);
   setBadgeContent({
@@ -759,7 +797,8 @@ export async function refreshSearchSuggestions() {
 function getProviderShortcutCount(searchMode) {
   if (searchMode === 'ai') return AI_PROVIDERS.length;
   if (searchMode === 'map') return MAP_PROVIDERS.length;
-  if (searchMode === 'gh' || searchMode === 'zh' || searchMode === 'xhs') return 0;
+  if (searchMode === 'gh' || searchMode === 'zh' || searchMode === 'xhs'
+    || searchMode === 'arxiv' || searchMode === 'scholar') return 0;
   return SEARCH_ENGINE_ORDER.length;
 }
 
@@ -1055,7 +1094,8 @@ export function initSearch({ getSettings: settingsGetter, onSettingsChange: sett
   badgeEl.addEventListener('mousedown', (e) => {
     e.preventDefault();
     const { searchMode } = getSettings();
-    if (searchMode === 'gh' || searchMode === 'zh' || searchMode === 'xhs') return;
+    if (searchMode === 'gh' || searchMode === 'zh' || searchMode === 'xhs'
+      || searchMode === 'arxiv' || searchMode === 'scholar') return;
     if (menuEl.hidden) {
       showEngineMenu();
     } else {

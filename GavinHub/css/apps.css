@@ -473,6 +473,11 @@ body.page-blur-active .shortcut-label {
   touch-action: none;
 }
 
+body.shortcut-drag-active,
+body.shortcut-drag-active * {
+  cursor: grabbing !important;
+}
+
 .shortcuts-grid.is-reordering .shortcut-item:not(.is-dragging) {
   transition: none;
 }

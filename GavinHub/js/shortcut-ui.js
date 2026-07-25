@@ -407,6 +407,7 @@ function bindDragReorder(grid, refresh, onDockChange) {
     item._floatLeft = rect.left;
     item._floatTop = rect.top;
     item.style.width = `${rect.width}px`;
+    item.style.height = `${rect.height}px`;
     item.style.position = 'fixed';
     item.style.left = `${rect.left}px`;
     item.style.top = `${rect.top}px`;
@@ -416,6 +417,17 @@ function bindDragReorder(grid, refresh, onDockChange) {
     item.style.zIndex = '100';
     item.style.pointerEvents = 'none';
     item.style.margin = '0';
+  }
+
+  function portalDraggedItem(item) {
+    document.body.appendChild(item);
+    document.body.classList.add('shortcut-drag-active');
+  }
+
+  function restoreDraggedItem(item, placeholder) {
+    if (placeholder?.isConnected) placeholder.replaceWith(item);
+    else item.remove();
+    resetItemStyles(item);
   }
 
   function moveFloatedItem(item, clientX, clientY) {
@@ -490,6 +502,7 @@ function bindDragReorder(grid, refresh, onDockChange) {
 
   function cleanupDragStyles() {
     grid.classList.remove('is-reordering');
+    document.body.classList.remove('shortcut-drag-active');
     grid.querySelectorAll('.shortcut-item:not(.shortcut-add)').forEach((el) => {
       el._reorderAnimation?.cancel();
       delete el._reorderAnimation;
@@ -505,6 +518,7 @@ function bindDragReorder(grid, refresh, onDockChange) {
     item.style.left = '';
     item.style.top = '';
     item.style.width = '';
+    item.style.height = '';
     item.style.zIndex = '';
     item.style.pointerEvents = '';
     item.style.margin = '';
@@ -544,15 +558,13 @@ function bindDragReorder(grid, refresh, onDockChange) {
       item.classList.remove('is-dragging');
 
       setTimeout(() => {
-        placeholder.remove();
-        resetItemStyles(item);
+        restoreDraggedItem(item, placeholder);
         cleanupDragStyles();
       }, FLIP_MS);
       return;
     }
 
-    placeholder?.remove();
-    resetItemStyles(item);
+    restoreDraggedItem(item, placeholder);
     cleanupDragStyles();
   }
 
@@ -570,6 +582,7 @@ function bindDragReorder(grid, refresh, onDockChange) {
     session.placeholder = placeholder;
     floatItem(session.item, session.startX, session.startY);
     grid.insertBefore(placeholder, session.item);
+    portalDraggedItem(session.item);
     session.item.classList.add('is-dragging');
     grid.classList.add('is-reordering');
     moveFloatedItem(session.item, clientX, clientY);
@@ -642,8 +655,7 @@ function bindDragReorder(grid, refresh, onDockChange) {
         const shortcut = loadShortcuts().find((item) => item.id === active.id);
         if (shortcut) addShortcutToDock(shortcut, { index: active.dockInsertIndex });
         clearDockDropTarget(active);
-        active.placeholder?.remove();
-        resetItemStyles(active.item);
+        restoreDraggedItem(active.item, active.placeholder);
         cleanupDragStyles();
         refresh();
         onDockChange?.();
@@ -672,8 +684,7 @@ function bindDragReorder(grid, refresh, onDockChange) {
       session = null;
 
       setTimeout(() => {
-        placeholder?.remove();
-        resetItemStyles(item);
+        restoreDraggedItem(item, placeholder);
         cleanupDragStyles();
         moveShortcut(fromId, toIndex);
         refresh();
@@ -732,7 +743,7 @@ function bindDragReorder(grid, refresh, onDockChange) {
     }
   });
 
-  grid.addEventListener('click', (e) => {
+  document.addEventListener('click', (e) => {
     if (!suppressClick) return;
     e.preventDefault();
     e.stopImmediatePropagation();

@@ -263,6 +263,13 @@ export function getSearchUrl(engine, query) {
   return base + encodeURIComponent(query);
 }
 
+export function getAcademicSearchUrl(provider, query) {
+  if (provider === 'arxiv') {
+    return `https://arxiv.org/search/?query=${encodeURIComponent(query)}&searchtype=all&abstracts=show&order=-announced_date_first&size=50`;
+  }
+  return `https://scholar.google.com/scholar?q=${encodeURIComponent(query)}`;
+}
+
 export function getAiProvider(index) {
   const i = Number(index) || 0;
   return AI_PROVIDERS[((i % AI_PROVIDERS.length) + AI_PROVIDERS.length) % AI_PROVIDERS.length];

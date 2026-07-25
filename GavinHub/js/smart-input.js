@@ -1,7 +1,9 @@
 /** 智能输入识别：URL / 计算 / 天气 / DOI / 进制 / 数据量 */
 import { BLOCKING_SMART_IDS } from './keys.js';
+import { getAcademicSearchUrl } from './storage.js';
 
 export { BLOCKING_SMART_IDS };
+export { getAcademicSearchUrl };
 
 const URL_RE = /^https?:\/\/.+/i;
 const DOI_PREFIX_RE = /^doi:\s*(10\.\S+)$/i;
@@ -42,13 +44,6 @@ export function parseAcademicSearch(raw) {
   if (!query) return null;
   const provider = match[1].toLowerCase() === 'arxiv' ? 'arxiv' : 'scholar';
   return { provider, query };
-}
-
-export function getAcademicSearchUrl(provider, query) {
-  if (provider === 'arxiv') {
-    return `https://arxiv.org/search/?query=${encodeURIComponent(query)}&searchtype=all&abstracts=show&order=-announced_date_first&size=50`;
-  }
-  return `https://scholar.google.com/scholar?q=${encodeURIComponent(query)}`;
 }
 
 export function parseWeatherQuery(raw) {

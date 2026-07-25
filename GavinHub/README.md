@@ -69,7 +69,7 @@ GavinHub/
 - 修改 `js/shortcuts.js` 中的 `DEFAULT_SHORTCUTS` 和 `DEFAULT_DOCK` 自定义默认链接
 - 在应用页点击「+」可添加新快捷方式
 - 直接拖动 Dock 图标或应用快捷方式可调整顺序；拖到 Dock 可固定，触屏设备长按后拖动
-- 输入 `arxiv 关键词` 搜索 arXiv，输入 `gs 关键词` 或 `sc 关键词` 搜索 Google Scholar
+- 输入 `arxiv`、`sc` 或 `gs` 后按 Tab 可进入学术搜索模式；也可直接输入 `arxiv 关键词`、`sc 关键词`
 - 点击右上角齿轮可切换搜索引擎与壁纸来源
 
 ## 轻量化设计
