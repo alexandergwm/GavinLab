@@ -380,7 +380,7 @@ body.page-apps-active .header-actions {
 .shortcut-icon--letter {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", sans-serif;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   background:
     linear-gradient(135deg, var(--shortcut-letter-tint, rgba(255, 255, 255, 0.1)), transparent 68%),
     rgba(255, 255, 255, 0.12);
@@ -406,12 +406,12 @@ body.page-apps-active .header-actions {
 
 .shortcut-icon--letter[data-len="2"] .shortcut-icon-letter {
   font-size: 23px;
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
 }
 
 .shortcut-icon--letter[data-len="3"] .shortcut-icon-letter {
   font-size: 18px;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 .shortcut-item:hover .shortcut-icon {
@@ -422,7 +422,7 @@ body.page-apps-active .header-actions {
 .shortcut-label {
   font-size: 12px;
   font-weight: 400;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   color: var(--text-primary);
   text-align: center;
   max-width: 84px;

@@ -4,9 +4,22 @@ const DB_NAME = 'wallpaper-db';
 const STORE_NAME = 'wallpapers';
 const CACHE_STORE = 'wallpaper-cache';
 const ICON_CACHE_STORE = 'icon-cache';
+const libraryObjectUrls = new Map();
+const iconObjectUrls = new Map();
+let dbPromise = null;
+
+window.addEventListener('pagehide', () => {
+  for (const url of libraryObjectUrls.values()) URL.revokeObjectURL(url);
+  libraryObjectUrls.clear();
+  for (const url of iconObjectUrls.values()) URL.revokeObjectURL(url);
+  iconObjectUrls.clear();
+  void dbPromise?.then((db) => db.close()).catch(() => {});
+  dbPromise = null;
+}, { once: true });
 
 function openDb() {
-  return new Promise((resolve, reject) => {
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, 3);
     req.onupgradeneeded = (event) => {
       const db = event.target.result;
@@ -20,9 +33,20 @@ function openDb() {
         db.createObjectStore(ICON_CACHE_STORE, { keyPath: 'iconKey' });
       }
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const db = req.result;
+      db.onversionchange = () => {
+        db.close();
+        dbPromise = null;
+      };
+      resolve(db);
+    };
+    req.onerror = () => {
+      dbPromise = null;
+      reject(req.error);
+    };
   });
+  return dbPromise;
 }
 
 export async function saveWallpaperBlobCache(cacheKey, blob) {
@@ -85,14 +109,26 @@ export async function removeLibraryWallpaper(id) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).delete(id);
-    tx.oncomplete = () => resolve();
+    tx.oncomplete = () => {
+      const url = libraryObjectUrls.get(id);
+      if (url) URL.revokeObjectURL(url);
+      libraryObjectUrls.delete(id);
+      resolve();
+    };
     tx.onerror = () => reject(tx.error);
   });
 }
 
 export function libraryEntryToWallpaper(entry) {
   if (!entry) return null;
-  const url = entry.objectUrl || (entry.blob ? URL.createObjectURL(entry.blob) : entry.url);
+  let url = entry.objectUrl || entry.url;
+  if (!url && entry.blob) {
+    url = libraryObjectUrls.get(entry.id);
+    if (!url) {
+      url = URL.createObjectURL(entry.blob);
+      libraryObjectUrls.set(entry.id, url);
+    }
+  }
   return {
     id: entry.id,
     url,
@@ -167,7 +203,6 @@ export async function downloadWallpaperToLibrary(wallpaper) {
 }
 
 let activeTab = 'favorites';
-let refreshGrid = null;
 
 function createThumb(item, onSelect) {
   const btn = document.createElement('button');
@@ -238,6 +273,8 @@ export function initWallpaperLibrary({ getCurrentWallpaper, applySelectedWallpap
   if (!dialog || !grid) return;
 
   let currentItems = [];
+  let renderGeneration = 0;
+  let libraryActive = false;
 
   const setStatus = (text, isError = false) => {
     if (!statusEl) return;
@@ -254,38 +291,60 @@ export function initWallpaperLibrary({ getCurrentWallpaper, applySelectedWallpap
   };
 
   const renderGrid = async () => {
+    const generation = ++renderGeneration;
+    const tab = activeTab;
+    let nextItems;
+    try {
+      nextItems = await loadGridItems(tab);
+    } catch {
+      if (generation === renderGeneration && libraryActive) {
+        setStatus('图库加载失败，请稍后重试', true);
+      }
+      return;
+    }
+    if (generation !== renderGeneration || !libraryActive) {
+      revokeThumbUrls(nextItems);
+      return;
+    }
     revokeThumbUrls(currentItems);
-    currentItems = await loadGridItems(activeTab);
+    currentItems = nextItems;
     grid.replaceChildren();
 
     if (!currentItems.length) {
       emptyEl.hidden = false;
-      emptyEl.textContent = activeTab === 'favorites' ? '暂无收藏，点击红心收藏当前壁纸' : '暂无已保存壁纸，点击下方保存当前壁纸';
+      emptyEl.textContent = tab === 'favorites' ? '暂无收藏，点击红心收藏当前壁纸' : '暂无已保存壁纸，点击下方保存当前壁纸';
       return;
     }
 
     emptyEl.hidden = true;
     for (const item of currentItems) {
       grid.append(createThumb(item, async (selected) => {
-        await applySelectedWallpaper(selected);
-        closeDialog(dialog);
-        onFavoriteChange?.();
+        try {
+          const payload = selected.origin === 'library'
+            ? libraryEntryToWallpaper(await getLibraryWallpaper(selected.id))
+            : selected;
+          if (!payload) throw new Error('Wallpaper missing');
+          await applySelectedWallpaper(payload);
+          closeDialog(dialog);
+          onFavoriteChange?.();
+        } catch {
+          setStatus('壁纸应用失败，请重试', true);
+        }
       }));
     }
   };
 
   const open = () => {
+    libraryActive = true;
     openDialog(dialog);
-    renderGrid();
+    void renderGrid();
   };
-
-  refreshGrid = renderGrid;
 
   tabs?.forEach((tab) => {
     tab.addEventListener('click', () => {
       activeTab = tab.dataset.wallpaperTab;
       tabs.forEach((el) => el.classList.toggle('active', el === tab));
-      renderGrid();
+      void renderGrid();
     });
   });
 
@@ -303,13 +362,14 @@ export function initWallpaperLibrary({ getCurrentWallpaper, applySelectedWallpap
     }
   });
 
-  dialog.addEventListener('close', () => revokeThumbUrls(currentItems));
+  dialog.addEventListener('close', () => {
+    libraryActive = false;
+    renderGeneration += 1;
+    revokeThumbUrls(currentItems);
+    currentItems = [];
+  });
 
   return { open };
-}
-
-export function refreshWallpaperLibraryGrid() {
-  refreshGrid?.();
 }
 
 // ===== Icon blob cache (for shortcut/dock favicons etc. to avoid repeated remote fetches) =====
@@ -320,7 +380,12 @@ export async function saveIconBlobCache(iconKey, blob) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(ICON_CACHE_STORE, 'readwrite');
     tx.objectStore(ICON_CACHE_STORE).put({ iconKey, blob, savedAt: Date.now() });
-    tx.oncomplete = () => resolve();
+    tx.oncomplete = () => {
+      const url = iconObjectUrls.get(iconKey);
+      if (url) URL.revokeObjectURL(url);
+      iconObjectUrls.delete(iconKey);
+      resolve();
+    };
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -336,9 +401,15 @@ export async function getIconBlobCache(iconKey) {
   });
 }
 
-/** Returns a blob: object URL if cached, else null. Caller should keep the url for revoke if needed (for shortcuts we keep per-session). */
+/** Returns a stable, session-scoped blob URL for a cached icon. */
 export async function getIconObjectUrl(iconKey) {
+  const existing = iconObjectUrls.get(iconKey);
+  if (existing) return existing;
   const blob = await getIconBlobCache(iconKey);
-  if (blob) return URL.createObjectURL(blob);
-  return null;
+  if (!blob) return null;
+  const concurrent = iconObjectUrls.get(iconKey);
+  if (concurrent) return concurrent;
+  const url = URL.createObjectURL(blob);
+  iconObjectUrls.set(iconKey, url);
+  return url;
 }

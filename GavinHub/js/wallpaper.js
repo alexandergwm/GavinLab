@@ -54,11 +54,12 @@ export { isOnlineWallpaperSource };
 
 export const WALLPAPER_SOURCE_LABELS = {
   bing: 'Bing 每日风景',
+  library: '我的图库',
 };
 
 /** 设置 UI 可选壁纸来源（仅 Bing） */
 export const WALLPAPER_SOURCE_ORDER = [
-  'bing',
+  'bing', 'library',
 ];
 
 /** 每周自动轮换的线上壁纸源顺序（目前仅 Bing） */
@@ -89,7 +90,11 @@ const wallpaperEffects = createWallpaperEffects({
   createPreview: createWallpaperAppsPreview,
 });
 
-window.addEventListener('pagehide', wallpaperEffects.dispose, { once: true });
+window.addEventListener('pagehide', () => {
+  wallpaperEffects.dispose();
+  blobUrlCache.forEach((url) => URL.revokeObjectURL(url));
+  blobUrlCache.clear();
+}, { once: true });
 
 let bootThemeAdaptPending = false;
 
@@ -1209,7 +1214,7 @@ export async function applyWallpaperRotation(onSourceChange) {
 
 export function initWallpaperRotation(onRotate, { runImmediately = false } = {}) {
   const rotation = loadWallpaperRotation();
-  if (!runImmediately && (!rotation.interval || rotation.interval === 'manual')) return null;
+  if (!rotation.interval || rotation.interval === 'manual') return null;
   let running = false;
   const tick = async () => {
     if (running || document.hidden) return;

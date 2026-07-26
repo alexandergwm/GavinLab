@@ -18,6 +18,7 @@ const STARTUP_SYNC_BUDGET_MS = 120;
 let wallpaper;
 /** @type {typeof import('./shortcuts.js')} */
 let shortcuts;
+let wallpaperRotationInterval = null;
 
 const settingsApi = {
   getSettings: settingsStore.get,
@@ -27,6 +28,7 @@ const settingsApi = {
   onDataImported: () => {
     location.reload();
   },
+  onWallpaperRotationChange: () => startWallpaperRotation(),
 };
 
 async function openWallpaperLibrary() {
@@ -162,6 +164,27 @@ function updateFavoriteUI() {
   const wp = wallpaper?.getCurrentWallpaper?.();
   const btn = document.getElementById('wallpaper-like');
   btn?.classList.toggle('liked', wp ? isWallpaperFavorited(wp) : false);
+}
+
+async function handleWallpaperRotation(source, meta = {}) {
+  if (!meta.advanced) {
+    await wallpaper?.loadWallpaper?.(source, { force: true });
+  }
+  updateFavoriteUI();
+}
+
+function stopWallpaperRotation() {
+  if (wallpaperRotationInterval) clearInterval(wallpaperRotationInterval);
+  wallpaperRotationInterval = null;
+}
+
+function startWallpaperRotation({ runImmediately = false } = {}) {
+  stopWallpaperRotation();
+  if (!wallpaper || document.hidden) return;
+  wallpaperRotationInterval = wallpaper.initWallpaperRotation(
+    handleWallpaperRotation,
+    { runImmediately },
+  );
 }
 
 function initFavorite() {
@@ -406,28 +429,14 @@ async function initCore() {
       }
       updateFavoriteUI();
     })();
-    let rotationInterval = wallpaper.initWallpaperRotation(async (source, meta = {}) => {
-      if (!meta.advanced) {
-        await wallpaper.loadWallpaper(source, { force: true });
-      }
-      updateFavoriteUI();
-    });
+    startWallpaperRotation();
 
     // 低资源：标签页隐藏时暂停壁纸轮换 tick
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
-        if (rotationInterval) {
-          clearInterval(rotationInterval);
-          rotationInterval = null;
-        }
-      } else if (!rotationInterval) {
-        // 恢复时立即检查一次（函数内部已判断是否 due）
-        rotationInterval = wallpaper.initWallpaperRotation(async (source, meta = {}) => {
-          if (!meta.advanced) {
-            await wallpaper.loadWallpaper(source, { force: true });
-          }
-          updateFavoriteUI();
-        }, { runImmediately: true });
+        stopWallpaperRotation();
+      } else {
+        startWallpaperRotation({ runImmediately: true });
       }
     }, { passive: true });
   }

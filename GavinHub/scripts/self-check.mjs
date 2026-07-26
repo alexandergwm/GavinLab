@@ -116,6 +116,11 @@ assert(settingsUi.includes('export function initSettingsUI'), 'settings-ui.js sh
 
 const wpLib = read('js/wallpaper-library.js');
 assert(wpLib.includes('return { open }'), 'wallpaper-library.js should return { open }');
+assert(wpLib.includes('const iconObjectUrls = new Map()'), 'cached icon object URLs should be session-scoped');
+
+const shortcutUi = read('js/shortcut-ui.js');
+assert(shortcutUi.includes('iconFetchGeneration'), 'shortcut icon requests should reject stale results');
+assert(read('js/shortcuts.js').includes('iconRenderTokens'), 'shortcut icon rendering should reject stale async upgrades');
 
 assert(read('js/calendar.js').includes('export function initCalendarApp'), 'calendar.js should export initCalendarApp');
 assert(!read('js/calendar.js').includes('export function initDateInfo'), 'calendar.js should not export initDateInfo');
@@ -137,6 +142,8 @@ assert(searchSuggest.includes('export async function fetchQueryCompletions'), 's
 assert(searchSuggest.includes("from './util.js'"), 'search-suggest.js should use util.js');
 
 const search = read('js/search.js');
+assert(search.includes("google: 'assets/search-google.svg'"), 'Google search badge should use a local asset');
+assert(search.includes("bing: 'assets/search-bing.svg'"), 'Bing search badge should use a local asset');
 assert(search.includes("from './search-suggest.js'"), 'search.js should import search-suggest.js');
 assert(search.includes("from './search-suggestions-ui.js'"), 'search.js should import search-suggestions-ui.js');
 assert(search.includes("from './search-intelligence.js'"), 'search should load intelligence through a lazy boundary');
@@ -166,6 +173,10 @@ assert(storage.includes("from './keys.js'"), 'storage.js should use keys.js');
 const keys = read('js/keys.js');
 assert(keys.includes('export const KEYS'), 'keys.js should export KEYS');
 assert(keys.includes('export const BLOCKING_SMART_IDS'), 'keys.js should export BLOCKING_SMART_IDS');
+
+const smartInput = read('js/smart-input.js');
+assert(smartInput.includes("from './math-expression.js'"), 'calculator should use the CSP-safe expression parser');
+assert(!smartInput.includes('new Function'), 'extension calculator must not rely on unsafe-eval');
 
 const wp = read('js/wallpaper.js');
 const wpTheme = read('js/wallpaper-theme.js');

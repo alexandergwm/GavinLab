@@ -274,7 +274,7 @@ function renderMonthCell(date, viewMonth, todayKey, importantMap) {
     const doneClass = todo.done ? ' is-done' : '';
     const instanceAttr = todo._instanceDate ? ` data-todo-instance="${todo._instanceDate}"` : '';
     const masterId = todo._masterId ?? todo.id;
-    return `<span class="month-todo-item month-todo-item--${cat.id}${doneClass}" data-todo-id="${masterId}"${instanceAttr} title="${escapeHtml(todo.text)}">${escapeHtml(abbr)}</span>`;
+    return `<span class="month-todo-item month-todo-item--${cat.id}${doneClass}" data-todo-id="${escapeHtml(masterId)}"${instanceAttr} title="${escapeHtml(todo.text)}">${escapeHtml(abbr)}</span>`;
   }).join('');
   const overflowHtml = overflowCount > 0
     ? `<span class="month-todo-overflow">+${overflowCount}</span>`
@@ -341,8 +341,8 @@ function renderSidePanel() {
   const done = goals.filter((g) => g.status === 'done');
 
   const renderGoalItem = (goal) => `
-    <li class="cal-side-item cal-side-item--goal${goal.status === 'done' ? ' is-done' : ''}" data-id="${goal.id}">
-      <button type="button" class="cal-side-goal-check" data-id="${goal.id}" aria-label="${goal.status === 'done' ? '标为进行中' : '标为完成'}">
+    <li class="cal-side-item cal-side-item--goal${goal.status === 'done' ? ' is-done' : ''}" data-id="${escapeHtml(goal.id)}">
+      <button type="button" class="cal-side-goal-check" data-id="${escapeHtml(goal.id)}" aria-label="${goal.status === 'done' ? '标为进行中' : '标为完成'}">
         ${goal.status === 'done' ? '✓' : ''}
       </button>
       <div class="cal-side-item-main">
@@ -353,7 +353,7 @@ function renderSidePanel() {
         </div>
       </div>
       <span class="cal-side-item-badge">${goal.status === 'done' ? '已完成' : getGoalDeadlineLabel(goal.targetDate)}</span>
-      <button type="button" class="cal-side-item-delete" data-id="${goal.id}" aria-label="删除">×</button>
+      <button type="button" class="cal-side-item-delete" data-id="${escapeHtml(goal.id)}" aria-label="删除">×</button>
     </li>
   `;
 

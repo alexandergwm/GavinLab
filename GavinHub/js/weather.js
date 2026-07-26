@@ -41,9 +41,24 @@ let cachedWeather = null;
 let weatherRequest = null;
 let weatherRequestGeneration = 0;
 
+function isValidWeatherData(data) {
+  const current = data?.current;
+  const daily = data?.daily;
+  if (!Number.isFinite(Number(current?.temperature_2m))) return false;
+  if (!Number.isFinite(Number(current?.weather_code))) return false;
+  return Array.isArray(daily?.time)
+    && Array.isArray(daily.weather_code)
+    && Array.isArray(daily.temperature_2m_max)
+    && Array.isArray(daily.temperature_2m_min);
+}
+
 function readWeatherCache() {
   const raw = readJson(WEATHER_CACHE_KEY, null);
   if (!raw?.data || Date.now() - Number(raw.updatedAt || 0) > WEATHER_CACHE_TTL) return null;
+  if (!isValidWeatherData(raw.data)) {
+    try { localStorage.removeItem(WEATHER_CACHE_KEY); } catch { /* ignore */ }
+    return null;
+  }
   return raw.data;
 }
 
@@ -239,12 +254,14 @@ async function fetchForecast(location) {
   const res = await fetchWithTimeout(url, 12000);
   if (!res.ok) throw new Error('Weather fetch failed');
   const data = await res.json();
-  return {
+  const payload = {
     ...data,
     location,
     locationName: formatLocationName(location),
     districtName: formatDistrictName(location),
   };
+  if (!isValidWeatherData(payload)) throw new Error('Invalid weather payload');
+  return payload;
 }
 
 export async function loadWeather({ forceLocation = false } = {}) {
@@ -284,7 +301,9 @@ export function getCachedWeather() {
     cachedWeather = fresh;
     return fresh;
   }
-  return cachedWeather;
+  if (isValidWeatherData(cachedWeather)) return cachedWeather;
+  cachedWeather = null;
+  return null;
 }
 
 export function formatWeatherSummary(data) {

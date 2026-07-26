@@ -28,15 +28,14 @@ const XHS_ICON = 'https://www.xiaohongshu.com/favicon.ico';
 const ARXIV_ICON = 'assets/search-arxiv.png';
 const GOOGLE_SCHOLAR_ICON = 'assets/search-google-scholar.png';
 
-/** 普通搜索引擎 favicon（优先清晰 32px 源，失败时走 gstatic fallback） */
-const SEARCH_ENGINE_SITES = {
-  google: 'https://www.google.com',
-  bing: 'https://www.bing.com',
+/** 首屏标识随扩展打包，避免网络失败时露出破图。 */
+const SEARCH_ENGINE_ICONS = {
+  google: 'assets/search-google.svg',
+  bing: 'assets/search-bing.svg',
 };
 
 function getSearchEngineIcon(engine) {
-  const site = SEARCH_ENGINE_SITES[engine] || SEARCH_ENGINE_SITES.google;
-  return `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodeURIComponent(site)}&size=32`;
+  return SEARCH_ENGINE_ICONS[engine] || SEARCH_ENGINE_ICONS.google;
 }
 
 function getGithubUrl(query) {

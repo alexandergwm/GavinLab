@@ -1,6 +1,7 @@
 /** 智能输入识别：URL / 计算 / 天气 / DOI / 进制 / 数据量 */
 import { BLOCKING_SMART_IDS } from './keys.js';
 import { getAcademicSearchUrl } from './storage.js';
+import { evaluateMathExpression } from './math-expression.js';
 
 export { BLOCKING_SMART_IDS };
 export { getAcademicSearchUrl };
@@ -64,12 +65,7 @@ export function evaluateCalc(raw) {
   if (/^[+-]?\d+(\.\d*)?$/.test(expr)) return null;
 
   try {
-    const normalized = expr
-      .replace(/(\d+(?:\.\d+)?)\s*%/g, '($1/100)')
-      .replace(/\^/g, '**'); /* ^ 在 JS 是异或，这里按幂运算 */
-    // eslint-disable-next-line no-new-func
-    const fn = new Function(`"use strict"; return (${normalized});`);
-    const result = fn();
+    const result = evaluateMathExpression(expr);
     if (typeof result !== 'number' || !Number.isFinite(result)) return null;
     return result;
   } catch {

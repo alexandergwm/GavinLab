@@ -28,6 +28,8 @@ const INCLUDE = [
   'css/weather.css',
   'assets/default-wallpaper.jpg',
   'assets/search-arxiv.png',
+  'assets/search-google.svg',
+  'assets/search-bing.svg',
   'assets/search-google-scholar.png',
 ];
 
@@ -83,7 +85,12 @@ function verifyPackage(outRoot) {
   if (!existsSync(join(outRoot, 'index.html'))) {
     throw new Error('missing index.html');
   }
-  for (const asset of ['assets/search-arxiv.png', 'assets/search-google-scholar.png']) {
+  for (const asset of [
+    'assets/search-arxiv.png',
+    'assets/search-google.svg',
+    'assets/search-bing.svg',
+    'assets/search-google-scholar.png',
+  ]) {
     if (!existsSync(join(outRoot, asset))) throw new Error(`missing search icon: ${asset}`);
   }
   if (!manifest.background?.service_worker) {

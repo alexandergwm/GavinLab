@@ -167,7 +167,7 @@ const KNOWN_WALLPAPER_SOURCES = new Set([
 ]);
 
 const SELECTABLE_WALLPAPER_SOURCES = new Set([
-  'bing',
+  'bing', 'library',
 ]);
 
 export const WALLPAPER_ROTATION_LABELS = {

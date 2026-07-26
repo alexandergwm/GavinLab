@@ -225,6 +225,7 @@ function syncWallpaperRotationHint() {
  *   setSettings: (partial: object) => object,
  *   updateFavoriteUI: () => void,
  *   openWallpaperLibrary: () => Promise<void>,
+ *   onWallpaperRotationChange?: () => void,
  * }} api
  */
 export function initSettingsUI(api) {
@@ -278,21 +279,23 @@ export function initSettingsUI(api) {
   wallpaperSelect?.addEventListener('change', async () => {
     const settings = api.getSettings();
     const prevSource = settings.wallpaperSource;
-    api.setSettings({ wallpaperSource: wallpaperSelect.value });
-    saveWallpaperRotation({ lastChange: Date.now() });
-    if (wallpaperSelect.value !== prevSource) {
-      if (wallpaperSelect.value === 'library') {
-        await api.openWallpaperLibrary();
-      } else {
-        await loadWallpaper(wallpaperSelect.value, { force: true });
-      }
-      api.updateFavoriteUI();
+    const nextSource = wallpaperSelect.value;
+    if (nextSource === prevSource) return;
+    if (nextSource === 'library') {
+      wallpaperSelect.value = prevSource;
+      await api.openWallpaperLibrary();
+      return;
     }
+    api.setSettings({ wallpaperSource: nextSource });
+    saveWallpaperRotation({ lastChange: Date.now() });
+    await loadWallpaper(nextSource, { force: true });
+    api.updateFavoriteUI();
   });
 
   rotationSelect?.addEventListener('change', () => {
     api.setSettings({ wallpaperRotation: rotationSelect.value });
     saveWallpaperRotation({ interval: rotationSelect.value, lastChange: Date.now() });
+    api.onWallpaperRotationChange?.();
     syncWallpaperRotationHint();
     if (rotationSelect.value === 'weekly') {
       const source = getInitialWallpaperSource();

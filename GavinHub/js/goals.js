@@ -12,16 +12,33 @@ function matchGoalId(a, b) {
   return String(a) === String(b);
 }
 
-function normalizeGoal(item) {
+function validDateKey(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return '';
+  const date = parseDateKey(value);
+  return Number.isNaN(date.getTime()) || toDateKey(date) !== value ? '' : value;
+}
+
+function resetNextId(items) {
+  const maxId = items.reduce((max, item) => {
+    const id = Number(item.id);
+    return Number.isSafeInteger(id) && id > max ? id : max;
+  }, 0);
+  nextId = maxId + 1;
+}
+
+function normalizeGoal(item = {}) {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
   const progress = Math.max(0, Math.min(100, Number(item.progress) || 0));
+  const suppliedId = item.id == null ? '' : String(item.id).trim().slice(0, 128);
+  const createdAt = Number(item.createdAt);
   return {
-    id: item.id ?? nextId++,
-    title: String(item.title || item.name || '').trim(),
-    targetDate: item.targetDate || item.date || '',
+    id: suppliedId || nextId++,
+    title: String(item.title || item.name || '').trim().slice(0, 60),
+    targetDate: validDateKey(item.targetDate || item.date),
     progress,
     status: item.status === 'done' || progress >= 100 ? 'done' : 'active',
-    notes: String(item.notes || '').trim(),
-    createdAt: item.createdAt || Date.now(),
+    notes: String(item.notes || '').trim().slice(0, 5000),
+    createdAt: Number.isFinite(createdAt) && createdAt > 0 ? createdAt : Date.now(),
   };
 }
 
@@ -35,7 +52,8 @@ function migrateFromCountdownsList(legacy) {
       progress: 0,
       status: 'active',
       notes: item.kind === 'anniversary' ? '由纪念日迁移' : '由倒计时迁移',
-    }));
+    }))
+    .filter(Boolean);
 }
 
 function migrateFromCountdowns() {
@@ -76,7 +94,7 @@ export function ensureGoalsFromLegacyCountdowns(countdowns = null) {
   markMigrated();
   if (!migrated.length) return Array.isArray(existing) ? existing : [];
   saveAll(migrated);
-  nextId = migrated.reduce((max, item) => Math.max(max, item.id), 0) + 1;
+  resetNextId(migrated);
   return migrated;
 }
 
@@ -85,17 +103,17 @@ export function loadGoals() {
   let items;
 
   if (Array.isArray(raw) && raw.length > 0) {
-    items = raw.map(normalizeGoal).filter((g) => g.title);
+    items = raw.map(normalizeGoal).filter((g) => g?.title);
     markMigrated();
   } else if (!hasMigrated()) {
     items = migrateFromCountdowns();
     markMigrated();
     saveAll(items);
   } else {
-    items = Array.isArray(raw) ? raw.map(normalizeGoal).filter((g) => g.title) : [];
+    items = Array.isArray(raw) ? raw.map(normalizeGoal).filter((g) => g?.title) : [];
   }
 
-  nextId = items.reduce((max, item) => Math.max(max, item.id), 0) + 1;
+  resetNextId(items);
   return items;
 }
 
@@ -108,7 +126,7 @@ export function addGoal({ title, targetDate = '', progress = 0, notes = '' }) {
     progress,
     notes,
   });
-  if (!goal.title) return null;
+  if (!goal?.title) return null;
   items.unshift(goal);
   saveAll(items);
   return goal;

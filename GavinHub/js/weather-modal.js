@@ -90,7 +90,7 @@ export function renderWeatherModal(data) {
       <div class="weather-current-main">
         <div class="weather-current-icon">${weatherIconSvg(currentInfo.icon, 56)}</div>
         <div class="weather-current-brief">
-          <p class="weather-location">${formatLocationName(data.location)}</p>
+          <p class="weather-location">${escapeHtml(formatLocationName(data.location))}</p>
           <p class="weather-location-sub">${sourceHint}</p>
           <p class="weather-temp-large">${Math.round(current.temperature_2m)}°</p>
         </div>

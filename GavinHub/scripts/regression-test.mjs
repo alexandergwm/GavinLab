@@ -252,10 +252,12 @@ try {
     `a delayed wallpaper refresh must not overwrite the latest user selection: ${wallpaperRace}`,
   );
   const lifecycleSafety = await page.evaluate(async () => {
-    const [{ createFeatureRegistry }, dialogs, { createWallpaperEffects }] = await Promise.all([
+    const [{ createFeatureRegistry }, dialogs, { createWallpaperEffects }, lifecycle, wallpaperLibrary] = await Promise.all([
       import('./js/feature-registry.js'),
       import('./js/dialog-ui.js'),
       import('./js/wallpaper-effects.js'),
+      import('./js/lifecycle.js'),
+      import('./js/wallpaper-library.js'),
     ]);
     let attempts = 0;
     const registry = createFeatureRegistry({
@@ -298,6 +300,34 @@ try {
       layer.style.backgroundImage = previousBackgrounds[index];
     });
 
+    const enqueue = lifecycle.createAsyncQueue();
+    let activeTasks = 0;
+    let maxActiveTasks = 0;
+    const queueOrder = [];
+    await Promise.all([1, 2, 3].map((id) => enqueue(async () => {
+      activeTasks += 1;
+      maxActiveTasks = Math.max(maxActiveTasks, activeTasks);
+      await new Promise((resolve) => setTimeout(resolve, 8 - id));
+      queueOrder.push(id);
+      activeTasks -= 1;
+    })));
+    const libraryEntry = {
+      id: 'library-url-lifecycle-test',
+      blob: new Blob(['wallpaper'], { type: 'image/jpeg' }),
+      type: 'image',
+    };
+    const firstLibraryUrl = wallpaperLibrary.libraryEntryToWallpaper(libraryEntry).url;
+    const secondLibraryUrl = wallpaperLibrary.libraryEntryToWallpaper(libraryEntry).url;
+    const iconKey = 'https://example.com/lifecycle-icon.png';
+    await wallpaperLibrary.saveIconBlobCache(
+      iconKey,
+      new Blob(['icon'], { type: 'image/png' }),
+    );
+    const [firstIconUrl, secondIconUrl] = await Promise.all([
+      wallpaperLibrary.getIconObjectUrl(iconKey),
+      wallpaperLibrary.getIconObjectUrl(iconKey),
+    ]);
+
     return {
       attempts,
       retryValue: retryValue.value,
@@ -305,6 +335,10 @@ try {
       cancelledDialogOpen: dialog.open,
       stalePreviewDisposals,
       stalePreviewApplied,
+      maxActiveTasks,
+      queueOrder,
+      stableLibraryUrl: firstLibraryUrl === secondLibraryUrl && firstLibraryUrl.startsWith('blob:'),
+      stableIconUrl: firstIconUrl === secondIconUrl && firstIconUrl.startsWith('blob:'),
     };
   });
   assert(
@@ -319,6 +353,14 @@ try {
     lifecycleSafety.stalePreviewDisposals === 1 && !lifecycleSafety.stalePreviewApplied,
     `disposed wallpaper effects must reject late previews: ${JSON.stringify(lifecycleSafety)}`,
   );
+  assert(
+    lifecycleSafety.maxActiveTasks === 1 && lifecycleSafety.queueOrder.join(',') === '1,2,3',
+    `serialized async work must preserve mutation order: ${JSON.stringify(lifecycleSafety)}`,
+  );
+  assert(lifecycleSafety.stableLibraryUrl,
+    'the selected library wallpaper should not reuse a disposable thumbnail URL');
+  assert(lifecycleSafety.stableIconUrl,
+    'cached shortcut icons should reuse one session-scoped object URL');
   const wallpaperThemes = await page.evaluate(async () => {
     const { analyzeWallpaperTheme } = await import('./js/wallpaper-theme.js');
     const makeWallpaper = (paint) => {
@@ -430,6 +472,8 @@ try {
     const previousShortcuts = localStorage.getItem(shortcutsKey);
     const previousWeather = localStorage.getItem(weatherDataKey);
     const previousLocation = localStorage.getItem(weatherLocKey);
+    const previousTodos = localStorage.getItem('startpage-todos');
+    const previousGoals = localStorage.getItem('startpage-goals');
     const originalFetch = window.fetch;
 
     try {
@@ -441,6 +485,28 @@ try {
       const sanitized = shortcuts.loadShortcuts();
       const persisted = JSON.parse(localStorage.getItem(shortcutsKey) || '[]');
 
+      localStorage.setItem('startpage-todos', JSON.stringify([
+        null,
+        { id: 'missing-date', text: 'invalid' },
+        { id: 'safe-todo', text: 'kept', startDate: '2026-07-26', endDate: 'invalid' },
+      ]));
+      localStorage.setItem('startpage-goals', JSON.stringify([
+        null,
+        { id: 'external-id', title: 'kept goal', targetDate: 'invalid', progress: 'oops' },
+      ]));
+      const [{ loadTodos }, { loadGoals }] = await Promise.all([
+        import('./js/todos.js'),
+        import('./js/goals.js'),
+      ]);
+      const sanitizedTodos = loadTodos();
+      const sanitizedGoals = loadGoals();
+
+      localStorage.setItem(weatherDataKey, JSON.stringify({
+        updatedAt: Date.now(),
+        data: { current: null, daily: null },
+      }));
+      const weather = await import('./js/weather.js');
+      const invalidWeatherCacheRejected = weather.getCachedWeather() == null;
       localStorage.removeItem(weatherDataKey);
       localStorage.removeItem(weatherLocKey);
       const requests = [];
@@ -459,12 +525,16 @@ try {
           return new Response(JSON.stringify({
             current: { weather_code: 0, temperature_2m: 25 },
             hourly: { time: [] },
-            daily: { time: [] },
+            daily: {
+              time: [],
+              weather_code: [],
+              temperature_2m_max: [],
+              temperature_2m_min: [],
+            },
           }), { status: 200, headers: { 'content-type': 'application/json' } });
         }
         throw new Error(`unexpected request: ${requestUrl}`);
       };
-      const weather = await import('./js/weather.js');
       const [firstWeather, secondWeather] = await Promise.all([
         weather.loadWeather(),
         weather.loadWeather(),
@@ -474,8 +544,13 @@ try {
         shortcutIds: sanitized.map((item) => item.id),
         validUrl: sanitized[0]?.url,
         persistedIds: persisted.map((item) => item.id),
+        todoIds: sanitizedTodos.map((item) => item.id),
+        todoEndDate: sanitizedTodos[0]?.endDate,
+        goalIds: sanitizedGoals.map((item) => item.id),
+        goalTargetDate: sanitizedGoals[0]?.targetDate,
         weatherRequests: requests.length,
         weatherSharedResult: firstWeather === secondWeather,
+        invalidWeatherCacheRejected,
       };
     } finally {
       window.fetch = originalFetch;
@@ -485,15 +560,52 @@ try {
       else localStorage.setItem(weatherDataKey, previousWeather);
       if (previousLocation == null) localStorage.removeItem(weatherLocKey);
       else localStorage.setItem(weatherLocKey, previousLocation);
+      if (previousTodos == null) localStorage.removeItem('startpage-todos');
+      else localStorage.setItem('startpage-todos', previousTodos);
+      if (previousGoals == null) localStorage.removeItem('startpage-goals');
+      else localStorage.setItem('startpage-goals', previousGoals);
     }
   });
   assert(
     dataBoundarySafety.shortcutIds.join(',') === 'valid'
       && dataBoundarySafety.validUrl === 'https://example.com/path'
       && dataBoundarySafety.persistedIds.join(',') === 'valid'
+      && dataBoundarySafety.todoIds.join(',') === 'safe-todo'
+      && dataBoundarySafety.todoEndDate === '2026-07-26'
+      && dataBoundarySafety.goalIds.join(',') === 'external-id'
+      && dataBoundarySafety.goalTargetDate === ''
       && dataBoundarySafety.weatherRequests === 2
-      && dataBoundarySafety.weatherSharedResult,
+      && dataBoundarySafety.weatherSharedResult
+      && dataBoundarySafety.invalidWeatherCacheRejected,
     `import boundaries and weather requests must be deterministic: ${JSON.stringify(dataBoundarySafety)}`,
+  );
+
+  const todoPersistenceRetry = await page.evaluate(async () => {
+    const { createTodoStore } = await import('./js/todo-store.js');
+    const key = 'gavinhub-todo-retry-test';
+    const originalSetItem = Storage.prototype.setItem;
+    const store = createTodoStore({
+      key,
+      migrate: (raw) => (Array.isArray(raw) ? raw : []),
+    });
+    try {
+      Storage.prototype.setItem = function setItem(storageKey, value) {
+        if (storageKey === key) throw new DOMException('quota test', 'QuotaExceededError');
+        return originalSetItem.call(this, storageKey, value);
+      };
+      store.set([{ id: 1, text: 'retry me' }]);
+      await Promise.resolve();
+    } finally {
+      Storage.prototype.setItem = originalSetItem;
+    }
+    const retried = store.flush();
+    const persisted = JSON.parse(localStorage.getItem(key) || '[]');
+    localStorage.removeItem(key);
+    return { retried, persistedText: persisted[0]?.text };
+  });
+  assert(
+    todoPersistenceRetry.retried && todoPersistenceRetry.persistedText === 'retry me',
+    `failed todo persistence must remain retryable: ${JSON.stringify(todoPersistenceRetry)}`,
   );
 
   const syncSafety = await page.evaluate(async () => {
@@ -550,6 +662,15 @@ try {
       revisions: { 'startpage-todos': 0 },
       'startpage-todos': null,
     }, remote);
+    const previousSettings = localStorage.getItem('startpage-settings');
+    storage.saveSettings({ wallpaperSource: 'library', wallpaperId: 'library-persist-test' });
+    const librarySource = storage.loadSettings().wallpaperSource;
+    storage.saveSettings({ wallpaperRotation: 'manual' });
+    const wallpaper = await import('./js/wallpaper.js');
+    const manualRotationTimer = wallpaper.initWallpaperRotation(() => {}, { runImmediately: true });
+    if (manualRotationTimer) clearInterval(manualRotationTimer);
+    if (previousSettings == null) localStorage.removeItem('startpage-settings');
+    else localStorage.setItem('startpage-settings', previousSettings);
     return {
       mutationAt,
       savedToken,
@@ -561,6 +682,8 @@ try {
       periodicApplied,
       arxivUrl: arxiv[0]?.url,
       scholarUrl: scholar[0]?.url,
+      librarySource,
+      manualRotationStayedStopped: manualRotationTimer == null,
     };
   });
   assert(syncSafety.mutationAt > 100, 'local sync timestamp should advance after a synced data change');
@@ -573,7 +696,9 @@ try {
       && syncSafety.periodicRuns >= 2
       && syncSafety.periodicApplied === 1
       && syncSafety.arxivUrl?.startsWith('https://arxiv.org/search/')
-      && syncSafety.scholarUrl?.startsWith('https://scholar.google.com/scholar'),
+      && syncSafety.scholarUrl?.startsWith('https://scholar.google.com/scholar')
+      && syncSafety.librarySource === 'library'
+      && syncSafety.manualRotationStayedStopped,
     `sync should merge each dataset independently: ${JSON.stringify(syncSafety)}`,
   );
 
@@ -831,8 +956,13 @@ try {
   const githubField = await page.evaluate(() => ({
     hidden: document.getElementById('github-gist-field')?.hidden,
     readOnly: document.getElementById('github-sync-gist-id')?.readOnly,
+    wallpaperSources: [...document.getElementById('wallpaper-source')?.options || []]
+      .map((option) => option.value),
   }));
-  assert(githubField.hidden === false && githubField.readOnly === false,
+  assert(
+    githubField.hidden === false
+      && githubField.readOnly === false
+      && githubField.wallpaperSources.includes('library'),
     `Gist ID must be editable on a second computer: ${JSON.stringify(githubField)}`);
   await page.locator('#settings-dialog .settings-actions .modal-close').click();
   await page.waitForFunction(() => !document.getElementById('settings-dialog')?.open);

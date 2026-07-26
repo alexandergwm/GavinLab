@@ -6,6 +6,7 @@ import { KEYS } from './keys.js';
 
 const SHORTCUTS_KEY = KEYS.shortcuts;
 const DOCK_KEY = KEYS.dock;
+const iconRenderTokens = new WeakMap();
 
 function svgDataUrl(svg) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
@@ -615,6 +616,9 @@ function renderLetterAvatar(container, item) {
 
 export function renderIconInto(container, item, pageUrl = item.url, options = {}) {
   const { eager = false } = options;
+  const renderToken = {};
+  iconRenderTokens.set(container, renderToken);
+  const isCurrentRender = () => iconRenderTokens.get(container) === renderToken;
   container.innerHTML = '';
   container.classList.remove(
     'shortcut-icon--letter',
@@ -633,21 +637,25 @@ export function renderIconInto(container, item, pageUrl = item.url, options = {}
     if (eager) {
       prepareImageIconContainer(container);
       const img = createIconImage();
-      const toLetter = () => renderLetterAvatar(container, {
-        ...item,
-        letter: item.letter || deriveLetterLabel(item.name, item.url || pageUrl),
-        color: item.color || deriveLetterColor(letterColorSeed(item.name, item.url || pageUrl)),
-      });
+      const toLetter = () => {
+        if (!isCurrentRender()) return;
+        renderLetterAvatar(container, {
+          ...item,
+          letter: item.letter || deriveLetterLabel(item.name, item.url || pageUrl),
+          color: item.color || deriveLetterColor(letterColorSeed(item.name, item.url || pageUrl)),
+        });
+      };
       bindIconWithFallback(img, iconSrc, toLetter, () => {
+        if (!isCurrentRender()) return;
         classifyIconImage(container, img, iconSrc);
-        ensureIconCached(iconSrc);
+        void ensureIconCached(iconSrc);
       });
       container.appendChild(img);
 
       void (async () => {
         try {
           const cachedUrl = await getIconObjectUrl(iconSrc);
-          if (cachedUrl && img.isConnected) img.src = cachedUrl;
+          if (cachedUrl && img.isConnected && isCurrentRender()) img.src = cachedUrl;
         } catch { /* ignore */ }
       })();
       return;
@@ -660,12 +668,15 @@ export function renderIconInto(container, item, pageUrl = item.url, options = {}
       let usedCached = false;
       try {
         const cachedUrl = await getIconObjectUrl(iconSrc);
+        if (!isCurrentRender()) return;
         if (cachedUrl) {
           usedCached = true;
           prepareImageIconContainer(container);
           const img = createIconImage({ lazy: true });
           img.src = cachedUrl;
-          const finish = () => classifyIconImage(container, img, iconSrc);
+          const finish = () => {
+            if (isCurrentRender()) classifyIconImage(container, img, iconSrc);
+          };
           img.addEventListener('load', finish, { once: true });
           if (img.complete) finish();
           container.appendChild(img);
@@ -677,15 +688,20 @@ export function renderIconInto(container, item, pageUrl = item.url, options = {}
 
       // First time for this icon (or no cache): load remote, on success cache the blob for future.
       // Use same bind logic which will replace the letter content.
-      const toLetter = () => renderLetterAvatar(container, {
-        ...item,
-        letter: item.letter || deriveLetterLabel(item.name, item.url || pageUrl),
-        color: item.color || deriveLetterColor(letterColorSeed(item.name, item.url || pageUrl)),
-      });
+      if (!isCurrentRender()) return;
+      const toLetter = () => {
+        if (!isCurrentRender()) return;
+        renderLetterAvatar(container, {
+          ...item,
+          letter: item.letter || deriveLetterLabel(item.name, item.url || pageUrl),
+          color: item.color || deriveLetterColor(letterColorSeed(item.name, item.url || pageUrl)),
+        });
+      };
       const img = createIconImage({ lazy: true });
       bindIconWithFallback(img, iconSrc, toLetter, () => {
+        if (!isCurrentRender()) return;
         classifyIconImage(container, img, iconSrc);
-        ensureIconCached(iconSrc);
+        void ensureIconCached(iconSrc);
       });
       prepareImageIconContainer(container);
       container.appendChild(img);

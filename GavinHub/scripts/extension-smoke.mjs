@@ -60,6 +60,14 @@ try {
     null,
     { timeout: 8000 },
   );
+  const calculatorResults = await indexPage.evaluate(async () => {
+    const { evaluateCalc } = await import('./js/smart-input.js');
+    return ['1+2*3', '50%*200', '-2^2', '2^-2', '1/0']
+      .map((expression) => evaluateCalc(expression));
+  });
+  if (JSON.stringify(calculatorResults) !== JSON.stringify([7, 100, -4, 0.25, null])) {
+    throw new Error(`extension calculator failed under MV3 CSP: ${JSON.stringify(calculatorResults)}`);
+  }
   const credentialMigration = await indexPage.evaluate(async () => {
     await chrome.storage.local.remove('gavinhubCredentials');
     localStorage.setItem('startpage-github-token', 'ghp_extension_migration_test');

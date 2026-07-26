@@ -18,6 +18,7 @@ import { closeDialog as closeModal, openDialog as openModal } from './dialog-ui.
 let activeShortcutId = null;
 let iconManuallySet = false;
 let fetchTimer = null;
+let iconFetchGeneration = 0;
 /** @type {(() => void) | null} */
 let shortcutsUiRefresh = null;
 
@@ -86,7 +87,12 @@ async function autoFetchIcon(force = false) {
   const { source } = getEls();
   if (source) source.textContent = '获取中…';
 
+  const generation = ++iconFetchGeneration;
   const result = await fetchIconFromWeb(rawUrl);
+  if (generation !== iconFetchGeneration || url?.value.trim() !== rawUrl) {
+    return { type: 'stale' };
+  }
+
   const displayName = name?.value.trim() || '';
   const existing = getShortcutById(getEls().id?.value);
   const letterColor = existing?.color || deriveLetterColor(letterColorSeed(displayName, rawUrl));
@@ -110,15 +116,25 @@ async function autoFetchIcon(force = false) {
   return result;
 }
 
-function scheduleAutoFetch() {
+function cancelIconFetch() {
   clearTimeout(fetchTimer);
-  fetchTimer = setTimeout(() => autoFetchIcon(), 400);
+  fetchTimer = null;
+  iconFetchGeneration += 1;
+}
+
+function scheduleAutoFetch() {
+  cancelIconFetch();
+  fetchTimer = setTimeout(() => {
+    fetchTimer = null;
+    void autoFetchIcon();
+  }, 400);
 }
 
 function openDialog(mode, shortcut = null) {
   const { dialog, title, id, url, name, iconUrl } = getEls();
   if (!dialog) return;
 
+  cancelIconFetch();
   iconManuallySet = false;
   activeShortcutId = shortcut?.id || null;
 
@@ -136,7 +152,7 @@ function openDialog(mode, shortcut = null) {
     : letterPreviewProps(shortcut?.name || '', shortcut?.color, shortcut?.url));
 
   openModal(dialog);
-  if (!shortcut?.icon && url?.value) autoFetchIcon(true);
+  if (!shortcut?.icon && url?.value) void autoFetchIcon(true);
   else if (shortcut) {
     renderPreview(shortcut.icon
       ? { icon: shortcut.icon, name: shortcut.name, color: shortcut.color }
@@ -147,6 +163,7 @@ function openDialog(mode, shortcut = null) {
 }
 
 function closeShortcutDialog() {
+  cancelIconFetch();
   closeModal(getEls().dialog);
 }
 
@@ -189,6 +206,7 @@ function bindDialog(refresh, onDockChange) {
 
   els.form.addEventListener('submit', async (e) => {
     e.preventDefault();
+    cancelIconFetch();
 
     const name = els.name?.value.trim();
     const url = normalizeUrl(els.url?.value);
@@ -217,7 +235,10 @@ function bindDialog(refresh, onDockChange) {
   });
 
   els.url?.addEventListener('input', scheduleAutoFetch);
-  els.url?.addEventListener('blur', () => autoFetchIcon());
+  els.url?.addEventListener('blur', () => {
+    cancelIconFetch();
+    void autoFetchIcon();
+  });
 
   els.name?.addEventListener('input', () => {
     const icon = els.iconUrl?.value.trim();
@@ -228,6 +249,7 @@ function bindDialog(refresh, onDockChange) {
   });
 
   els.iconUrl?.addEventListener('input', () => {
+    cancelIconFetch();
     const val = els.iconUrl.value.trim();
     iconManuallySet = !!val;
     if (val) {
@@ -241,11 +263,13 @@ function bindDialog(refresh, onDockChange) {
   });
 
   els.fetchBtn?.addEventListener('click', async () => {
+    cancelIconFetch();
     iconManuallySet = false;
     if (els.iconUrl) els.iconUrl.value = '';
     await autoFetchIcon(true);
   });
 
+  els.dialog?.addEventListener('close', cancelIconFetch);
 }
 
 function bindMenu(refresh, onDockChange) {

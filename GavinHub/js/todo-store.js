@@ -41,9 +41,9 @@ export function createTodoStore({ key, migrate }) {
 
   const flush = () => {
     if (!persistPending || !state) return false;
-    persistPending = false;
     const raw = JSON.stringify(state);
-    writeJson(key, state);
+    if (!writeJson(key, state)) return false;
+    persistPending = false;
     rawSnapshot = raw;
     return true;
   };

@@ -4,6 +4,7 @@
  */
 import { KEYS } from './keys.js';
 import { loadGithubToken, saveGithubToken } from './credential-store.js';
+import { createAsyncQueue } from './lifecycle.js';
 import {
   exportSyncBundle,
   hasNewerSyncData,
@@ -13,6 +14,7 @@ import {
 
 const GIST_FILENAME = 'gavinhub-sync.json';
 const GITHUB_API = 'https://api.github.com';
+const runGithubSyncExclusive = createAsyncQueue();
 
 export async function loadGithubSyncConfig() {
   return {
@@ -117,7 +119,7 @@ async function pushToGithub(config) {
 }
 
 /** 按数据集版本合并，避免一端改待办时覆盖另一端刚改的快捷方式。 */
-export async function syncWithGithub(config) {
+async function syncWithGithubTask(config) {
   const { token, gistId } = readConfigFromForm(config || await loadGithubSyncConfig());
 
   if (!gistId) {
@@ -147,6 +149,10 @@ export async function syncWithGithub(config) {
   if (remoteNewer) return { action: 'downloaded', reloaded: true };
   if (localNewer) return { action: 'uploaded', reloaded: false };
   return { action: 'up-to-date', reloaded: false };
+}
+
+export function syncWithGithub(config) {
+  return runGithubSyncExclusive(() => syncWithGithubTask(config));
 }
 
 export function formatGithubSyncResult(result) {

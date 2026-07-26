@@ -4,6 +4,7 @@
  */
 import { KEYS } from './keys.js';
 import { ensureGoalsFromLegacyCountdowns } from './goals.js';
+import { createAsyncQueue } from './lifecycle.js';
 
 const SYNC_VERSION = 2;
 const LEGACY_SYNC_VERSION = 1;
@@ -30,6 +31,7 @@ let applyingRemote = false;
 let pushTimer = null;
 let stopPeriodicSync = null;
 const localPushVersions = new Set();
+const runSyncExclusive = createAsyncQueue();
 
 function hasChromeSync() {
   return typeof chrome !== 'undefined' && chrome.storage?.sync;
@@ -320,7 +322,7 @@ async function commitPayloadToCloud(payload) {
   window.setTimeout(() => localPushVersions.delete(version), 5000);
 }
 
-export async function pullSyncOnStartup() {
+async function pullSyncOnStartupTask() {
   if (!hasChromeSync()) return { applied: false, reason: 'unavailable' };
   try {
     const remote = normalizeSyncPayload(await storageGetSync());
@@ -353,7 +355,11 @@ export async function pullSyncOnStartup() {
   }
 }
 
-async function pushToSync({ force = false } = {}) {
+export function pullSyncOnStartup() {
+  return runSyncExclusive(pullSyncOnStartupTask);
+}
+
+async function pushToSyncTask({ force = false } = {}) {
   if (!hasChromeSync() || applyingRemote) return false;
   let pushVersion = 0;
   try {
@@ -378,6 +384,10 @@ async function pushToSync({ force = false } = {}) {
   }
 }
 
+function pushToSync(options) {
+  return runSyncExclusive(() => pushToSyncTask(options));
+}
+
 export function scheduleSyncPush() {
   if (applyingRemote || !hasChromeSync()) return;
   clearTimeout(pushTimer);
@@ -400,7 +410,7 @@ export function startPeriodicSync({
 
   const schedule = (delay = intervalMs) => {
     window.clearTimeout(timer);
-    if (!stopped) timer = window.setTimeout(run, Math.max(20, delay));
+    if (!stopped && !document.hidden) timer = window.setTimeout(run, Math.max(20, delay));
   };
 
   const run = async () => {
@@ -424,7 +434,11 @@ export function startPeriodicSync({
   };
 
   const onVisibilityChange = () => {
-    if (document.hidden || running) return;
+    if (document.hidden) {
+      window.clearTimeout(timer);
+      return;
+    }
+    if (running) return;
     const elapsed = Date.now() - lastRunAt;
     if (elapsed >= intervalMs) void run();
     else schedule(intervalMs - elapsed);
@@ -453,7 +467,7 @@ function handleSyncStorageChange(changes, area) {
   if (area !== 'sync' || !changes[SYNC_ROOT_KEY]) return;
   const changedAt = Number(changes[SYNC_ROOT_KEY].newValue?.updatedAt) || 0;
   if (changedAt && localPushVersions.has(changedAt)) return;
-  void (async () => {
+  void runSyncExclusive(async () => {
     try {
       const remote = normalizeSyncPayload(await storageGetSync());
       const local = buildSyncPayload();
@@ -465,7 +479,7 @@ function handleSyncStorageChange(changes, area) {
     } catch (error) {
       console.warn('[GavinHub] sync apply failed', error);
     }
-  })();
+  });
 }
 
 export function initSyncListener(onApplied) {

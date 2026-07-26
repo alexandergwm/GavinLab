@@ -43,26 +43,63 @@ function resolveCategory(item, index) {
   return TODO_CATEGORIES[index % TODO_CATEGORIES.length].id;
 }
 
+function validDateKey(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return '';
+  const date = parseDateKey(value);
+  return Number.isNaN(date.getTime()) || toDateKey(date) !== value ? '' : value;
+}
+
 function normalizeItem(item, index) {
-  const { color: _color, ...rest } = item;
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+  const {
+    color: _color,
+    recurrence: _recurrence,
+    weekdays: _weekdays,
+    ...rest
+  } = item;
+  const text = String(item.text || '').trim().slice(0, 120);
+  const startDate = validDateKey(item.startDate);
+  if (!text || !startDate) return null;
+  const suppliedId = item.id == null ? '' : String(item.id).trim().slice(0, 128);
+  const endDate = validDateKey(item.endDate);
+  const recurrence = item.recurrence === 'daily' || item.recurrence === 'weekly'
+    ? item.recurrence
+    : '';
   return {
     ...rest,
+    id: suppliedId || createTodoId(),
+    text,
+    done: Boolean(item.done),
+    startDate,
+    endDate: recurrence || !endDate || endDate < startDate ? startDate : endDate,
     category: resolveCategory(item, index),
-    notes: item.notes || '',
-    instanceDone: item.instanceDone || {},
-    skippedDates: item.skippedDates || [],
+    notes: String(item.notes || '').slice(0, 5000),
+    instanceDone: item.instanceDone && typeof item.instanceDone === 'object'
+      && !Array.isArray(item.instanceDone) ? item.instanceDone : {},
+    instanceOverrides: item.instanceOverrides && typeof item.instanceOverrides === 'object'
+      && !Array.isArray(item.instanceOverrides) ? item.instanceOverrides : {},
+    skippedDates: Array.isArray(item.skippedDates)
+      ? item.skippedDates.filter(validDateKey)
+      : [],
+    ...(recurrence ? { recurrence } : {}),
+    ...(recurrence === 'weekly' ? {
+      weekdays: Array.isArray(item.weekdays)
+        ? [...new Set(item.weekdays.map(Number).filter((day) => day >= 0 && day <= 6))]
+        : [],
+    } : {}),
   };
 }
 
 function migrate(raw) {
-  if (Array.isArray(raw)) return raw.map(normalizeItem);
+  if (Array.isArray(raw)) return raw.map(normalizeItem).filter(Boolean);
   if (!raw || typeof raw !== 'object') return [];
 
   const items = [];
   for (const [dateKey, list] of Object.entries(raw)) {
     if (!Array.isArray(list)) continue;
     for (const item of list) {
-      items.push(normalizeItem({
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+      const normalized = normalizeItem({
         id: item.id || createTodoId(),
         text: item.text,
         done: !!item.done,
@@ -71,7 +108,8 @@ function migrate(raw) {
         category: item.category,
         color: item.color,
         notes: item.notes || '',
-      }, items.length));
+      }, items.length);
+      if (normalized) items.push(normalized);
     }
   }
   return items;

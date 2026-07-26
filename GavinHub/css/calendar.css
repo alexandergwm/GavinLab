@@ -157,7 +157,7 @@ dialog.calendar-dialog:modal {
   font-size: 12px;
   font-weight: 700;
   color: #666;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
 }
 
 .cal-side-add {
@@ -929,25 +929,25 @@ dialog.calendar-dialog:modal {
 .cal-event--work .cal-event-title {
   color: #1a5c32;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
 }
 
 .cal-event--fitness .cal-event-title {
   color: #9b3d5c;
   font-weight: 600;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
 }
 
 .cal-event--life .cal-event-title {
   color: #1e4a7a;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .cal-event--study .cal-event-title {
   color: #7a5c1a;
   font-weight: 600;
-  letter-spacing: 0.03em;
+  letter-spacing: 0;
 }
 
 .cal-event-main {
@@ -1011,25 +1011,25 @@ dialog.calendar-dialog:modal {
 .cal-event--green .cal-event-title {
   color: #1a5c32;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
 }
 
 .cal-event--pink .cal-event-title {
   color: #9b3d5c;
   font-weight: 600;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
 }
 
 .cal-event--blue .cal-event-title {
   color: #1e4a7a;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .cal-event--yellow .cal-event-title {
   color: #7a5c1a;
   font-weight: 600;
-  letter-spacing: 0.03em;
+  letter-spacing: 0;
 }
 
 .cal-event-title-input {

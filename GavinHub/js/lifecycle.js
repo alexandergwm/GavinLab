@@ -52,6 +52,15 @@ export async function loadOptionalModules(loaders, onError = console.error) {
   return Object.fromEntries(loaded);
 }
 
+export function createAsyncQueue() {
+  let tail = Promise.resolve();
+  return (task) => {
+    const result = tail.catch(() => {}).then(task);
+    tail = result.catch(() => {});
+    return result;
+  };
+}
+
 export function settleWithin(promise, timeoutMs) {
   let timer = 0;
   const result = Promise.resolve(promise).then(
