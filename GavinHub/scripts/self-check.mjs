@@ -19,7 +19,6 @@ for (const f of [
   'css/home.css',
   'css/dock.css',
   'css/apps.css',
-  'css/feed.css',
   'css/dialogs.css',
   'css/settings.css',
   'css/calendar.css',
@@ -59,6 +58,9 @@ for (const part of [
   assert(html.includes(part), `index.html should link ${part}`);
 }
 assert(!html.includes('css/feed.css'), 'index.html should not link feed.css');
+for (const retired of ['css/style.css', 'css/feed.css', 'js/feed.js', 'js/arxiv.js', 'js/github-home.js', 'js/countdowns.js']) {
+  assert(!existsSync(join(root, retired)), `retired source should be removed: ${retired}`);
+}
 
 assert(existsSync(join(root, 'js/boot.js')), 'missing boot.js');
 const boot = read('js/boot.js');
@@ -197,15 +199,12 @@ assert(!background.includes('chrome.tabs.create'), 'NTP handoff must not create 
 assert(read('js/newtab.js').includes('window.location.replace'), 'NTP shell should navigate itself before using the worker fallback');
 assert(read('js/search-focus.js').includes('document.hasFocus()'), 'search focus should verify document-level keyboard focus');
 
-const feed = read('js/feed.js');
-assert(!feed.includes('MOCK_ITEMS'), 'feed.js should not contain MOCK_ITEMS');
-assert(feed.includes("from './keys.js'"), 'feed.js should use keys.js');
-
 assert(!existsSync(join(root, 'js/greeting.js')), 'greeting.js should be removed');
 assert(read('js/quote.js').includes('function getGreetingText'), 'quote.js should inline getGreetingText');
 assert(read('js/lazy-search-quote.js').includes("import('./quote.js')"), 'quote should load through its lazy facade');
 
 const jsFiles = readdirSync(join(root, 'js')).filter((f) => f.endsWith('.js'));
+const cssFiles = readdirSync(join(root, 'css')).filter((f) => f.endsWith('.css'));
 assert(existsSync(join(root, 'newtab.html')), 'missing newtab.html (NTP shell)');
 assert(existsSync(join(root, 'js/background.js')), 'missing background.js (search focus)');
 assert(existsSync(join(root, 'js/newtab.js')), 'missing newtab.js (NTP handshake)');
@@ -238,4 +237,4 @@ if (errors.length) {
   console.error('SELF-CHECK FAILED:\n' + errors.map((e) => `  - ${e}`).join('\n'));
   process.exit(1);
 }
-console.log('SELF-CHECK OK:', jsFiles.length, 'JS modules, 10 CSS parts, runtime layer ready');
+console.log('SELF-CHECK OK:', jsFiles.length, 'JS modules,', cssFiles.length, 'stylesheets, runtime layer ready');

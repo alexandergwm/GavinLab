@@ -13,10 +13,6 @@ export const KEYS = {
   countdowns: 'startpage-countdowns',
   goals: 'startpage-goals',
   importantDates: 'startpage-important-dates',
-  rssSources: 'startpage-rss-sources',
-  rssStats: 'startpage-rss-stats',
-  newsCache: 'startpage-news-cache',
-  arxivKeywords: 'startpage-arxiv-keywords',
   weatherLoc: 'startpage-weather-loc',
   weatherData: 'startpage-weather-data',
   aiLoginHint: 'startpage-ai-login-hint',
@@ -26,10 +22,6 @@ export const KEYS = {
   githubGistId: 'startpage-github-gist-id',
   syncLocalAt: 'startpage-sync-local-at',
   syncRevisions: 'startpage-sync-revisions',
-};
-
-export const SESSION_KEYS = {
-  newsRotation: 'startpage-news-rotation',
 };
 
 /** 命中后不再请求搜索引擎联想的智能建议 id */

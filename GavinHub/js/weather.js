@@ -38,6 +38,8 @@ const WEATHER_MAP = {
 };
 
 let cachedWeather = null;
+let weatherRequest = null;
+let weatherRequestGeneration = 0;
 
 function readWeatherCache() {
   const raw = readJson(WEATHER_CACHE_KEY, null);
@@ -119,10 +121,11 @@ export function formatWeatherSourceLabel(location, { compact = false } = {}) {
 }
 
 function withTimeout(promise, ms) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
-  ]);
+  let timer = 0;
+  return new Promise((resolve, reject) => {
+    timer = window.setTimeout(() => reject(new Error('timeout')), ms);
+    Promise.resolve(promise).then(resolve, reject).finally(() => window.clearTimeout(timer));
+  });
 }
 
 function parseGeoResult(geo, source) {
@@ -252,13 +255,27 @@ export async function loadWeather({ forceLocation = false } = {}) {
       cachedWeather = fresh;
       return fresh;
     }
+    if (weatherRequest) return weatherRequest.promise;
   }
-  cachedWeather = null;
-  const location = await resolveLocation({ fresh: forceLocation });
-  const data = await fetchForecast(location);
-  cachedWeather = data;
-  writeWeatherCache(data);
-  return data;
+
+  const generation = ++weatherRequestGeneration;
+  const promise = (async () => {
+    const location = await resolveLocation({ fresh: forceLocation });
+    const data = await fetchForecast(location);
+    if (generation !== weatherRequestGeneration) {
+      return weatherRequest?.promise || cachedWeather || data;
+    }
+    cachedWeather = data;
+    writeWeatherCache(data);
+    return data;
+  })();
+  weatherRequest = { generation, promise };
+
+  try {
+    return await promise;
+  } finally {
+    if (weatherRequest?.generation === generation) weatherRequest = null;
+  }
 }
 
 export function getCachedWeather() {

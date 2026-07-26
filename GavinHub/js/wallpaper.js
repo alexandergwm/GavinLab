@@ -33,7 +33,6 @@ import {
 import {
   scheduleInitialSearchFocus,
   focusSearchInput,
-  refreshSearchGlass,
 } from './search-focus.js';
 import {
   settleBootUiClasses,
@@ -1189,21 +1188,30 @@ export async function applyWallpaperRotation(onSourceChange) {
 export function initWallpaperRotation(onRotate, { runImmediately = false } = {}) {
   const rotation = loadWallpaperRotation();
   if (!runImmediately && (!rotation.interval || rotation.interval === 'manual')) return null;
+  let running = false;
   const tick = async () => {
-    const result = await applyWallpaperRotation((nextSource) => {
-      const select = document.getElementById('wallpaper-source');
-      if (select) select.value = nextSource;
-    });
-    if (!result) return;
-    if (result.type === 'next' && result.source === 'bing') {
-      await loadNextWallpaper();
-      await onRotate(result.source, { advanced: true });
-      return;
+    if (running || document.hidden) return;
+    running = true;
+    try {
+      const result = await applyWallpaperRotation((nextSource) => {
+        const select = document.getElementById('wallpaper-source');
+        if (select) select.value = nextSource;
+      });
+      if (!result) return;
+      if (result.type === 'next' && result.source === 'bing') {
+        await loadNextWallpaper();
+        await onRotate(result.source, { advanced: true });
+        return;
+      }
+      await onRotate(result.source, { advanced: false });
+    } catch (error) {
+      console.warn('[GavinHub] wallpaper rotation failed', error);
+    } finally {
+      running = false;
     }
-    await onRotate(result.source, { advanced: false });
   };
 
-  if (runImmediately) tick();
+  if (runImmediately) void tick();
   return setInterval(tick, 60 * 1000);
 }
 

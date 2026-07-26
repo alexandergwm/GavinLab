@@ -79,7 +79,9 @@ function loadList(key, fallback) {
 function normalizeItemId(item) {
   if (!item || typeof item !== 'object') return null;
   if (item.id == null || item.id === '') return null;
-  return { ...item, id: String(item.id) };
+  const url = normalizeUrl(item.url);
+  if (!url) return null;
+  return { ...item, id: String(item.id), url };
 }
 
 function transparentKnownIconForUrl(url = '') {
@@ -158,9 +160,10 @@ function readSanitizedShortcuts() {
 }
 
 export function loadShortcuts() {
-  const list = loadList(SHORTCUTS_KEY, DEFAULT_SHORTCUTS).map(normalizeItemId).filter(Boolean);
+  const stored = loadList(SHORTCUTS_KEY, DEFAULT_SHORTCUTS);
+  const list = stored.map(normalizeItemId).filter(Boolean);
   const sanitized = list.map(sanitizeShortcut);
-  let changed = false;
+  let changed = JSON.stringify(stored) !== JSON.stringify(list);
   sanitized.forEach((s, i) => {
     if (s.icon !== list[i].icon || s.letter !== list[i].letter || s.color !== list[i].color) {
       syncDockFromShortcut(s);
@@ -172,20 +175,21 @@ export function loadShortcuts() {
 }
 
 export function loadDock() {
-  let dock = loadList(DOCK_KEY, DEFAULT_DOCK).map(normalizeItemId).filter(Boolean);
+  const stored = loadList(DOCK_KEY, DEFAULT_DOCK);
+  let dock = stored.map(normalizeItemId).filter(Boolean);
+  let changed = JSON.stringify(stored) !== JSON.stringify(dock);
 
   // 页面切换已内置为 Dock 分段标签，持久化 dock 只保留快捷链接
   const links = dock.filter((d) => d.type === 'link');
   if (links.length !== dock.length) {
     dock = links.length ? links : [...DEFAULT_DOCK];
-    saveDock(dock);
+    changed = true;
   }
 
   const shortcutById = Object.fromEntries(readSanitizedShortcuts().map((s) => [s.id, s]));
 
   const migrated = dock.map((item) => mergeDockLinkFromShortcut(item, shortcutById));
 
-  let changed = false;
   migrated.forEach((item, i) => {
     if (item.type !== 'link') return;
     const prev = dock[i];
@@ -223,7 +227,16 @@ export function reorderDock(orderedIds = []) {
 export function normalizeUrl(url) {
   const trimmed = (url || '').trim();
   if (!trimmed) return '';
-  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  if (/^[a-z][a-z\d+.-]*:/i.test(trimmed) && !/^https?:\/\//i.test(trimmed)) return '';
+  const candidate = trimmed.startsWith('//')
+    ? `https:${trimmed}`
+    : /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const parsed = new URL(candidate);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? candidate : '';
+  } catch {
+    return '';
+  }
 }
 
 export function extractDomain(url) {

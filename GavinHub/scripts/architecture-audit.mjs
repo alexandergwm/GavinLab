@@ -10,6 +10,7 @@ const errors = [];
 const read = (path) => readFileSync(path, 'utf8');
 const jsFiles = readdirSync(jsRoot).filter((name) => name.endsWith('.js'));
 const graph = new Map();
+const runtimeGraph = new Map();
 
 for (const name of jsFiles) {
   const file = join(jsRoot, name);
@@ -20,15 +21,18 @@ for (const name of jsFiles) {
     errors.push(`${name}: ${error.stderr?.toString().trim() || 'syntax error'}`);
   }
 
-  const dependencies = [];
+  const runtimeDependencies = new Set();
   for (const match of source.matchAll(/(?:from\s+|import\s*\()\s*['"](\.\/[^'"]+\.js)['"]/g)) {
     const dependency = resolve(jsRoot, match[1]);
     if (!existsSync(dependency)) errors.push(`${name}: missing import ${match[1]}`);
+    runtimeDependencies.add(basename(match[1]));
   }
+  const staticDependencies = new Set();
   for (const match of source.matchAll(/^import[\s\S]*?from\s+['"](\.\/[^'"]+\.js)['"];?/gm)) {
-    dependencies.push(basename(match[1]));
+    staticDependencies.add(basename(match[1]));
   }
-  graph.set(name, dependencies);
+  graph.set(name, [...staticDependencies]);
+  runtimeGraph.set(name, [...runtimeDependencies]);
 
   if (name !== 'dialog-ui.js' && /\.showModal\s*\(/.test(source)) {
     errors.push(`${name}: bypasses dialog-ui open lifecycle`);
@@ -54,9 +58,42 @@ function visit(name, path = []) {
 for (const name of jsFiles) visit(name);
 
 const html = read(join(root, 'index.html'));
+const newtabHtml = read(join(root, 'newtab.html'));
+const manifest = JSON.parse(read(join(root, 'manifest.json')));
+const entryModules = new Set();
+for (const source of [html, newtabHtml]) {
+  for (const match of source.matchAll(/<script\s+[^>]*src=["']js\/([^"']+\.js)["'][^>]*>/g)) {
+    entryModules.add(match[1]);
+  }
+}
+if (manifest.background?.service_worker?.startsWith('js/')) {
+  entryModules.add(basename(manifest.background.service_worker));
+}
+
+const reachable = new Set();
+function markReachable(name) {
+  if (reachable.has(name)) return;
+  reachable.add(name);
+  for (const dependency of runtimeGraph.get(name) || []) markReachable(dependency);
+}
+for (const entry of entryModules) {
+  if (!graph.has(entry)) errors.push(`missing JavaScript entry module: ${entry}`);
+  else markReachable(entry);
+}
+const unreachable = jsFiles.filter((name) => !reachable.has(name));
+if (unreachable.length) errors.push(`modules unreachable from runtime entries: ${unreachable.join(', ')}`);
+
 const ids = [...html.matchAll(/\sid=["']([^"']+)["']/g)].map((match) => match[1]);
 const duplicateIds = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
 if (duplicateIds.length) errors.push(`duplicate DOM ids: ${duplicateIds.join(', ')}`);
+
+const cssRoot = join(root, 'css');
+const cssFiles = readdirSync(cssRoot).filter((name) => name.endsWith('.css'));
+const referencedCss = new Set(
+  [...html.matchAll(/\shref=["']css\/([^"']+\.css)["']/g)].map((match) => match[1]),
+);
+const unreachableCss = cssFiles.filter((name) => !referencedCss.has(name));
+if (unreachableCss.length) errors.push(`stylesheets unreachable from index.html: ${unreachableCss.join(', ')}`);
 
 let blockingCssBytes = 0;
 for (const match of html.matchAll(/<link\s+[^>]*rel=["']stylesheet["'][^>]*href=["']([^"']+\.css)["'][^>]*>/g)) {
@@ -90,5 +127,5 @@ if (errors.length) {
 }
 
 console.log(
-  `ARCHITECTURE AUDIT OK: ${jsFiles.length} modules, ${ids.length} DOM ids, ${blockingCssBytes} render-blocking CSS bytes`,
+  `ARCHITECTURE AUDIT OK: ${jsFiles.length} modules, ${cssFiles.length} stylesheets, ${ids.length} DOM ids, ${blockingCssBytes} render-blocking CSS bytes`,
 );

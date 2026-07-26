@@ -81,22 +81,6 @@ export function scheduleInitialSearchFocus() {
   waitForBootGlassReady(start);
 }
 
-function toggleSearchGlassRefresh() {
-  const box = document.getElementById('search-box');
-  if (!box) return Promise.resolve();
-  box.dataset.glassRefresh = '1';
-  void box.offsetHeight;
-  return new Promise((resolve) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        delete box.dataset.glassRefresh;
-        void box.offsetHeight;
-        requestAnimationFrame(resolve);
-      });
-    });
-  });
-}
-
 /** 离开主页前立即收起搜索栏，避免 opacity 动画 + backdrop-filter 叠加重算掉帧 */
 export function dismissSearchForPageLeave() {
   focusAttemptGeneration += 1;
@@ -111,27 +95,6 @@ export function dismissSearchForPageLeave() {
   document.getElementById('search-suggestions')?.setAttribute('hidden', '');
   document.getElementById('search-engine-menu')?.setAttribute('hidden', '');
   document.getElementById('search-quote')?.setAttribute('hidden', '');
-}
-
-/** 轻量触发合成层刷新（启动/常态可用） */
-export function refreshSearchGlass() {
-  const box = document.getElementById('search-box');
-  if (!box) return;
-  if (
-    document.body.classList.contains('wallpaper-boot')
-    && !document.body.classList.contains('boot-priming-ui')
-    && !document.body.classList.contains('boot-done')
-  ) return;
-  box.style.willChange = 'transform, backdrop-filter';
-  void box.offsetHeight;
-  requestAnimationFrame(() => {
-    box.style.willChange = '';
-  });
-}
-
-/** 二级页返回 / 壁纸换图后硬刷新毛玻璃 */
-export function hardRefreshSearchGlass() {
-  void toggleSearchGlassRefresh();
 }
 
 export function initSearchFocusHooks(getCurrentPage) {

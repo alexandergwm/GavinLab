@@ -39,11 +39,6 @@
     border-radius var(--transition-search-focus);
 }
 
-.search-box[data-glass-refresh='1'] {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
 .search-box:hover {
   background: var(--glass-search-bg-hover);
   border-color: var(--glass-search-border-hover);

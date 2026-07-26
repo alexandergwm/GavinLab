@@ -383,6 +383,79 @@ try {
       `${dialogId} should disappear cleanly after close: ${JSON.stringify(closedState)}`);
   }
 
+  const dataBoundarySafety = await page.evaluate(async () => {
+    const shortcutsKey = 'startpage-shortcuts';
+    const weatherDataKey = 'startpage-weather-data';
+    const weatherLocKey = 'startpage-weather-loc';
+    const previousShortcuts = localStorage.getItem(shortcutsKey);
+    const previousWeather = localStorage.getItem(weatherDataKey);
+    const previousLocation = localStorage.getItem(weatherLocKey);
+    const originalFetch = window.fetch;
+
+    try {
+      localStorage.setItem(shortcutsKey, JSON.stringify([
+        { id: 'unsafe', name: 'Unsafe', url: 'javascript:alert(1)' },
+        { id: 'valid', name: 'Valid', url: 'example.com/path' },
+      ]));
+      const shortcuts = await import('./js/shortcuts.js');
+      const sanitized = shortcuts.loadShortcuts();
+      const persisted = JSON.parse(localStorage.getItem(shortcutsKey) || '[]');
+
+      localStorage.removeItem(weatherDataKey);
+      localStorage.removeItem(weatherLocKey);
+      const requests = [];
+      window.fetch = async (input) => {
+        const requestUrl = String(input?.url || input);
+        requests.push(requestUrl);
+        if (requestUrl.includes('bigdatacloud.net')) {
+          return new Response(JSON.stringify({
+            latitude: 22.54,
+            longitude: 113.94,
+            locality: '测试区',
+            city: '测试市',
+          }), { status: 200, headers: { 'content-type': 'application/json' } });
+        }
+        if (requestUrl.includes('open-meteo.com')) {
+          return new Response(JSON.stringify({
+            current: { weather_code: 0, temperature_2m: 25 },
+            hourly: { time: [] },
+            daily: { time: [] },
+          }), { status: 200, headers: { 'content-type': 'application/json' } });
+        }
+        throw new Error(`unexpected request: ${requestUrl}`);
+      };
+      const weather = await import('./js/weather.js');
+      const [firstWeather, secondWeather] = await Promise.all([
+        weather.loadWeather(),
+        weather.loadWeather(),
+      ]);
+
+      return {
+        shortcutIds: sanitized.map((item) => item.id),
+        validUrl: sanitized[0]?.url,
+        persistedIds: persisted.map((item) => item.id),
+        weatherRequests: requests.length,
+        weatherSharedResult: firstWeather === secondWeather,
+      };
+    } finally {
+      window.fetch = originalFetch;
+      if (previousShortcuts == null) localStorage.removeItem(shortcutsKey);
+      else localStorage.setItem(shortcutsKey, previousShortcuts);
+      if (previousWeather == null) localStorage.removeItem(weatherDataKey);
+      else localStorage.setItem(weatherDataKey, previousWeather);
+      if (previousLocation == null) localStorage.removeItem(weatherLocKey);
+      else localStorage.setItem(weatherLocKey, previousLocation);
+    }
+  });
+  assert(
+    dataBoundarySafety.shortcutIds.join(',') === 'valid'
+      && dataBoundarySafety.validUrl === 'https://example.com/path'
+      && dataBoundarySafety.persistedIds.join(',') === 'valid'
+      && dataBoundarySafety.weatherRequests === 2
+      && dataBoundarySafety.weatherSharedResult,
+    `import boundaries and weather requests must be deterministic: ${JSON.stringify(dataBoundarySafety)}`,
+  );
+
   const syncSafety = await page.evaluate(async () => {
     localStorage.setItem('startpage-sync-local-at', '100');
     const storage = await import('./js/storage.js');

@@ -48,9 +48,8 @@ function copyIcons(outRoot) {
 }
 
 function collectJsFiles() {
-  const dormantModules = new Set(['feed.js', 'arxiv.js', 'github-home.js']);
   return readdirSync(join(root, 'js'))
-    .filter((f) => f.endsWith('.js') && !dormantModules.has(f))
+    .filter((f) => f.endsWith('.js'))
     .map((f) => `js/${f}`);
 }
 
@@ -116,8 +115,8 @@ function verifyPackage(outRoot) {
       }
     }
   }
-  for (const dormant of ['js/feed.js', 'js/arxiv.js', 'js/github-home.js', 'css/feed.css']) {
-    if (existsSync(join(outRoot, dormant))) throw new Error(`dormant file should not be packaged: ${dormant}`);
+  for (const retired of ['js/feed.js', 'js/arxiv.js', 'js/github-home.js', 'js/countdowns.js', 'css/style.css', 'css/feed.css']) {
+    if (existsSync(join(outRoot, retired))) throw new Error(`retired file should not be packaged: ${retired}`);
   }
 }
 

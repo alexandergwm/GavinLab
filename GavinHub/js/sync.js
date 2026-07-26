@@ -447,28 +447,32 @@ export function startPeriodicSync({
 }
 
 let onRemoteApplied = null;
+let syncListenerBound = false;
+
+function handleSyncStorageChange(changes, area) {
+  if (area !== 'sync' || !changes[SYNC_ROOT_KEY]) return;
+  const changedAt = Number(changes[SYNC_ROOT_KEY].newValue?.updatedAt) || 0;
+  if (changedAt && localPushVersions.has(changedAt)) return;
+  void (async () => {
+    try {
+      const remote = normalizeSyncPayload(await storageGetSync());
+      const local = buildSyncPayload();
+      if (!remote || !hasNewerRevisions(remote, local)) return;
+      const localChanged = hasNewerRevisions(local, remote);
+      const merged = mergeSyncBundles(local, remote);
+      if (applyRemotePayload(merged, { force: true })) onRemoteApplied?.();
+      if (localChanged) await commitPayloadToCloud(merged);
+    } catch (error) {
+      console.warn('[GavinHub] sync apply failed', error);
+    }
+  })();
+}
 
 export function initSyncListener(onApplied) {
   onRemoteApplied = onApplied;
-  if (!hasChromeSync()) return;
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'sync' || !changes[SYNC_ROOT_KEY]) return;
-    const changedAt = Number(changes[SYNC_ROOT_KEY].newValue?.updatedAt) || 0;
-    if (changedAt && localPushVersions.has(changedAt)) return;
-    void (async () => {
-      try {
-        const remote = normalizeSyncPayload(await storageGetSync());
-        const local = buildSyncPayload();
-        if (!remote || !hasNewerRevisions(remote, local)) return;
-        const localChanged = hasNewerRevisions(local, remote);
-        const merged = mergeSyncBundles(local, remote);
-        if (applyRemotePayload(merged, { force: true })) onRemoteApplied?.();
-        if (localChanged) await commitPayloadToCloud(merged);
-      } catch (error) {
-        console.warn('[GavinHub] sync apply failed', error);
-      }
-    })();
-  });
+  if (!hasChromeSync() || syncListenerBound) return;
+  syncListenerBound = true;
+  chrome.storage.onChanged.addListener(handleSyncStorageChange);
 }
 
 export function isSyncKey(key) {
