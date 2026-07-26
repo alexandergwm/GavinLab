@@ -177,6 +177,8 @@ assert(wp.includes("from './wallpaper-effects.js'"), 'wallpaper.js should delega
 assert(!wp.includes('effectPreviewCache'), 'wallpaper.js should not own effect preview caching');
 assert(wpTheme.includes('viewportRegionToImageRegion'), 'wallpaper-theme.js should map viewport regions');
 assert(wp.includes('fetchNextBingWallpaper'), 'wallpaper.js should use fetchNextBingWallpaper');
+assert(wp.includes('async function fetchWallpaperForSource'), 'wallpaper force refresh should use a defined source loader');
+assert(wp.includes('beginWallpaperIntent'), 'wallpaper async entrypoints should share latest-intent guards');
 assert(wpImage.includes('canvas.toBlob'), 'wallpaper effect previews should encode asynchronously');
 assert(wpImage.includes('URL.revokeObjectURL'), 'wallpaper effect previews should expose memory cleanup');
 assert(!wpImage.includes('render(300'), 'apps glass must not upscale a 300px wallpaper preview');

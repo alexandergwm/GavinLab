@@ -211,6 +211,46 @@ try {
   const weatherModalLoadedAtStartup = await page.evaluate(() => performance.getEntriesByType('resource')
     .some((entry) => entry.name.endsWith('/js/weather-modal.js')));
   assert(!weatherModalLoadedAtStartup, 'weather modal should not load on the home startup path');
+  const delayedBingRoute = async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        url: 'assets/default-wallpaper.jpg',
+        end_date: '20260726',
+        title: 'Delayed Bing test wallpaper',
+      }),
+    });
+  };
+  await page.route('https://bing.biturl.top/**', delayedBingRoute);
+  const wallpaperRace = await page.evaluate(async () => {
+    const wallpaper = await import('./js/wallpaper.js');
+    const before = { ...wallpaper.getCurrentWallpaper() };
+    const storedSettings = localStorage.getItem('startpage-settings');
+    const storedWallpaper = localStorage.getItem('startpage-wallpaper-last');
+    const pendingRefresh = wallpaper.loadWallpaper('bing', { force: true });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await wallpaper.applySelectedWallpaper({
+      id: 'race-selected-wallpaper',
+      source: 'library',
+      type: 'gradient',
+      css: 'linear-gradient(135deg, #30475e, #9b6a6c)',
+      title: 'Race winner',
+    });
+    await pendingRefresh;
+    const winner = wallpaper.getCurrentWallpaper().id;
+    wallpaper.applyWallpaper(before, { adaptImmediate: true });
+    if (storedSettings == null) localStorage.removeItem('startpage-settings');
+    else localStorage.setItem('startpage-settings', storedSettings);
+    if (storedWallpaper == null) localStorage.removeItem('startpage-wallpaper-last');
+    else localStorage.setItem('startpage-wallpaper-last', storedWallpaper);
+    return winner;
+  });
+  await page.unroute('https://bing.biturl.top/**', delayedBingRoute);
+  assert(
+    wallpaperRace === 'race-selected-wallpaper',
+    `a delayed wallpaper refresh must not overwrite the latest user selection: ${wallpaperRace}`,
+  );
   const lifecycleSafety = await page.evaluate(async () => {
     const [{ createFeatureRegistry }, dialogs, { createWallpaperEffects }] = await Promise.all([
       import('./js/feature-registry.js'),
@@ -554,6 +594,49 @@ try {
     afterDockDrag[1] === beforeDockDrag[0],
     `dock drag should persist the new order: ${JSON.stringify({ beforeDockDrag, afterDockDrag })}`,
   );
+  const canceledDockDrag = await page.evaluate(async () => {
+    const before = localStorage.getItem('startpage-dock');
+    const items = [...document.querySelectorAll('.dock-link[data-dock-id]')];
+    const beforeDomOrder = items.map((item) => item.dataset.dockId);
+    const from = items[0].getBoundingClientRect();
+    const to = items[1].getBoundingClientRect();
+    items[0].dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true,
+      button: 0,
+      pointerId: 71,
+      pointerType: 'mouse',
+      clientX: from.left + from.width / 2,
+      clientY: from.top + from.height / 2,
+    }));
+    document.dispatchEvent(new PointerEvent('pointermove', {
+      bubbles: true,
+      pointerId: 71,
+      pointerType: 'mouse',
+      clientX: to.right - 2,
+      clientY: to.top + to.height / 2,
+    }));
+    document.dispatchEvent(new PointerEvent('pointercancel', {
+      bubbles: true,
+      pointerId: 71,
+      pointerType: 'mouse',
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 240));
+    return {
+      unchanged: localStorage.getItem('startpage-dock') === before,
+      domOrder: [...document.querySelectorAll('.dock-link[data-dock-id]')]
+        .map((item) => item.dataset.dockId),
+      beforeDomOrder,
+      active: document.getElementById('dock').classList.contains('is-reordering'),
+      placeholders: document.querySelectorAll('#dock .dock-placeholder').length,
+    };
+  });
+  assert(
+    canceledDockDrag.unchanged
+      && canceledDockDrag.domOrder.join(',') === canceledDockDrag.beforeDomOrder.join(',')
+      && !canceledDockDrag.active
+      && canceledDockDrag.placeholders === 0,
+    `cancelled dock drag must roll back without committing: ${JSON.stringify(canceledDockDrag)}`,
+  );
 
   await page.evaluate(() => {
     localStorage.setItem('startpage-shortcuts', JSON.stringify({ corrupted: true }));
@@ -581,6 +664,50 @@ try {
   assert(
     appsTextTheme.color === 'rgba(255, 255, 255, 0.92)',
     `apps labels should keep one light theme: ${JSON.stringify(appsTextTheme)}`,
+  );
+
+  const canceledShortcutDrag = await page.evaluate(async () => {
+    const before = localStorage.getItem('startpage-shortcuts');
+    const items = [...document.querySelectorAll('.shortcut-item:not(.shortcut-add)')];
+    const beforeDomOrder = items.map((item) => item.dataset.id);
+    const from = items[0].getBoundingClientRect();
+    const to = items[1].getBoundingClientRect();
+    items[0].dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true,
+      button: 0,
+      pointerId: 72,
+      pointerType: 'mouse',
+      clientX: from.left + from.width / 2,
+      clientY: from.top + from.height / 2,
+    }));
+    document.dispatchEvent(new PointerEvent('pointermove', {
+      bubbles: true,
+      pointerId: 72,
+      pointerType: 'mouse',
+      clientX: to.right - 2,
+      clientY: to.top + to.height / 2,
+    }));
+    document.dispatchEvent(new PointerEvent('pointercancel', {
+      bubbles: true,
+      pointerId: 72,
+      pointerType: 'mouse',
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 240));
+    return {
+      unchanged: localStorage.getItem('startpage-shortcuts') === before,
+      domOrder: [...document.querySelectorAll('.shortcut-item:not(.shortcut-add)')]
+        .map((item) => item.dataset.id),
+      beforeDomOrder,
+      active: document.body.classList.contains('shortcut-drag-active'),
+      placeholders: document.querySelectorAll('.shortcut-placeholder').length,
+    };
+  });
+  assert(
+    canceledShortcutDrag.unchanged
+      && canceledShortcutDrag.domOrder.join(',') === canceledShortcutDrag.beforeDomOrder.join(',')
+      && !canceledShortcutDrag.active
+      && canceledShortcutDrag.placeholders === 0,
+    `cancelled shortcut drag must roll back without committing: ${JSON.stringify(canceledShortcutDrag)}`,
   );
 
   const beforeShortcutDrag = await page.evaluate(() =>
@@ -967,9 +1094,13 @@ try {
   assert(!(await page.locator('.cal-side-form').isVisible()), 'goal form should start collapsed');
   await page.locator('.cal-side-add').click();
   assert(await page.locator('.cal-side-form').isVisible(), 'goal form should open on demand');
-  await page.locator('.cal-side-cancel').click();
   await page.locator('#cal-view-toggle').click();
   await page.waitForSelector('.month-calendar');
+  assert(
+    await page.locator('.cal-side-form').isVisible(),
+    'calendar navigation should preserve the independent goal form state',
+  );
+  await page.locator('.cal-side-cancel').click();
   assert(await page.locator('.month-day-cell').count() >= 28,
     'month view should render a complete delegated date grid');
   assert(
@@ -984,6 +1115,20 @@ try {
   assert(await page.locator('.cal-event').count() === 8, 'busy week should start in compact mode');
   await page.locator('.week-events-overflow-btn').click();
   await page.waitForFunction(() => document.querySelectorAll('.cal-event').length === 20);
+  await page.locator('.cal-event-title').first().dispatchEvent('mousedown', {
+    button: 0,
+    clientX: 120,
+    clientY: 120,
+  });
+  assert(
+    await page.locator('.cal-event').first().evaluate((el) => el.classList.contains('is-dragging')),
+    'calendar drag should enter an explicit active state',
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  assert(
+    !(await page.locator('.cal-event').first().evaluate((el) => el.classList.contains('is-dragging'))),
+    'calendar drag should cancel when the browser loses focus',
+  );
   assert(
     !(await page.locator('link[data-active-style="todo"]').count()),
     'todo editor styling should remain idle while browsing the calendar',

@@ -28,14 +28,19 @@ export function bindDockReorder(dock, { onCommit } = {}) {
   function removeDocumentListeners(active) {
     document.removeEventListener('pointermove', active.onMove);
     document.removeEventListener('pointerup', active.onUp);
-    document.removeEventListener('pointercancel', active.onUp);
+    document.removeEventListener('pointercancel', active.onCancel);
+    window.removeEventListener('blur', active.onCancel);
   }
 
   function clear(active = session) {
     if (!active) return;
     clearTimeout(active.timer);
     removeDocumentListeners(active);
-    active.placeholder?.replaceWith(active.item);
+    if (active.placeholder) {
+      active.placeholder.remove();
+      const remaining = links().filter((item) => item !== active.item);
+      dock.insertBefore(active.item, remaining[active.originIndex] || null);
+    }
     resetItem(active.item);
     dock.classList.remove('is-reordering');
     if (session === active) session = null;
@@ -153,6 +158,13 @@ export function bindDockReorder(dock, { onCommit } = {}) {
     }, SETTLE_MS);
   }
 
+  function onCancel(event) {
+    const active = session;
+    if (!active) return;
+    if (event?.pointerId != null && event.pointerId !== active.pointerId) return;
+    clear(active);
+  }
+
   dock.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
     const item = event.target.closest('.dock-link[data-dock-id]');
@@ -164,15 +176,18 @@ export function bindDockReorder(dock, { onCommit } = {}) {
       pointerType: event.pointerType || 'mouse',
       startX: event.clientX,
       startY: event.clientY,
+      originIndex: links().indexOf(item),
       active: false,
       onMove,
       onUp,
+      onCancel,
       timer: 0,
     };
     session = active;
     document.addEventListener('pointermove', onMove, { passive: false });
     document.addEventListener('pointerup', onUp);
-    document.addEventListener('pointercancel', onUp);
+    document.addEventListener('pointercancel', onCancel);
+    window.addEventListener('blur', onCancel, { once: true });
     if (active.pointerType !== 'mouse' && active.pointerType !== 'pen') {
       active.timer = window.setTimeout(() => activate(active, active.startX, active.startY), TOUCH_HOLD_MS);
     }

@@ -180,7 +180,7 @@ function showDayMenu(dateKey, x, y) {
 function gotoWeekForDate(dateKey) {
   viewWeekStart = parseDateKey(dateKey);
   viewMode = 'week';
-  renderCalendar();
+  renderSchedule();
 }
 
 function bindMonthCells(container) {
@@ -320,10 +320,15 @@ function renderMonthCalendar() {
   bindMonthCells(container);
 }
 
-function renderCalendar() {
+function renderSchedule() {
+  activeCalendarDragCancel?.();
   updateToolbarForView();
   if (viewMode === 'month') renderMonthCalendar();
   else renderWeekCalendar();
+}
+
+function renderCalendar() {
+  renderSchedule();
   renderSidePanel();
 }
 
@@ -448,10 +453,6 @@ function bindSidePanel(panel) {
   });
 }
 
-function initSidePanel() {
-  renderSidePanel();
-}
-
 function toggleViewMode() {
   if (viewMode === 'week') {
     viewMode = 'month';
@@ -460,7 +461,7 @@ function toggleViewMode() {
   } else {
     viewMode = 'week';
   }
-  renderCalendar();
+  renderSchedule();
 }
 
 const COMPOSE_ROW_HEIGHT = 84;
@@ -628,7 +629,7 @@ function submitComposer(dateKey, compose) {
   addTodo({ text, startDate: dateKey, category, recurrence, weekdays });
   const container = document.getElementById('week-calendar');
   if (container) closeAllComposers(container);
-  renderCalendar();
+  renderSchedule();
 }
 
 function bindComposer(body, container, weekStartKey, events) {
@@ -758,7 +759,7 @@ function initTodoDetailDialog() {
       updateTodo(id, patch);
     }
     closeDialog(dialog);
-    renderCalendar();
+    renderSchedule();
   });
 
   document.getElementById('todo-detail-delete')?.addEventListener('click', () => {
@@ -773,7 +774,7 @@ function initTodoDetailDialog() {
       removeTodo(id);
     }
     closeDialog(dialog);
-    renderCalendar();
+    renderSchedule();
   });
 
 }
@@ -813,6 +814,37 @@ function applyGridPlacement(card, startCol, span, row) {
   if (row != null) card.style.gridRow = row + 1;
 }
 
+let activeCalendarDragCancel = null;
+
+function beginCalendarDrag({ onMove, onCommit, onCancel }) {
+  activeCalendarDragCancel?.();
+  let settled = false;
+
+  const cleanup = () => {
+    if (onMove) document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', commit);
+    window.removeEventListener('blur', cancel);
+    if (activeCalendarDragCancel === cancel) activeCalendarDragCancel = null;
+  };
+  const commit = (event) => {
+    if (settled) return;
+    settled = true;
+    cleanup();
+    onCommit?.(event);
+  };
+  const cancel = () => {
+    if (settled) return;
+    settled = true;
+    cleanup();
+    onCancel?.();
+  };
+
+  if (onMove) document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', commit);
+  window.addEventListener('blur', cancel, { once: true });
+  activeCalendarDragCancel = cancel;
+}
+
 function bindResize(handle, todo, gridEl, weekStartKey) {
   handle.addEventListener('mousedown', (e) => {
     e.preventDefault();
@@ -834,23 +866,25 @@ function bindResize(handle, todo, gridEl, weekStartKey) {
       applyGridPlacement(card, startCol, newSpan, todo._row);
     };
 
-    const onUp = (ev) => {
-      card.classList.remove('is-resizing');
-      const delta = Math.round((ev.clientX - startX) / colStep);
-      const newSpan = clampSpanAtCol(startCol, baseSpan + delta);
-      const weekSat = weekSaturdayKey(weekStartKey);
-      let newEnd = addDays(weekStartKey, startCol + newSpan - 1);
-      if (parseDateKey(newEnd) > parseDateKey(weekSat)) {
-        newEnd = weekSat;
-      }
-      resizeTodoEnd(todo.id, newEnd);
-      renderCalendar();
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    };
-
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    beginCalendarDrag({
+      onMove,
+      onCommit: (ev) => {
+        card.classList.remove('is-resizing');
+        const delta = Math.round((ev.clientX - startX) / colStep);
+        const newSpan = clampSpanAtCol(startCol, baseSpan + delta);
+        const weekSat = weekSaturdayKey(weekStartKey);
+        let newEnd = addDays(weekStartKey, startCol + newSpan - 1);
+        if (parseDateKey(newEnd) > parseDateKey(weekSat)) {
+          newEnd = weekSat;
+        }
+        resizeTodoEnd(todo.id, newEnd);
+        renderSchedule();
+      },
+      onCancel: () => {
+        card.classList.remove('is-resizing');
+        applyGridPlacement(card, startCol, baseSpan, todo._row);
+      },
+    });
   });
 }
 
@@ -864,13 +898,13 @@ function bindMove(card, todo, gridEl, weekStartKey, masterId, instanceDate) {
       e.preventDefault();
       const startX = e.clientX;
       const startY = e.clientY;
-      const onUp = (ev) => {
-        document.removeEventListener('mouseup', onUp);
-        if (Math.abs(ev.clientX - startX) > 4 || Math.abs(ev.clientY - startY) > 4) return;
-        if (ev.target.closest('.cal-event-resize, .cal-event-close, .cal-event-done, input, button')) return;
-        openTodoDetail(masterId, instanceDate);
-      };
-      document.addEventListener('mouseup', onUp);
+      beginCalendarDrag({
+        onCommit: (ev) => {
+          if (Math.abs(ev.clientX - startX) > 4 || Math.abs(ev.clientY - startY) > 4) return;
+          if (ev.target.closest('.cal-event-resize, .cal-event-close, .cal-event-done, input, button')) return;
+          openTodoDetail(masterId, instanceDate);
+        },
+      });
       return;
     }
 
@@ -896,27 +930,29 @@ function bindMove(card, todo, gridEl, weekStartKey, masterId, instanceDate) {
       setDropHighlight(gridEl, newStartCol);
     };
 
-    const onUp = (ev) => {
-      card.classList.remove('is-dragging');
-      clearDropHighlight(gridEl);
+    beginCalendarDrag({
+      onMove,
+      onCommit: (ev) => {
+        card.classList.remove('is-dragging');
+        clearDropHighlight(gridEl);
 
-      if (moved) {
-        const delta = Math.round((ev.clientX - startX) / colStep);
-        const maxStart = 7 - span;
-        const newStartCol = Math.max(0, Math.min(maxStart, startCol + delta));
-        const newStartDate = addDays(weekStartKey, newStartCol);
-        moveTodo(todo.id, newStartDate, weekStartKey);
-        renderCalendar();
-      } else if (!ev.target.closest('.cal-event-resize, .cal-event-close, .cal-event-done, input, button')) {
-        openTodoDetail(masterId, instanceDate);
-      }
-
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    };
-
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+        if (moved) {
+          const delta = Math.round((ev.clientX - startX) / colStep);
+          const maxStart = 7 - span;
+          const newStartCol = Math.max(0, Math.min(maxStart, startCol + delta));
+          const newStartDate = addDays(weekStartKey, newStartCol);
+          moveTodo(todo.id, newStartDate, weekStartKey);
+          renderSchedule();
+        } else if (!ev.target.closest('.cal-event-resize, .cal-event-close, .cal-event-done, input, button')) {
+          openTodoDetail(masterId, instanceDate);
+        }
+      },
+      onCancel: () => {
+        card.classList.remove('is-dragging');
+        clearDropHighlight(gridEl);
+        applyGridPlacement(card, startCol, span, todo._row);
+      },
+    });
   });
 }
 
@@ -972,7 +1008,7 @@ function createEventCard(todo, weekStartKey, gridEl) {
   card.querySelector('input[type="checkbox"]').addEventListener('change', (e) => {
     e.stopPropagation();
     toggleTodo(masterId, instanceDate);
-    renderCalendar();
+    renderSchedule();
   });
 
   delBtn.addEventListener('click', (e) => {
@@ -984,7 +1020,7 @@ function createEventCard(todo, weekStartKey, gridEl) {
     } else {
       removeTodo(masterId);
     }
-    renderCalendar();
+    renderSchedule();
   });
 
   if (todo._isRecurring) {
@@ -1105,7 +1141,7 @@ function renderWeekCalendar() {
 
   container.querySelector('.week-events-overflow-btn')?.addEventListener('click', () => {
     expandedWeekKey = isExpanded ? '' : weekStartKey;
-    renderCalendar();
+    renderSchedule();
   });
 
   const bodies = container.querySelectorAll('.week-day-body');
@@ -1143,7 +1179,7 @@ function shiftPeriod(delta) {
     const d = new Date(viewMonthStart);
     d.setMonth(d.getMonth() + delta);
     viewMonthStart = d;
-    renderCalendar();
+    renderSchedule();
     return;
   }
   shiftWeek(delta);
@@ -1153,14 +1189,14 @@ function shiftWeek(delta) {
   const d = getWeekStart(viewWeekStart);
   d.setDate(d.getDate() + delta * 7);
   viewWeekStart = d;
-  renderCalendar();
+  renderSchedule();
 }
 
 function goToToday() {
   const now = new Date();
   viewWeekStart = now;
   viewMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  renderCalendar();
+  renderSchedule();
 }
 
 function initDayMenu() {
@@ -1171,7 +1207,7 @@ function initDayMenu() {
     if (!dayMenuDateKey) return;
     toggleImportantDate(dayMenuDateKey);
     hideDayMenu();
-    renderCalendar();
+    renderSchedule();
   });
 
   menu.querySelector('[data-action="goto-week"]')?.addEventListener('click', () => {
@@ -1199,7 +1235,6 @@ export function initCalendarApp() {
   calendarAppInitialized = true;
   initTodoDetailDialog();
   initDayMenu();
-  initSidePanel();
 
   document.getElementById('cal-view-toggle')?.addEventListener('click', toggleViewMode);
   document.getElementById('cal-prev-week')?.addEventListener('click', () => shiftPeriod(-1));
@@ -1223,6 +1258,7 @@ export function initCalendarApp() {
   });
 
   document.getElementById('calendar-dialog')?.addEventListener('close', () => {
+    activeCalendarDragCancel?.();
     const week = document.getElementById('week-calendar');
     if (week) closeAllComposers(week);
   });

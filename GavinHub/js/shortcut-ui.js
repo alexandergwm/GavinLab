@@ -531,6 +531,14 @@ function bindDragReorder(grid, refresh, onDockChange) {
     delete item._floatTop;
   }
 
+  function removeSessionListeners(active) {
+    if (!active) return;
+    document.removeEventListener('pointermove', active.onMove);
+    document.removeEventListener('pointerup', active.onUp);
+    document.removeEventListener('pointercancel', active.onCancel);
+    window.removeEventListener('blur', active.onCancel);
+  }
+
   function clearSession(animateBack = false) {
     if (!session) return;
 
@@ -541,9 +549,7 @@ function bindDragReorder(grid, refresh, onDockChange) {
       clearTimeout(session.timer);
     }
 
-    document.removeEventListener('pointermove', session.onMove);
-    document.removeEventListener('pointerup', session.onUp);
-    document.removeEventListener('pointercancel', session.onUp);
+    removeSessionListeners(session);
 
     const current = session;
     const { item, placeholder, active } = current;
@@ -551,6 +557,13 @@ function bindDragReorder(grid, refresh, onDockChange) {
     clearDockDropTarget(current);
 
     if (!active && !placeholder) return;
+
+    if (placeholder?.isConnected && current.fromIndex >= 0) {
+      placeholder.remove();
+      const remaining = getShortcutItems().filter((candidate) => candidate !== item);
+      const addButton = grid.querySelector('.shortcut-add');
+      grid.insertBefore(placeholder, remaining[current.fromIndex] || addButton);
+    }
 
     if (animateBack && placeholder?.isConnected) {
       const targetRect = placeholder.getBoundingClientRect();
@@ -644,9 +657,7 @@ function bindDragReorder(grid, refresh, onDockChange) {
       const active = session;
       const targetRect = active.dockPlaceholder.getBoundingClientRect();
       suppressClick = true;
-      document.removeEventListener('pointermove', active.onMove);
-      document.removeEventListener('pointerup', active.onUp);
-      document.removeEventListener('pointercancel', active.onUp);
+      removeSessionListeners(active);
       session = null;
 
       animateFloatedItemTo(active.item, targetRect);
@@ -678,9 +689,7 @@ function bindDragReorder(grid, refresh, onDockChange) {
       animateFloatedItemTo(item, targetRect);
       item.classList.remove('is-dragging');
 
-      document.removeEventListener('pointermove', session.onMove);
-      document.removeEventListener('pointerup', session.onUp);
-      document.removeEventListener('pointercancel', session.onUp);
+      removeSessionListeners(session);
       session = null;
 
       setTimeout(() => {
@@ -697,6 +706,12 @@ function bindDragReorder(grid, refresh, onDockChange) {
     setTimeout(() => {
       suppressClick = false;
     }, 0);
+  }
+
+  function onCancel(e) {
+    if (!session) return;
+    if (e?.pointerId != null && e.pointerId !== session.pointerId) return;
+    clearSession();
   }
 
   grid.addEventListener('contextmenu', (e) => {
@@ -733,11 +748,13 @@ function bindDragReorder(grid, refresh, onDockChange) {
       active: false,
       onMove,
       onUp,
+      onCancel,
     };
 
     document.addEventListener('pointermove', onMove);
     document.addEventListener('pointerup', onUp);
-    document.addEventListener('pointercancel', onUp);
+    document.addEventListener('pointercancel', onCancel);
+    window.addEventListener('blur', onCancel, { once: true });
 
     if (session.pointerType !== 'mouse' && session.pointerType !== 'pen') {
       session.timer = setTimeout(() => {

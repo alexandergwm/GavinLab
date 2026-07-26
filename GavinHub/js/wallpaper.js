@@ -77,6 +77,7 @@ const blobUrlCache = new Map();
 let preloadedWallpaper = null;
 let preloadIdleHandle = null;
 let preloadGeneration = 0;
+let wallpaperIntentRevision = 0;
 const storedBootWallpaper = loadLastWallpaperMeta();
 let currentWallpaper = isValidCachedWallpaperMeta(storedBootWallpaper)
   ? { ...storedBootWallpaper, type: storedBootWallpaper.type || 'image' }
@@ -91,6 +92,15 @@ const wallpaperEffects = createWallpaperEffects({
 window.addEventListener('pagehide', wallpaperEffects.dispose, { once: true });
 
 let bootThemeAdaptPending = false;
+
+function beginWallpaperIntent() {
+  wallpaperIntentRevision += 1;
+  return wallpaperIntentRevision;
+}
+
+function isWallpaperIntentCurrent(intent) {
+  return intent === wallpaperIntentRevision;
+}
 
 function canRunBackgroundImageWork() {
   return !document.hidden && !navigator.connection?.saveData;
@@ -196,15 +206,17 @@ function finishBootReveal() {
   document.body.classList.remove('wallpaper-boot', 'boot-priming-ui');
 }
 
-async function fetchBingAndApplyInBackground(fallbackMeta) {
+async function fetchBingAndApplyInBackground(fallbackMeta, intent) {
   if (fallbackMeta && !canRunBackgroundImageWork()) return;
   try {
     const data = await fetchBingWallpaper(0);
+    if (!isWallpaperIntentCurrent(intent)) return;
     const next = { ...data, url: upgradeWallpaperUrl(data) };
     if (isSameWallpaperImage(getCurrentWallpaper(), next)) return;
     if (fallbackMeta && isSameWallpaperImage(fallbackMeta, next)) return;
-    await applyWallpaperProgressive(next);
+    await applyWallpaperProgressive(next, intent);
   } catch {
+    if (!isWallpaperIntentCurrent(intent)) return;
     if (fallbackMeta && isValidCachedWallpaperMeta(fallbackMeta)) return;
     if (!initialWallpaperRevealed) {
       await revealBootWallpaper({ ...DEFAULT_WALLPAPER }, { skipPersist: true });
@@ -228,11 +240,6 @@ function isBingDailyStale(cached) {
     const cachedDay = getLocalDateKey(new Date(cached.cachedAt));
     if (cachedDay >= today) return false;
   }
-  return true;
-}
-
-async function bootFetchAndRevealBing(fallbackMeta) {
-  void fetchBingAndApplyInBackground(fallbackMeta);
   return true;
 }
 
@@ -727,10 +734,14 @@ export function isWallpaperRevealComplete() {
   return initialWallpaperRevealed;
 }
 
-export async function restoreWallpaperFromCache(source = getInitialWallpaperSource()) {
+export async function restoreWallpaperFromCache(
+  source = getInitialWallpaperSource(),
+  intent = wallpaperIntentRevision,
+) {
   const meta = loadLastWallpaperMeta();
   if (!isValidCachedWallpaperMeta(meta)) return false;
   if (!cacheMatchesSource(meta, source)) return false;
+  if (!isWallpaperIntentCurrent(intent)) return false;
 
   if (meta.textTheme) {
     applyTextTheme({ theme: meta.textTheme, min: meta.luminance ?? 120 });
@@ -747,11 +758,14 @@ export async function restoreWallpaperFromCache(source = getInitialWallpaperSour
     await revealBootWallpaper(meta);
   }
 
+  if (!isWallpaperIntentCurrent(intent)) return false;
+
   if (meta.type !== 'gradient' && meta.url) {
+    const restoredWallpaperId = getWallpaperId(meta);
     isWallpaperUrlReachable(meta.url).then((ok) => {
-      if (!ok) {
-        loadWallpaper(source, { force: true }).catch(() => applyBingFallbackWallpaper());
-      }
+      if (ok || !isWallpaperIntentCurrent(intent)) return;
+      if (getWallpaperId(getCurrentWallpaper()) !== restoredWallpaperId) return;
+      loadWallpaper(source, { force: true }).catch(() => {});
     });
   }
   return true;
@@ -1090,9 +1104,11 @@ function ensureWallpaperDomPainted() {
   applyWallpaper({ ...DEFAULT_WALLPAPER }, { skipPersist: true, skipAdapt: true, immediateBlur: false });
 }
 
-async function commitNextWallpaper(data) {
+async function commitNextWallpaper(data, intent) {
+  if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
   lastAnalyzedWallpaperKey = '';
   await applyWallpaperSwitch(data);
+  if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
   saveSettings({
     wallpaperId: data.id || data.dateKey || '',
     wallpaperSource: normalizeSelectableWallpaperSource(data.source || 'bing'),
@@ -1101,6 +1117,7 @@ async function commitNextWallpaper(data) {
 }
 
 export async function loadNextWallpaper() {
+  const intent = beginWallpaperIntent();
   const previous = { ...currentWallpaper };
   const recent = loadRecentWallpaperIds();
 
@@ -1109,36 +1126,41 @@ export async function loadNextWallpaper() {
     && !isRecentlyShown(preloadedWallpaper, recent)) {
     const next = preloadedWallpaper;
     preloadedWallpaper = null;
-    return await commitNextWallpaper({ ...next, source: 'bing' });
+    return await commitNextWallpaper({ ...next, source: 'bing' }, intent);
   }
 
   for (let attempt = 0; attempt < BING_WALLPAPER_DAYS; attempt += 1) {
     try {
       const data = await fetchNextBingWallpaper(recent);
+      if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
       if (!data?.url || isSameWallpaperImage(data, previous)) continue;
-      return await commitNextWallpaper({ ...data, source: 'bing' });
+      return await commitNextWallpaper({ ...data, source: 'bing' }, intent);
     } catch {
+      if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
       /* try next day in archive */
     }
   }
 
-  await applyBingFallbackWallpaper(previous);
+  await applyBingFallbackWallpaper(previous, intent);
   return currentWallpaper;
 }
 
-async function applyBingFallbackWallpaper(previous = null) {
+async function applyBingFallbackWallpaper(previous = null, intent = wallpaperIntentRevision) {
   for (let idx = 0; idx < BING_WALLPAPER_DAYS; idx += 1) {
     try {
       const data = await fetchBingWallpaper(idx);
+      if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
       if (previous && isSameWallpaperImage(data, previous)) continue;
       if (data?.url) {
         await applyWallpaperSwitch({ ...data, source: 'bing' });
         return currentWallpaper;
       }
     } catch {
+      if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
       /* try next idx */
     }
   }
+  if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
   applyWallpaper({ ...DEFAULT_WALLPAPER }, { adaptImmediate: true });
   return currentWallpaper;
 }
@@ -1215,7 +1237,8 @@ export function initWallpaperRotation(onRotate, { runImmediately = false } = {})
   return setInterval(tick, 60 * 1000);
 }
 
-async function applyWallpaperProgressive(data) {
+async function applyWallpaperProgressive(data, intent) {
+  if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
   if (!initialWallpaperRevealed && isBootWallpaperDisplayed(data)) return currentWallpaper;
   const source = normalizeWallpaperSource(data.source);
   let payload = data;
@@ -1224,6 +1247,7 @@ async function applyWallpaperProgressive(data) {
   } catch {
     /* keep original payload */
   }
+  if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
 
   const hiResUrl = upgradeWallpaperUrl(payload);
   const previewUrl = payload.previewUrl
@@ -1237,6 +1261,7 @@ async function applyWallpaperProgressive(data) {
     try {
       await loadImageElement(hiResUrl, /^https?:/i.test(hiResUrl));
     } catch {
+      if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
       if (!isSameWallpaperImage(getCurrentWallpaper(), { ...payload, url: hiResUrl })) {
         applyWallpaper({ ...payload, url: hiResUrl }, { adaptImmediate: true });
       }
@@ -1244,6 +1269,7 @@ async function applyWallpaperProgressive(data) {
     }
   }
 
+  if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
   const finalPayload = { ...payload, url: hiResUrl, previewUrl };
   if (!isSameWallpaperImage(getCurrentWallpaper(), finalPayload)) {
     applyWallpaper(finalPayload, { adaptImmediate: true });
@@ -1251,32 +1277,41 @@ async function applyWallpaperProgressive(data) {
   return currentWallpaper;
 }
 
-async function fetchWallpaperParallel() {
+async function fetchWallpaperParallel(intent) {
   let lastError = new Error('Bing wallpaper failed');
   for (let idx = 0; idx < BING_WALLPAPER_DAYS; idx += 1) {
     try {
       const data = await fetchBingWallpaper(idx);
+      if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
       if (!data?.url) throw new Error('No wallpaper url');
-      await applyWallpaperProgressive({ ...data, source: 'bing' });
+      await applyWallpaperProgressive({ ...data, source: 'bing' }, intent);
       return currentWallpaper;
     } catch (err) {
+      if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
       lastError = err;
     }
   }
   throw lastError;
 }
 
-async function loadWallpaperForSource(source) {
+async function loadWallpaperForSource(source, intent) {
   const data = await fetchWallpaperData(source);
+  if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
   if (source === 'local' || source === 'library' || source === 'builtin') {
     applyWallpaper(data, { adaptImmediate: true });
     return currentWallpaper;
   }
-  await applyWallpaperProgressive(data);
+  await applyWallpaperProgressive(data, intent);
   return currentWallpaper;
 }
 
+async function fetchWallpaperForSource(source, intent) {
+  if (source === 'bing') return fetchWallpaperParallel(intent);
+  return loadWallpaperForSource(source, intent);
+}
+
 export async function loadWallpaper(source = 'bing', { force = false } = {}) {
+  const intent = beginWallpaperIntent();
   source = normalizeSelectableWallpaperSource(source);
   let cached = loadLastWallpaperMeta();
   if (cached && !isValidCachedWallpaperMeta(cached)) {
@@ -1299,14 +1334,15 @@ export async function loadWallpaper(source = 'bing', { force = false } = {}) {
 
   if (!initialWallpaperRevealed) {
     if (hasCache) {
-      await restoreWallpaperFromCache(source);
+      await restoreWallpaperFromCache(source, intent);
     } else {
       await revealBootWallpaper({ ...DEFAULT_WALLPAPER }, { skipPersist: true });
     }
+    if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
   }
 
   if (source === 'bing' && needsRefresh && !force) {
-    void fetchBingAndApplyInBackground(hasCache ? cached : null);
+    void fetchBingAndApplyInBackground(hasCache ? cached : null, intent);
     schedulePreloadNext(getCurrentWallpaper());
     return currentWallpaper;
   }
@@ -1320,14 +1356,16 @@ export async function loadWallpaper(source = 'bing', { force = false } = {}) {
   }
 
   await waitForBootFadeComplete();
+  if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
 
   try {
-    await fetchWallpaperForSource(source);
+    await fetchWallpaperForSource(source, intent);
   } catch {
+    if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
     if (!initialWallpaperRevealed) {
       await applyWallpaperWithInitialReveal({ ...DEFAULT_WALLPAPER }, { skipPersist: true });
     } else {
-      await applyBingFallbackWallpaper();
+      await applyBingFallbackWallpaper(null, intent);
     }
   }
 
@@ -1335,6 +1373,7 @@ export async function loadWallpaper(source = 'bing', { force = false } = {}) {
 }
 
 export async function applySelectedWallpaper(data) {
+  beginWallpaperIntent();
   applyWallpaper(data, { adaptImmediate: true });
   saveSettings({ wallpaperId: data.id || data.dateKey || '', wallpaperSource: 'library' });
   return currentWallpaper;
