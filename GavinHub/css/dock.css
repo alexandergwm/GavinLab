@@ -362,7 +362,6 @@ body[data-text-theme='on-light'] .dock-tab.active {
   width: 100%;
 }
 
-:is(body.layout-sidebar, html.layout-sidebar body) .search-focus-overlay,
 :is(body.layout-sidebar, html.layout-sidebar body) .scene-vignette {
   left: var(--dock-rail-width);
 }

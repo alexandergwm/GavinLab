@@ -14,12 +14,12 @@
   /* 搜索栏亮毛玻璃 — idle 更透、贴壁纸；聚焦时再抬起对比 */
   --glass-search-bg: rgba(255, 255, 255, 0.1);
   --glass-search-bg-hover: rgba(255, 255, 255, 0.16);
-  --glass-search-bg-focus: rgba(255, 255, 255, 0.3);
+  --glass-search-bg-focus: rgba(38, 34, 44, 0.5);
   --glass-search-blur: blur(22px) saturate(150%);
   --glass-search-blur-focus: var(--glass-search-blur);
   --glass-search-border: rgba(255, 255, 255, 0.1);
   --glass-search-border-hover: rgba(255, 255, 255, 0.18);
-  --glass-search-border-focus: rgba(255, 255, 255, 0.3);
+  --glass-search-border-focus: rgba(255, 255, 255, 0.28);
 
   /* 统一面板毛玻璃 — Dock / 联想下拉 / 引擎菜单（保持可读，不跟搜索栏 idle 变淡） */
   --glass-panel-bg: rgba(255, 255, 255, 0.2);
@@ -72,6 +72,7 @@
   --transition-wallpaper: 0.45s cubic-bezier(0.4, 0, 0.2, 1); /* 壁纸滤镜/缩放 */
   --transition-page: 0.32s cubic-bezier(0.4, 0, 0.2, 1); /* 页面/毛玻璃切换 — 更平滑的跨页过渡 */
   --transition-search-focus: 0.82s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-focus-backdrop: 0.56s cubic-bezier(0.16, 1, 0.3, 1);
   --dock-height: 68px;
   --dock-bottom: 24px;
   --dock-clearance: calc(var(--dock-height) + var(--dock-bottom) + 28px);
@@ -92,9 +93,9 @@
     var(--stage-top) + clamp(52px, 7.2vw, 68px) + 6px + clamp(12px, 1.6vw, 14px) * 1.5 + 18px
   );
   --stage-color: rgba(255, 255, 255, 0.94);
-  --stage-shadow: 0 1px 18px rgba(0, 0, 0, 0.12);
+  --stage-shadow: 0 1px 3px rgba(0, 0, 0, 0.58), 0 5px 20px rgba(0, 0, 0, 0.2);
   --meta-color: rgba(255, 255, 255, 0.78);
-  --meta-shadow: 0 1px 10px rgba(0, 0, 0, 0.1);
+  --meta-shadow: 0 1px 3px rgba(0, 0, 0, 0.62), 0 3px 12px rgba(0, 0, 0, 0.2);
   --meta-sep-opacity: 0.42;
   --label-shadow: none;
 }
@@ -103,27 +104,27 @@ body[data-text-theme='on-light'],
 body[data-text-tone='dark']:not([data-text-theme='on-mixed']) {
   --text-primary: #2d3748;
   --stage-color: rgba(45, 55, 72, 0.92);
-  --stage-shadow: 0 1px 14px rgba(255, 255, 255, 0.55);
+  --stage-shadow: 0 1px 3px rgba(255, 255, 255, 0.82), 0 3px 14px rgba(255, 255, 255, 0.5);
   --meta-color: rgba(45, 55, 72, 0.76);
-  --meta-shadow: 0 1px 8px rgba(255, 255, 255, 0.45);
+  --meta-shadow: 0 1px 3px rgba(255, 255, 255, 0.86), 0 2px 10px rgba(255, 255, 255, 0.48);
   --meta-sep-opacity: 0.34;
 }
 
 body[data-text-theme='on-dark'] {
   --text-primary: #fff;
   --stage-color: rgba(255, 255, 255, 0.94);
-  --stage-shadow: 0 1px 18px rgba(0, 0, 0, 0.12);
+  --stage-shadow: 0 1px 3px rgba(0, 0, 0, 0.58), 0 5px 20px rgba(0, 0, 0, 0.2);
   --meta-color: rgba(255, 255, 255, 0.78);
-  --meta-shadow: 0 1px 10px rgba(0, 0, 0, 0.1);
+  --meta-shadow: 0 1px 3px rgba(0, 0, 0, 0.62), 0 3px 12px rgba(0, 0, 0, 0.2);
   --meta-sep-opacity: 0.42;
 }
 
 body[data-text-theme='on-mixed'] {
   --text-primary: rgba(255, 255, 255, 0.98);
   --stage-color: rgba(255, 255, 255, 0.94);
-  --stage-shadow: 0 1px 18px rgba(0, 0, 0, 0.12);
+  --stage-shadow: 0 1px 4px rgba(0, 0, 0, 0.72), 0 4px 18px rgba(0, 0, 0, 0.3);
   --meta-color: rgba(255, 255, 255, 0.78);
-  --meta-shadow: 0 1px 10px rgba(0, 0, 0, 0.1);
+  --meta-shadow: 0 1px 4px rgba(0, 0, 0, 0.74), 0 3px 12px rgba(0, 0, 0, 0.26);
   --meta-sep-opacity: 0.42;
 }
 
@@ -291,7 +292,7 @@ body.page-apps-active .scene-vignette {
 }
 
 body.search-focused:not(.page-blur-active) .scene-vignette {
-  opacity: 0.95;
+  opacity: 0.55;
 }
 
 .search-focus-overlay {
@@ -302,19 +303,19 @@ body.search-focused:not(.page-blur-active) .scene-vignette {
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
-  transform: translateZ(0) scale(1.006);
+  transform: translateZ(0) scale(1.025);
   opacity: 0;
   visibility: hidden;
   transition:
-    opacity var(--transition-search-focus),
-    visibility var(--transition-search-focus);
+    opacity var(--transition-focus-backdrop),
+    visibility var(--transition-focus-backdrop);
   pointer-events: none;
   backface-visibility: hidden;
   contain: strict;
   will-change: opacity;
 }
 
-body.search-focused .search-focus-overlay {
+body.search-focused:not(.page-apps-active) .search-focus-overlay {
   opacity: 1;
   visibility: visible;
 }
@@ -455,7 +456,7 @@ body.boot-awakening.boot-ui-settled .dock {
 
 body.search-focused .clock-trigger,
 body.search-focused .meta-line {
-  opacity: 0.55;
+  opacity: 0.82;
   transition: opacity var(--transition-search-focus);
 }
 
@@ -497,6 +498,7 @@ body.page-apps-active .wallpaper-blur {
 }
 
 /* 应用页的预览层固定偏暗，统一亮色文字，避免壁纸分析完成时黑白跳变。 */
+body.search-focused,
 body.page-blur-active,
 body.page-apps-active {
   --text-primary: #fff;

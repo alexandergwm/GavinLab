@@ -45,7 +45,6 @@ import {
   loadImageElement,
   measureBlobWidth,
   createWallpaperAppsPreview,
-  createWallpaperFocusPreview,
   MIN_CACHE_WIDTH,
 } from './wallpaper-image.js';
 import { createWallpaperEffects } from './wallpaper-effects.js';
@@ -87,8 +86,7 @@ let initialWallpaperRevealed = document.body.classList.contains('boot-done');
 let wallpaperFocusReadyPromise = Promise.resolve(false);
 let wallpaperAppsReadyPromise = Promise.resolve(false);
 const wallpaperEffects = createWallpaperEffects({
-  createFocusPreview: createWallpaperFocusPreview,
-  createAppsPreview: createWallpaperAppsPreview,
+  createPreview: createWallpaperAppsPreview,
 });
 
 window.addEventListener('pagehide', wallpaperEffects.dispose, { once: true });
@@ -593,7 +591,7 @@ function getWallpaperEffectPayload(data = currentWallpaper) {
   return { type: 'image', url: getBlurWallpaperUrl(data) };
 }
 
-/** 首页搜索聚焦只等待轻量预览，不再被第二页高清模糊阻塞。 */
+/** 搜索聚焦与应用页复用同一张预模糊图，切换时只做合成层淡入。 */
 function syncFocusWallpaperLayer(data = currentWallpaper) {
   if (!data) return Promise.resolve(false);
   return wallpaperEffects.sync(getWallpaperEffectPayload(data));

@@ -156,6 +156,23 @@ try {
       && bootEffectState.focusLayer.includes('blob:'),
     `search focus must wait for its final wallpaper effect: ${JSON.stringify(bootEffectState)}`,
   );
+  const focusedBackdropState = await page.evaluate(() => {
+    const overlay = document.getElementById('search-focus-overlay');
+    const bodyStyle = getComputedStyle(document.body);
+    return {
+      preview: overlay?.style.backgroundImage || '',
+      previewScale: overlay ? getComputedStyle(overlay).transform : '',
+      searchBackgroundToken: bodyStyle.getPropertyValue('--glass-search-bg-focus').trim(),
+      stageColorToken: bodyStyle.getPropertyValue('--stage-color').trim(),
+    };
+  });
+  assert(
+    focusedBackdropState.preview.includes('blob:')
+      && focusedBackdropState.previewScale !== 'none'
+      && focusedBackdropState.searchBackgroundToken === 'rgba(38, 34, 44, 0.5)'
+      && focusedBackdropState.stageColorToken === '#fff',
+    `focused search must use a legible composited glass state: ${JSON.stringify(focusedBackdropState)}`,
+  );
   const bootVisualState = await page.evaluate(() => {
     const visibleFrames = window.__bootVisualFrames.filter((frame) => frame.searchVisible);
     const unique = (key) => [...new Set(visibleFrames.map((frame) => frame[key]).filter(Boolean))];
@@ -261,6 +278,41 @@ try {
   assert(
     lifecycleSafety.stalePreviewDisposals === 1 && !lifecycleSafety.stalePreviewApplied,
     `disposed wallpaper effects must reject late previews: ${JSON.stringify(lifecycleSafety)}`,
+  );
+  const wallpaperThemes = await page.evaluate(async () => {
+    const { analyzeWallpaperTheme } = await import('./js/wallpaper-theme.js');
+    const makeWallpaper = (paint) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 800;
+      canvas.height = 600;
+      const ctx = canvas.getContext('2d');
+      paint(ctx, canvas);
+      return canvas.toDataURL('image/png');
+    };
+    const light = makeWallpaper((ctx, canvas) => {
+      ctx.fillStyle = '#f4f6f8';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    });
+    const dark = makeWallpaper((ctx, canvas) => {
+      ctx.fillStyle = '#181b22';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    });
+    const mixed = makeWallpaper((ctx, canvas) => {
+      ctx.fillStyle = '#11151c';
+      ctx.fillRect(0, 0, canvas.width / 2, canvas.height);
+      ctx.fillStyle = '#f0f3f6';
+      ctx.fillRect(canvas.width / 2, 0, canvas.width / 2, canvas.height);
+    });
+    const analyses = await Promise.all([
+      analyzeWallpaperTheme(light),
+      analyzeWallpaperTheme(dark),
+      analyzeWallpaperTheme(mixed),
+    ]);
+    return analyses.map((analysis) => analysis.theme);
+  });
+  assert(
+    wallpaperThemes.join(',') === 'on-light,on-dark,on-mixed',
+    `wallpaper text themes must cover light, dark, and mixed scenes: ${wallpaperThemes}`,
   );
   const baseline = await page.evaluate(() => {
     const navigation = performance.getEntriesByType('navigation')[0];
@@ -439,7 +491,10 @@ try {
   await page.waitForFunction(() =>
     document.querySelector('.page-panel.page-apps')?.getBoundingClientRect().height > 0);
   assert(
-    await page.locator('#wallpaper-blur').evaluate((layer) => layer.style.backgroundImage.includes('blob:')),
+    await page.locator('#wallpaper-blur').evaluate(
+      (layer, focusedPreview) => layer.style.backgroundImage === focusedPreview,
+      focusedBackdropState.preview,
+    ),
     'apps navigation should reveal a final preview instead of a provisional wallpaper',
   );
   assert(await page.locator('.page-panel[data-page="apps"]').evaluate((el) => el.classList.contains('active')),

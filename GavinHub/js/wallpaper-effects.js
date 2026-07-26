@@ -3,26 +3,13 @@ const PREVIEW_WAIT_MS = 800;
 
 export function createWallpaperEffects({
   createPreviews,
-  createFocusPreview = createPreviews,
-  createAppsPreview = createPreviews,
+  createPreview = createPreviews,
   maxCacheSize = DEFAULT_CACHE_SIZE,
 } = {}) {
   const previewCache = new Map();
   const previewRequests = new Map();
   let activeKey = '';
   let generation = 0;
-
-  function getLayer(kind) {
-    return document.getElementById(kind === 'apps' ? 'wallpaper-blur' : 'search-focus-overlay');
-  }
-
-  function getFactory(kind) {
-    return kind === 'apps' ? createAppsPreview : createFocusPreview;
-  }
-
-  function previewKey(kind, url) {
-    return `${kind}:${url}`;
-  }
 
   function rememberPreview(key, preview) {
     previewCache.set(key, preview);
@@ -33,17 +20,16 @@ export function createWallpaperEffects({
     }
   }
 
-  function requestPreview(kind, url) {
-    const key = previewKey(kind, url);
+  function requestPreview(url) {
+    const key = url;
     const cached = previewCache.get(key);
     if (cached) return Promise.resolve(cached);
-    const factory = getFactory(kind);
-    if (!factory) return Promise.resolve(null);
+    if (!createPreview) return Promise.resolve(null);
     const pending = previewRequests.get(key);
     if (pending) return pending.bounded;
 
     const requestGeneration = generation;
-    const previewPromise = factory(url).then((preview) => {
+    const previewPromise = createPreview(url).then((preview) => {
       if (requestGeneration !== generation) {
         preview?.dispose?.();
         return null;
@@ -75,8 +61,8 @@ export function createWallpaperEffects({
     layer.style.backgroundColor = '';
   }
 
-  async function syncKind(kind, data = {}) {
-    const layer = getLayer(kind);
+  async function syncLayer(layerId, data = {}) {
+    const layer = document.getElementById(layerId);
     if (!layer) return false;
     const expectedKey = setActive(data);
     const { type = 'image', css = '', url = '' } = data;
@@ -90,19 +76,19 @@ export function createWallpaperEffects({
       return false;
     }
 
-    const preview = await requestPreview(kind, url);
+    const preview = await requestPreview(url);
     if (activeKey !== expectedKey) return false;
-    const previewUrl = preview?.[kind];
+    const previewUrl = preview?.apps;
     applyFallback(layer, previewUrl ? `url("${previewUrl}")` : `url("${url}")`);
     return Boolean(previewUrl);
   }
 
   function sync(data) {
-    return syncKind('focus', data);
+    return syncLayer('search-focus-overlay', data);
   }
 
   function prepareApps(data) {
-    return syncKind('apps', data);
+    return syncLayer('wallpaper-blur', data);
   }
 
   function dispose() {

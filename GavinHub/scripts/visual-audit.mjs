@@ -77,6 +77,7 @@ async function inspectLayout(page, state) {
     const dock = rect('#dock');
     const activePanel = rect('.page-panel.active');
     const dialog = rect('dialog[open]');
+    const focusBackdrop = rect('#search-focus-overlay');
     const tiles = [...document.querySelectorAll('.page-apps.active .shortcut-icon')]
       .map((el) => el.getBoundingClientRect())
       .filter((r) => r.width > 0 && r.height > 0);
@@ -100,6 +101,12 @@ async function inspectLayout(page, state) {
       dock,
       activePanel,
       dialog,
+      focusBackdropCoversViewport: !focusBackdrop || (
+        focusBackdrop.left <= 0
+        && focusBackdrop.top <= 0
+        && focusBackdrop.right >= innerWidth
+        && focusBackdrop.bottom >= innerHeight
+      ),
       insideViewport: [search, dock, activePanel, dialog].every(insideViewport),
       searchCenterOffset: search ? Math.abs((search.left + search.width / 2) - innerWidth / 2) : null,
       sidebarLayout: document.documentElement.classList.contains('layout-sidebar')
@@ -127,6 +134,8 @@ async function capture(page, profile, state) {
     const centerTolerance = layout.sidebarLayout ? 36 : 2;
     assert(layout.searchCenterOffset < centerTolerance,
       `${profile} search is outside its content center: ${layout.searchCenterOffset}`);
+    assert(layout.focusBackdropCoversViewport,
+      `${profile} search focus backdrop does not cover the viewport`);
   }
   if (state === 'apps') {
     assert(layout.tileSizeSpread < 1, `${profile} app tiles changed size: ${layout.tileSizeSpread}`);

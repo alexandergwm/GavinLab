@@ -158,18 +158,6 @@ async function renderWallpaperEffect(url, {
   }
 }
 
-export async function createWallpaperFocusPreview(url) {
-  const focus = await renderWallpaperEffect(url, {
-    targetWidth: 1200,
-    quality: 0.82,
-    filter: 'brightness(94%) saturate(104%)',
-  });
-  return {
-    focus,
-    dispose() { URL.revokeObjectURL(focus); },
-  };
-}
-
 export async function createWallpaperAppsPreview(url) {
   const viewportWidth = Math.max(APPS_EFFECT_MIN_WIDTH, Math.ceil(window.innerWidth * 1.05));
   const targetWidth = Math.min(APPS_EFFECT_MAX_WIDTH, viewportWidth);
@@ -182,22 +170,6 @@ export async function createWallpaperAppsPreview(url) {
   return {
     apps,
     dispose() { URL.revokeObjectURL(apps); },
-  };
-}
-
-/** Compatibility helper for callers that explicitly need both layers. */
-export async function createWallpaperEffectPreviews(url) {
-  const [appsPreview, focusPreview] = await Promise.all([
-    createWallpaperAppsPreview(url),
-    createWallpaperFocusPreview(url),
-  ]);
-  return {
-    apps: appsPreview.apps,
-    focus: focusPreview.focus,
-    dispose() {
-      appsPreview.dispose();
-      focusPreview.dispose();
-    },
   };
 }
 

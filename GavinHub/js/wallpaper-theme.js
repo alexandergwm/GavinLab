@@ -57,6 +57,7 @@ function sampleRegionStats(ctx, drawable, iw, ih, region, width, height) {
     median: samples[Math.floor(samples.length * 0.5)] ?? 128,
     p10: samples[Math.floor(samples.length * 0.1)] ?? 128,
     p25: samples[Math.floor(samples.length * 0.25)] ?? 128,
+    p75: samples[Math.floor(samples.length * 0.75)] ?? 128,
   };
 }
 
@@ -71,11 +72,15 @@ function analyzeDrawable(drawable, width, height) {
     64,
     28,
   );
-  const brightness = stats.p10 * 0.45 + stats.p25 * 0.35 + stats.median * 0.2;
+  const tonalSpread = stats.p75 - stats.p25;
+  const mixed = tonalSpread >= 92 || (stats.p25 < 88 && stats.p75 > 168);
+  const theme = mixed
+    ? 'on-mixed'
+    : stats.median >= LIGHT_TEXT_LUMINANCE ? 'on-light' : 'on-dark';
   return {
     min: stats.p10,
     max: stats.max,
-    theme: brightness >= LIGHT_TEXT_LUMINANCE ? 'on-light' : 'on-dark',
+    theme,
   };
 }
 
