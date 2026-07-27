@@ -338,7 +338,7 @@
           <ol class="settings-github-steps">
             <li><button type="button" id="github-open-token-btn" class="settings-link-btn">打开 GitHub 创建 Token</button>（推荐 classic，勾选 <code>gist</code>）</li>
             <li>复制 <code>ghp_</code> 或 <code>github_pat_</code> 开头 Token 粘贴下方</li>
-            <li>点「保存并同步」：首次会自动建私有 Gist；另一台电脑填同一 Token 和 Gist ID</li>
+            <li>点「保存并同步」：会先查找已有备份；没有时才新建私有 Gist</li>
           </ol>
           <label class="settings-field">
             <span>GitHub Token</span>
@@ -346,7 +346,7 @@
           </label>
           <label class="settings-field settings-field--gist" id="github-gist-field">
             <span>Gist ID</span>
-            <input type="text" id="github-sync-gist-id" placeholder="另一台电脑粘贴同一个 Gist ID" spellcheck="false" autocapitalize="off">
+            <input type="text" id="github-sync-gist-id" placeholder="可选：只有多个备份时需填写" spellcheck="false" autocapitalize="off">
           </label>
           <button type="button" id="github-sync-merge-btn" class="settings-sync-btn settings-sync-btn--primary settings-sync-file-action">保存并同步</button>
           <p id="github-sync-status" class="settings-hint settings-sync-manual-hint" hidden></p>

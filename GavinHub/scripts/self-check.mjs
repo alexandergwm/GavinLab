@@ -241,6 +241,11 @@ assert(existsSync(join(root, 'js/credential-store.js')), 'missing extension-priv
 assert(read('js/credential-store.js').includes('chrome.storage.local'), 'GitHub token should use extension-local storage');
 assert(read('js/sync.js').includes('const SYNC_VERSION = 2'), 'sync payload should use per-dataset revision format');
 assert(read('js/sync.js').includes('mergeSyncBundles'), 'sync should merge independent datasets');
+const githubSync = read('js/github-sync.js');
+assert(githubSync.includes('findGithubSyncGists'), 'GitHub sync should discover an existing backup before creating one');
+assert(githubSync.includes('githubGistBaseline'), 'GitHub sync should track whether a Gist has completed safe bootstrap');
+assert(githubSync.includes("new Error('multiple-gists')"), 'GitHub sync must stop before writing when backup identity is ambiguous');
+assert(app.includes('initialGithubSyncScheduled'), 'saved GitHub credentials should trigger an idle startup sync');
 assert(existsSync(join(root, 'js/page-registry.js')), 'missing extensible page registry');
 assert(read('js/runtime.js').includes('getPageDefinition'), 'runtime should prepare pages from registry metadata');
 

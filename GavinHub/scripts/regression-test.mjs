@@ -621,6 +621,8 @@ try {
     } catch { /* the test aborts external requests */ }
     const savedToken = localStorage.getItem('startpage-github-token');
     localStorage.removeItem('startpage-github-token');
+    const credentials = await import('./js/credential-store.js');
+    credentials.clearCredentialCache();
     const sync = await import('./js/sync.js');
     let periodicRuns = 0;
     let periodicApplied = 0;
@@ -700,6 +702,159 @@ try {
       && syncSafety.librarySource === 'library'
       && syncSafety.manualRotationStayedStopped,
     `sync should merge each dataset independently: ${JSON.stringify(syncSafety)}`,
+  );
+
+  const githubBootstrapSafety = await page.evaluate(async () => {
+    const storageKeys = [
+      'startpage-settings',
+      'startpage-shortcuts',
+      'startpage-dock',
+      'startpage-todos',
+      'startpage-goals',
+      'startpage-important-dates',
+      'startpage-countdowns',
+      'startpage-sync-local-at',
+      'startpage-sync-revisions',
+      'startpage-github-token',
+      'startpage-github-gist-id',
+      'startpage-github-gist-baseline',
+    ];
+    const previous = Object.fromEntries(storageKeys.map((key) => [key, localStorage.getItem(key)]));
+    const originalFetch = window.fetch;
+    const credentials = await import('./js/credential-store.js');
+    const github = await import('./js/github-sync.js');
+    const storage = await import('./js/storage.js');
+    let mode = 'single';
+    let writes = 0;
+    let patchedPayload = null;
+
+    const remote = {
+      v: 2,
+      updatedAt: 200,
+      revisions: {
+        'startpage-settings': 0,
+        'startpage-shortcuts': 0,
+        'startpage-dock': 0,
+        'startpage-todos': 200,
+        'startpage-goals': 0,
+        'startpage-important-dates': 0,
+      },
+      settings: {},
+      'startpage-shortcuts': null,
+      'startpage-dock': null,
+      'startpage-todos': [{ id: 1, text: 'remote truth', startDate: '2026-07-28', endDate: '2026-07-28' }],
+      'startpage-goals': null,
+      'startpage-important-dates': null,
+    };
+
+    try {
+      for (const key of storageKeys) localStorage.removeItem(key);
+      credentials.clearCredentialCache();
+      localStorage.setItem('startpage-todos', JSON.stringify([
+        { id: 9, text: 'fresh defaults', startDate: '2026-07-28', endDate: '2026-07-28' },
+      ]));
+      localStorage.setItem('startpage-sync-local-at', '900');
+      localStorage.setItem('startpage-sync-revisions', JSON.stringify({ 'startpage-todos': 900 }));
+
+      window.fetch = async (input, init = {}) => {
+        const url = String(input?.url || input);
+        const method = init.method || 'GET';
+        if (url.includes('/gists?per_page=100')) {
+          const list = mode === 'multiple'
+            ? [
+              { id: 'canonical-gist', files: { 'gavinhub-sync.json': {} }, updated_at: '2026-07-28T10:00:00Z' },
+              { id: 'duplicate-gist', files: { 'gavinhub-sync.json': {} }, updated_at: '2026-07-28T11:00:00Z' },
+            ]
+            : [{ id: 'canonical-gist', files: { 'gavinhub-sync.json': {} }, updated_at: '2026-07-28T10:00:00Z' }];
+          return new Response(JSON.stringify(list), { status: 200 });
+        }
+        if (url.endsWith('/gists/canonical-gist') && method === 'GET') {
+          return new Response(JSON.stringify({
+            id: 'canonical-gist',
+            files: { 'gavinhub-sync.json': { content: JSON.stringify(remote) } },
+          }), { status: 200 });
+        }
+        if (url.endsWith('/gists/canonical-gist') && method === 'PATCH') {
+          writes += 1;
+          patchedPayload = JSON.parse(JSON.parse(init.body).files['gavinhub-sync.json'].content);
+          return new Response(JSON.stringify({ id: 'canonical-gist' }), { status: 200 });
+        }
+        if (url.endsWith('/gists') && method === 'POST') {
+          writes += 1;
+          return new Response(JSON.stringify({ id: 'new-gist' }), { status: 200 });
+        }
+        throw new Error(`unexpected GitHub request: ${method} ${url}`);
+      };
+
+      const first = await github.syncWithGithub({ token: 'ghp_bootstrap_token', gistId: '' });
+      const firstTodo = JSON.parse(localStorage.getItem('startpage-todos') || '[]')[0]?.text;
+      const writesAfterBootstrap = writes;
+      const discoveredGist = localStorage.getItem('startpage-github-gist-id');
+      const baseline = localStorage.getItem('startpage-github-gist-baseline');
+
+      storage.writeJson('startpage-todos', [
+        { id: 2, text: 'office change', startDate: '2026-07-28', endDate: '2026-07-28' },
+      ]);
+      await Promise.resolve();
+      const second = await github.syncWithGithub();
+      const secondPatchedTodo = patchedPayload?.['startpage-todos']?.[0]?.text;
+
+      localStorage.removeItem('startpage-github-gist-baseline');
+      storage.writeJson('startpage-todos', [
+        { id: 3, text: 'legacy upgrade change', startDate: '2026-07-28', endDate: '2026-07-28' },
+      ]);
+      await Promise.resolve();
+      const legacyUpgrade = await github.syncWithGithub();
+      const legacyPatchedTodo = patchedPayload?.['startpage-todos']?.[0]?.text;
+
+      localStorage.removeItem('startpage-github-gist-id');
+      localStorage.removeItem('startpage-github-gist-baseline');
+      mode = 'multiple';
+      let multipleError = '';
+      const writesBeforeMultiple = writes;
+      try {
+        await github.syncWithGithub({ token: 'ghp_bootstrap_token', gistId: '' });
+      } catch (error) {
+        multipleError = error.message;
+      }
+
+      return {
+        firstAction: first.action,
+        firstDiscovered: first.discovered,
+        firstTodo,
+        writesAfterBootstrap,
+        discoveredGist,
+        baseline,
+        secondAction: second.action,
+        patchedTodo: secondPatchedTodo,
+        legacyUpgradeAction: legacyUpgrade.action,
+        legacyPatchedTodo,
+        multipleError,
+        multipleDidNotWrite: writes === writesBeforeMultiple,
+      };
+    } finally {
+      window.fetch = originalFetch;
+      for (const [key, value] of Object.entries(previous)) {
+        if (value == null) localStorage.removeItem(key);
+        else localStorage.setItem(key, value);
+      }
+      credentials.clearCredentialCache();
+    }
+  });
+  assert(
+    githubBootstrapSafety.firstAction === 'downloaded'
+      && githubBootstrapSafety.firstDiscovered
+      && githubBootstrapSafety.firstTodo === 'remote truth'
+      && githubBootstrapSafety.writesAfterBootstrap === 0
+      && githubBootstrapSafety.discoveredGist === 'canonical-gist'
+      && githubBootstrapSafety.baseline === 'canonical-gist'
+      && githubBootstrapSafety.secondAction === 'uploaded'
+      && githubBootstrapSafety.patchedTodo === 'office change'
+      && githubBootstrapSafety.legacyUpgradeAction === 'uploaded'
+      && githubBootstrapSafety.legacyPatchedTodo === 'legacy upgrade change'
+      && githubBootstrapSafety.multipleError === 'multiple-gists'
+      && githubBootstrapSafety.multipleDidNotWrite,
+    `GitHub bootstrap must pull before any write: ${JSON.stringify(githubBootstrapSafety)}`,
   );
 
   const beforeDockDrag = await page.evaluate(async () => {

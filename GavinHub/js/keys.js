@@ -20,6 +20,7 @@ export const KEYS = {
   greetingLast: 'startpage-greeting-last',
   githubToken: 'startpage-github-token',
   githubGistId: 'startpage-github-gist-id',
+  githubGistBaseline: 'startpage-github-gist-baseline',
   syncLocalAt: 'startpage-sync-local-at',
   syncRevisions: 'startpage-sync-revisions',
 };

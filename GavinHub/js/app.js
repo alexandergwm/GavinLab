@@ -316,7 +316,7 @@ function refreshSyncedUi() {
 async function runGithubAutoSync() {
   const github = await import('./github-sync.js');
   const config = await github.loadGithubSyncConfig();
-  if (!config.token || !config.gistId) return;
+  if (!config.token) return;
   const result = await github.syncWithGithub(config);
   if (!result.reloaded) return;
   settingsStore.reload();
@@ -357,6 +357,7 @@ async function initCore() {
     else document.addEventListener('boot-glass-stable', refresh, { once: true });
   };
   let periodicSyncRegistered = false;
+  let initialGithubSyncScheduled = false;
   const registerSyncListener = (syncMod) => {
     syncMod?.initSyncListener?.(onSyncedDataApplied);
     if (!syncMod || periodicSyncRegistered) return;
@@ -366,6 +367,17 @@ async function initCore() {
       onApplied: onSyncedDataApplied,
       extraSync: runGithubAutoSync,
     });
+    if (!initialGithubSyncScheduled) {
+      initialGithubSyncScheduled = true;
+      const schedule = () => runWhenIdle(
+        () => void runGithubAutoSync().catch((error) => {
+          console.warn('[GavinHub] initial GitHub sync failed', error);
+        }),
+        { timeout: 1500, fallbackDelay: 120 },
+      );
+      if (document.body.classList.contains('boot-glass-stable')) schedule();
+      else document.addEventListener('boot-glass-stable', schedule, { once: true });
+    }
   };
 
   if (syncGate.settled) {

@@ -13,6 +13,7 @@ import {
 } from './sync.js';
 
 const GIST_FILENAME = 'gavinhub-sync.json';
+const GIST_DESCRIPTION = 'GavinHub StartPage sync';
 const GITHUB_API = 'https://api.github.com';
 const runGithubSyncExclusive = createAsyncQueue();
 
@@ -41,6 +42,21 @@ function readConfigFromForm(config) {
     throw new Error('bad-token-format');
   }
   return { token, gistId: config.gistId?.trim() || '' };
+}
+
+function getGithubBaseline() {
+  try {
+    return localStorage.getItem(KEYS.githubGistBaseline) || '';
+  } catch {
+    return '';
+  }
+}
+
+function setGithubBaseline(gistId) {
+  try {
+    if (gistId) localStorage.setItem(KEYS.githubGistBaseline, gistId);
+    else localStorage.removeItem(KEYS.githubGistBaseline);
+  } catch { /* ignore restricted storage */ }
 }
 
 async function githubRequest(path, { token, method = 'GET', body } = {}) {
@@ -91,9 +107,33 @@ async function pullFromGithub(config) {
   return extractPayloadFromGist(gist);
 }
 
-async function pushToGithub(config) {
+async function findGithubSyncGists(token) {
+  const gists = await githubRequest('/gists?per_page=100', { token });
+  if (!Array.isArray(gists)) return [];
+  return gists
+    .filter((gist) => gist?.id && gist.files?.[GIST_FILENAME])
+    .map((gist) => ({
+      id: gist.id,
+      description: gist.description || '',
+      updatedAt: gist.updated_at || '',
+    }))
+    .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+}
+
+async function resolveGithubGist(token, requestedGistId) {
+  if (requestedGistId) return { gistId: requestedGistId, discovered: false };
+  const matches = await findGithubSyncGists(token);
+  if (!matches.length) return { gistId: '', discovered: false };
+  if (matches.length > 1) {
+    const error = new Error('multiple-gists');
+    error.candidates = matches;
+    throw error;
+  }
+  return { gistId: matches[0].id, discovered: true };
+}
+
+async function pushPayloadToGithub(config, payload) {
   const { token, gistId: existingId } = readConfigFromForm(config);
-  const payload = exportSyncBundle();
   const content = JSON.stringify(payload, null, 2);
 
   if (existingId) {
@@ -109,7 +149,7 @@ async function pushToGithub(config) {
     token,
     method: 'POST',
     body: {
-      description: 'GavinHub StartPage sync',
+      description: GIST_DESCRIPTION,
       public: false,
       files: { [GIST_FILENAME]: { content } },
     },
@@ -120,19 +160,43 @@ async function pushToGithub(config) {
 
 /** 按数据集版本合并，避免一端改待办时覆盖另一端刚改的快捷方式。 */
 async function syncWithGithubTask(config) {
-  const { token, gistId } = readConfigFromForm(config || await loadGithubSyncConfig());
+  const savedConfig = await loadGithubSyncConfig();
+  const requested = readConfigFromForm(config || savedConfig);
+  const resolved = await resolveGithubGist(requested.token, requested.gistId);
+  const { token } = requested;
+  const { gistId, discovered } = resolved;
 
   if (!gistId) {
-    const result = await pushToGithub({ token, gistId: '' });
+    const result = await pushPayloadToGithub(
+      { token, gistId: '' },
+      exportSyncBundle(),
+    );
     await saveGithubSyncConfig({ token, gistId: result.gistId });
-    return { action: 'uploaded', gistId: result.gistId, reloaded: false };
+    setGithubBaseline(result.gistId);
+    return { action: 'uploaded-new', gistId: result.gistId, reloaded: false };
   }
 
-  let remote;
-  try {
-    remote = await pullFromGithub({ token, gistId });
-  } catch (err) {
-    throw err;
+  const remote = await pullFromGithub({ token, gistId });
+  const baseline = getGithubBaseline();
+  const isLegacyEstablishedDevice = !baseline
+    && Boolean(savedConfig.token)
+    && savedConfig.gistId === gistId;
+
+  /*
+   * A new install can generate fresh revisions while normalizing defaults.
+   * On the first link to an existing Gist, remote must be authoritative or
+   * those defaults can overwrite the user's established data.
+   */
+  if (baseline !== gistId && !isLegacyEstablishedDevice) {
+    importSyncBundle(remote);
+    await saveGithubSyncConfig({ token, gistId });
+    setGithubBaseline(gistId);
+    return {
+      action: 'downloaded',
+      gistId,
+      discovered,
+      reloaded: true,
+    };
   }
 
   const local = exportSyncBundle();
@@ -142,9 +206,10 @@ async function syncWithGithubTask(config) {
 
   if (remoteNewer) importSyncBundle(merged);
   if (localNewer) {
-    await pushToGithub({ token, gistId });
+    await pushPayloadToGithub({ token, gistId }, merged);
   }
   await saveGithubSyncConfig({ token, gistId });
+  setGithubBaseline(gistId);
   if (remoteNewer && localNewer) return { action: 'merged', reloaded: true };
   if (remoteNewer) return { action: 'downloaded', reloaded: true };
   if (localNewer) return { action: 'uploaded', reloaded: false };
@@ -158,9 +223,13 @@ export function syncWithGithub(config) {
 export function formatGithubSyncResult(result) {
   switch (result?.action) {
     case 'downloaded':
-      return '已从 GitHub 拉取最新配置';
+      return result.discovered
+        ? '已找到已有备份并从 GitHub 恢复'
+        : '已从 GitHub 拉取最新配置';
     case 'uploaded':
       return '已上传到 GitHub';
+    case 'uploaded-new':
+      return '已创建 GitHub 备份并上传';
     case 'merged':
       return '已合并本地与 GitHub 的最新修改';
     case 'up-to-date':
@@ -177,6 +246,10 @@ export function formatGithubSyncError(err) {
   }
   if (err?.message === 'no-gist') return '请先填写 Gist ID，或点「保存并同步」自动创建';
   if (err?.message === 'gist-empty') return 'Gist 中找不到同步文件';
+  if (err?.message === 'multiple-gists') {
+    const ids = (err.candidates || []).slice(0, 3).map((item) => item.id).join('、');
+    return `发现多个 GavinHub 备份，为防止覆盖已停止同步。请在 Gist ID 中填入要使用的一个：${ids}`;
+  }
   if (err?.code === 'network' || /Failed to fetch|NetworkError/i.test(err?.message || '')) {
     return '无法连接 GitHub，请检查网络或代理后重试';
   }
