@@ -71,6 +71,12 @@ body.boot-awakening .dock:hover {
     transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+.dock-tab:focus-visible,
+.dock-link:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--stage-color) 82%, transparent);
+  outline-offset: 3px;
+}
+
 .dock-tab-icon {
   width: 18px;
   height: 18px;

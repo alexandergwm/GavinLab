@@ -14,10 +14,17 @@ const SYNCED_SETTING_FIELDS = new Set(['baseCurrency', 'showGreeting']);
 function scheduleSyncForKey(key = KEYS.settings) {
   if (!SYNCED_STORAGE_KEYS.has(key)) return;
   try {
-    const now = Date.now();
-    localStorage.setItem(KEYS.syncLocalAt, String(now));
-    const revisions = JSON.parse(localStorage.getItem(KEYS.syncRevisions) || '{}');
-    revisions[key] = now;
+    const parsedRevisions = JSON.parse(localStorage.getItem(KEYS.syncRevisions) || '{}');
+    const revisions = parsedRevisions && typeof parsedRevisions === 'object'
+      && !Array.isArray(parsedRevisions) ? parsedRevisions : {};
+    const candidates = [
+      Date.now() - 1,
+      Number(localStorage.getItem(KEYS.syncLocalAt)) || 0,
+      ...Object.values(revisions).map((value) => Number(value) || 0),
+    ].filter((value) => Number.isSafeInteger(value) && value >= 0);
+    const revision = Math.min(Number.MAX_SAFE_INTEGER, Math.max(...candidates, 0) + 1);
+    localStorage.setItem(KEYS.syncLocalAt, String(revision));
+    revisions[key] = revision;
     localStorage.setItem(KEYS.syncRevisions, JSON.stringify(revisions));
   } catch { /* storage may be unavailable in restricted contexts */ }
   queueMicrotask(() => {
@@ -308,7 +315,8 @@ export function getWallpaperId(wallpaper) {
 export function getWallpaperFavorites() {
   try {
     const raw = localStorage.getItem(FAVORITES_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }

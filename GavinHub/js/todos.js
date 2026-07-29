@@ -1,5 +1,14 @@
 import { KEYS } from './keys.js';
 import { createTodoStore } from './todo-store.js';
+import {
+  parseDateKey,
+  toDateKey,
+  addDays,
+  dayDistance,
+  daySpan,
+} from './date-utils.js';
+
+export { parseDateKey, toDateKey, addDays, dayDistance, daySpan } from './date-utils.js';
 
 const TODOS_KEY = KEYS.todos;
 
@@ -90,8 +99,26 @@ function normalizeItem(item, index) {
   };
 }
 
+function ensureUniqueTodoIds(items) {
+  const seen = new Set();
+  return items.map((item) => {
+    let key = String(item.id);
+    if (!seen.has(key)) {
+      seen.add(key);
+      return item;
+    }
+    let id = createTodoId();
+    while (seen.has(String(id))) id = createTodoId();
+    key = String(id);
+    seen.add(key);
+    return { ...item, id };
+  });
+}
+
 function migrate(raw) {
-  if (Array.isArray(raw)) return raw.map(normalizeItem).filter(Boolean);
+  if (Array.isArray(raw)) {
+    return ensureUniqueTodoIds(raw.map(normalizeItem).filter(Boolean));
+  }
   if (!raw || typeof raw !== 'object') return [];
 
   const items = [];
@@ -112,7 +139,7 @@ function migrate(raw) {
       if (normalized) items.push(normalized);
     }
   }
-  return items;
+  return ensureUniqueTodoIds(items);
 }
 
 const todoStore = createTodoStore({ key: TODOS_KEY, migrate });
@@ -131,30 +158,6 @@ export function subscribeTodos(listener) {
 
 export function flushTodos() {
   return todoStore.flush();
-}
-
-export function parseDateKey(key) {
-  const [y, m, d] = key.split('-').map(Number);
-  return new Date(y, m - 1, d);
-}
-
-export function toDateKey(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-export function addDays(dateKey, n) {
-  const d = parseDateKey(dateKey);
-  d.setDate(d.getDate() + n);
-  return toDateKey(d);
-}
-
-export function daySpan(startKey, endKey) {
-  const s = parseDateKey(startKey).getTime();
-  const e = parseDateKey(endKey).getTime();
-  return Math.round((e - s) / 86400000) + 1;
 }
 
 export function occursOnDate(item, dateKey) {
@@ -369,17 +372,16 @@ export function weekSaturdayKey(weekStartKey) {
 }
 
 export function eventWeekLayout(item, weekStartKey) {
-  const ws = parseDateKey(weekStartKey).getTime();
-  const we = parseDateKey(weekSaturdayKey(weekStartKey)).getTime();
-  const es = parseDateKey(item.startDate).getTime();
-  const ee = parseDateKey(item.endDate).getTime();
+  const ws = 0;
+  const we = 6;
+  const es = dayDistance(weekStartKey, item.startDate);
+  const ee = dayDistance(weekStartKey, item.endDate);
   if (ee < ws || es > we) return null;
 
   const visStart = Math.max(es, ws);
   const visEnd = Math.min(ee, we);
-  const dayMs = 86400000;
-  const startCol = Math.max(0, Math.min(6, Math.floor((visStart - ws) / dayMs)));
-  let span = Math.max(1, Math.floor((visEnd - visStart) / dayMs) + 1);
+  const startCol = Math.max(0, Math.min(6, visStart));
+  let span = Math.max(1, visEnd - visStart + 1);
   span = Math.min(span, 7 - startCol);
   return { startCol, span };
 }
@@ -389,7 +391,7 @@ export function overlaps(a, b) {
     && parseDateKey(b.startDate) <= parseDateKey(a.endDate);
 }
 
-export function assignEventRows(events) {
+export function assignEventRows(events, { maxRows = Number.POSITIVE_INFINITY } = {}) {
   const sorted = [...events].sort((a, b) => {
     const d = parseDateKey(a.startDate) - parseDateKey(b.startDate);
     return d || daySpan(b.startDate, b.endDate) - daySpan(a.startDate, a.endDate);
@@ -397,7 +399,11 @@ export function assignEventRows(events) {
   const rows = [];
   for (const ev of sorted) {
     let row = 0;
-    while (rows[row]?.some((other) => overlaps(ev, other))) row += 1;
+    while (row < maxRows && rows[row]?.some((other) => overlaps(ev, other))) row += 1;
+    if (row >= maxRows) {
+      ev._row = maxRows;
+      continue;
+    }
     if (!rows[row]) rows[row] = [];
     rows[row].push(ev);
     ev._row = row;

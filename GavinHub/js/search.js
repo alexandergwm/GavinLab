@@ -736,6 +736,7 @@ async function submitSearchFromInput({ altKey = false } = {}) {
 
 let completionTimer = null;
 let completionController = null;
+let blurCleanupTimer = null;
 const COMPLETION_DEBOUNCE_MS = 250;
 
 function cancelPendingCompletions() {
@@ -910,6 +911,10 @@ function tryModeCommandFromInput() {
 }
 
 export function handleSearchEscape() {
+  if (engineMenuOpen) {
+    hideEngineMenu();
+    return true;
+  }
   if (areSuggestionsVisible()) {
     if (activeSuggestionIndex >= 0) {
       resetActiveSuggestion();
@@ -984,6 +989,8 @@ export function initSearch({ getSettings: settingsGetter, onSettingsChange: sett
   };
 
   inputEl.addEventListener('focus', () => {
+    clearTimeout(blurCleanupTimer);
+    blurCleanupTimer = null;
     applySearchFocusLayout();
     if (shouldDeferFocusChrome()) return;
     applySearchFocusAmbience();
@@ -1004,11 +1011,16 @@ export function initSearch({ getSettings: settingsGetter, onSettingsChange: sett
   }, { once: true });
 
   inputEl.addEventListener('blur', () => {
+    suggestionGen += 1;
+    cancelPendingCompletions();
     document.body.classList.remove('search-focused');
     boxEl.classList.remove('focused');
     updateModeLabel();
     searchQuote.hide();
-    setTimeout(() => {
+    clearTimeout(blurCleanupTimer);
+    blurCleanupTimer = setTimeout(() => {
+      blurCleanupTimer = null;
+      if (document.activeElement === inputEl) return;
       hideSuggestions();
       if (!engineMenuOpen) hideEngineMenu();
     }, 120);
@@ -1104,6 +1116,16 @@ export function initSearch({ getSettings: settingsGetter, onSettingsChange: sett
     }
   });
 
+  badgeEl.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    const { searchMode } = getSettings();
+    if (searchMode === 'gh' || searchMode === 'zh' || searchMode === 'xhs'
+      || searchMode === 'arxiv' || searchMode === 'scholar') return;
+    if (menuEl.hidden) showEngineMenu();
+    else hideEngineMenu();
+  });
+
   menuEl.addEventListener('mousedown', (e) => {
     e.preventDefault();
     const item = e.target.closest('.search-engine-menu-item');
@@ -1111,10 +1133,23 @@ export function initSearch({ getSettings: settingsGetter, onSettingsChange: sett
     selectProviderByKey(item.dataset.key);
   });
 
+  menuEl.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const item = e.target.closest('.search-engine-menu-item');
+    if (!item) return;
+    e.preventDefault();
+    selectProviderByKey(item.dataset.key);
+    inputEl.focus({ preventScroll: true });
+  });
+
   document.addEventListener('mousedown', (e) => {
     if (menuEl.hidden) return;
     if (e.target.closest('#search-engine-badge, #search-engine-menu')) return;
     hideEngineMenu();
+  });
+
+  document.addEventListener('focusin', (e) => {
+    if (engineMenuOpen && !boxEl.contains(e.target)) hideEngineMenu();
   });
 
   form.addEventListener('submit', (e) => {

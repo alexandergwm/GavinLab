@@ -30,6 +30,7 @@ import {
   addDays,
   weekSaturdayKey,
   parseDateKey,
+  dayDistance,
   TODO_CATEGORIES,
   getCategoryById,
   isRecurringTodo,
@@ -468,8 +469,7 @@ const COMPOSE_ROW_HEIGHT = 84;
 const MAX_WEEK_EVENT_ROWS = 8;
 
 function getColumnIndex(dateKey, weekStartKey) {
-  const ws = parseDateKey(weekStartKey).getTime();
-  const col = Math.floor((parseDateKey(dateKey).getTime() - ws) / 86400000);
+  const col = dayDistance(weekStartKey, dateKey);
   return col >= 0 && col <= 6 ? col : -1;
 }
 
@@ -1055,9 +1055,11 @@ function renderWeekCalendar() {
     lunarInfo.textContent = `今天 ${lunar.text} · ${lunar.ganZhiYear}`;
   }
 
-  const events = assignEventRows(getTodosInWeek(weekStartKey));
-  const maxRow = events.reduce((m, e) => Math.max(m, e._row), -1);
   const isExpanded = expandedWeekKey === weekStartKey;
+  const events = assignEventRows(getTodosInWeek(weekStartKey), {
+    maxRows: isExpanded ? Number.POSITIVE_INFINITY : MAX_WEEK_EVENT_ROWS,
+  });
+  const maxRow = events.reduce((m, e) => Math.max(m, e._row), -1);
   const hiddenCount = isExpanded ? 0 : events.filter((e) => e._row >= MAX_WEEK_EVENT_ROWS).length;
   const visibleEvents = isExpanded ? events : events.filter((e) => e._row < MAX_WEEK_EVENT_ROWS);
   const eventRows = Math.max(

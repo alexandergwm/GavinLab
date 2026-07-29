@@ -29,6 +29,7 @@ export function createTodoStore({ key, migrate }) {
     state = migrate(parsed);
     rawSnapshot = raw;
     rebuildIndexes();
+    if (raw && JSON.stringify(state) !== raw) schedulePersist();
     return state;
   };
 

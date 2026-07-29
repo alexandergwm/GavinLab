@@ -17,7 +17,7 @@ import {
 import {
   saveWallpaperBlobCache,
   getWallpaperBlobCache,
-} from './wallpaper-library.js';
+} from './media-store.js';
 import {
   DEFAULT_WALLPAPER,
   isOnlineWallpaperSource,

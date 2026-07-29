@@ -8,10 +8,11 @@ function hasExtensionStorage() {
 }
 
 function storageGet(key) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     chrome.storage.local.get([key], (result) => {
-      void chrome.runtime.lastError;
-      resolve(result?.[key] || null);
+      const error = chrome.runtime?.lastError;
+      if (error) reject(new Error(error.message));
+      else resolve(result?.[key] || null);
     });
   });
 }

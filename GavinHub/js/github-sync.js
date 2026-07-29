@@ -4,19 +4,18 @@
  */
 import { KEYS } from './keys.js';
 import { loadGithubToken, saveGithubToken } from './credential-store.js';
-import { createAsyncQueue } from './lifecycle.js';
 import {
   exportSyncBundle,
   hasNewerSyncData,
   importSyncBundle,
   mergeSyncBundles,
+  runSyncTransaction,
 } from './sync.js';
 
 const GIST_FILENAME = 'gavinhub-sync.json';
 const GIST_DESCRIPTION = 'GavinHub StartPage sync';
 const GITHUB_API = 'https://api.github.com';
 const PENDING_BASELINE = 'pending:';
-const runGithubSyncExclusive = createAsyncQueue();
 
 export async function loadGithubSyncConfig() {
   return {
@@ -238,7 +237,7 @@ async function syncWithGithubTask(config) {
 }
 
 export function syncWithGithub(config) {
-  return runGithubSyncExclusive(() => syncWithGithubTask(config));
+  return runSyncTransaction(() => syncWithGithubTask(config));
 }
 
 export function formatGithubSyncResult(result) {

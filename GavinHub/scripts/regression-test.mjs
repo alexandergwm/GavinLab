@@ -178,6 +178,23 @@ try {
       && focusedBackdropState.stageColorToken === '#fff',
     `focused search must use a legible composited glass state: ${JSON.stringify(focusedBackdropState)}`,
   );
+  const startupLoadedWallpaperLibraryUi = await page.evaluate(() =>
+    performance.getEntriesByType('resource')
+      .some((entry) => entry.name.endsWith('/js/wallpaper-library.js')));
+  assert(!startupLoadedWallpaperLibraryUi,
+    'wallpaper library UI must remain lazy during startup');
+  await page.keyboard.press('Shift+Tab');
+  assert(await page.evaluate(() => document.activeElement?.id === 'search-engine-badge'),
+    'search engine button should be keyboard reachable');
+  await page.keyboard.press('Enter');
+  assert(await page.evaluate(() => !document.getElementById('search-engine-menu')?.hidden),
+    'Enter should open the search engine menu');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Enter');
+  assert(await page.evaluate(() =>
+    document.getElementById('search-engine-menu')?.hidden
+      && document.activeElement?.id === 'search-input'),
+  'keyboard provider selection should close the menu and restore search focus');
   const bootVisualState = await page.evaluate(() => {
     const visibleFrames = window.__bootVisualFrames.filter((frame) => frame.searchVisible);
     const unique = (key) => [...new Set(visibleFrames.map((frame) => frame[key]).filter(Boolean))];
@@ -510,6 +527,9 @@ try {
       ]);
       const sanitizedTodos = loadTodos();
       const sanitizedGoals = loadGoals();
+      await Promise.resolve();
+      const persistedTodos = JSON.parse(localStorage.getItem('startpage-todos') || '[]');
+      const persistedGoals = JSON.parse(localStorage.getItem('startpage-goals') || '[]');
 
       localStorage.setItem(weatherDataKey, JSON.stringify({
         updatedAt: Date.now(),
@@ -556,8 +576,10 @@ try {
         persistedIds: persisted.map((item) => item.id),
         todoIds: sanitizedTodos.map((item) => item.id),
         todoEndDate: sanitizedTodos[0]?.endDate,
+        persistedTodoIds: persistedTodos.map((item) => item.id),
         goalIds: sanitizedGoals.map((item) => item.id),
         goalTargetDate: sanitizedGoals[0]?.targetDate,
+        persistedGoalIds: persistedGoals.map((item) => item.id),
         weatherRequests: requests.length,
         weatherSharedResult: firstWeather === secondWeather,
         invalidWeatherCacheRejected,
@@ -582,8 +604,10 @@ try {
       && dataBoundarySafety.persistedIds.join(',') === 'valid'
       && dataBoundarySafety.todoIds.join(',') === 'safe-todo'
       && dataBoundarySafety.todoEndDate === '2026-07-26'
+      && dataBoundarySafety.persistedTodoIds.join(',') === 'safe-todo'
       && dataBoundarySafety.goalIds.join(',') === 'external-id'
       && dataBoundarySafety.goalTargetDate === ''
+      && dataBoundarySafety.persistedGoalIds.join(',') === 'external-id'
       && dataBoundarySafety.weatherRequests === 2
       && dataBoundarySafety.weatherSharedResult
       && dataBoundarySafety.invalidWeatherCacheRejected,
@@ -623,6 +647,15 @@ try {
     const storage = await import('./js/storage.js');
     storage.writeJson('startpage-todos', []);
     const mutationAt = Number(localStorage.getItem('startpage-sync-local-at'));
+    const futureRevision = Date.now() + 7 * 24 * 60 * 60 * 1000;
+    localStorage.setItem('startpage-sync-local-at', String(futureRevision));
+    localStorage.setItem('startpage-sync-revisions', JSON.stringify({
+      'startpage-todos': futureRevision,
+    }));
+    storage.writeJson('startpage-todos', []);
+    const skewSafeRevision = Number(JSON.parse(
+      localStorage.getItem('startpage-sync-revisions') || '{}',
+    )['startpage-todos']);
 
     localStorage.setItem('startpage-github-token', 'ghp_saved_token');
     const github = await import('./js/github-sync.js');
@@ -685,6 +718,8 @@ try {
     else localStorage.setItem('startpage-settings', previousSettings);
     return {
       mutationAt,
+      futureRevision,
+      skewSafeRevision,
       savedToken,
       mergedTodo: merged['startpage-todos']?.[0]?.text,
       mergedShortcut: merged['startpage-shortcuts']?.[0]?.id,
@@ -699,6 +734,8 @@ try {
     };
   });
   assert(syncSafety.mutationAt > 100, 'local sync timestamp should advance after a synced data change');
+  assert(syncSafety.skewSafeRevision > syncSafety.futureRevision,
+    'local revisions must stay monotonic when another device clock is ahead');
   assert(syncSafety.savedToken === 'ghp_saved_token', 'failed GitHub sync must not overwrite a working token');
   assert(
     syncSafety.mergedTodo === 'local todo'
@@ -712,6 +749,105 @@ try {
       && syncSafety.librarySource === 'library'
       && syncSafety.manualRotationStayedStopped,
     `sync should merge each dataset independently: ${JSON.stringify(syncSafety)}`,
+  );
+
+  const atomicSyncSafety = await page.evaluate(async () => {
+    const keys = [
+      'startpage-todos',
+      'startpage-sync-local-at',
+      'startpage-sync-revisions',
+    ];
+    const previous = Object.fromEntries(keys.map((key) => [key, localStorage.getItem(key)]));
+    const chromeDescriptor = Object.getOwnPropertyDescriptor(window, 'chrome');
+    const sync = await import('./js/sync.js');
+    const oldPayload = {
+      v: 2,
+      updatedAt: 100,
+      revisions: {
+        'startpage-settings': 0,
+        'startpage-shortcuts': 0,
+        'startpage-dock': 0,
+        'startpage-todos': 100,
+        'startpage-goals': 0,
+        'startpage-important-dates': 0,
+      },
+      settings: {},
+      'startpage-shortcuts': null,
+      'startpage-dock': null,
+      'startpage-todos': [{ id: 1, text: 'old cloud' }],
+      'startpage-goals': null,
+      'startpage-important-dates': null,
+    };
+    const oldChunk = JSON.stringify(oldPayload);
+    const oldRoot = { v: 2, updatedAt: 100, format: 'chunked', chunks: 1 };
+    const cloud = {
+      gavinhubSync: oldRoot,
+      gavinhubSync_c0: oldChunk,
+    };
+    let runtimeError = null;
+    let failRootWrite = true;
+
+    const mockChrome = {
+      runtime: {
+        get lastError() { return runtimeError; },
+      },
+      storage: {
+        sync: {
+          get(requested, callback) {
+            const requestedKeys = requested == null ? Object.keys(cloud) : requested;
+            const result = {};
+            for (const key of requestedKeys) {
+              if (key in cloud) result[key] = cloud[key];
+            }
+            callback(result);
+          },
+          set(values, callback) {
+            if (failRootWrite && Object.prototype.hasOwnProperty.call(values, 'gavinhubSync')) {
+              failRootWrite = false;
+              runtimeError = { message: 'simulated metadata failure' };
+              callback();
+              runtimeError = null;
+              return;
+            }
+            Object.assign(cloud, values);
+            callback();
+          },
+          remove(requested, callback) {
+            for (const key of Array.isArray(requested) ? requested : [requested]) delete cloud[key];
+            callback();
+          },
+        },
+      },
+    };
+
+    try {
+      Object.defineProperty(window, 'chrome', { configurable: true, value: mockChrome });
+      localStorage.setItem('startpage-todos', JSON.stringify([{ id: 2, text: 'new local' }]));
+      localStorage.setItem('startpage-sync-local-at', '200');
+      localStorage.setItem('startpage-sync-revisions', JSON.stringify({ 'startpage-todos': 200 }));
+      const result = await sync.pullSyncOnStartup();
+      return {
+        reason: result.reason,
+        rootUnchanged: cloud.gavinhubSync === oldRoot,
+        oldChunkUnchanged: cloud.gavinhubSync_c0 === oldChunk,
+        orphanChunks: Object.keys(cloud).filter((key) =>
+          key.startsWith('gavinhubSync_c') && key !== 'gavinhubSync_c0'),
+      };
+    } finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value == null) localStorage.removeItem(key);
+        else localStorage.setItem(key, value);
+      }
+      if (chromeDescriptor) Object.defineProperty(window, 'chrome', chromeDescriptor);
+      else delete window.chrome;
+    }
+  });
+  assert(
+    atomicSyncSafety.reason === 'error'
+      && atomicSyncSafety.rootUnchanged
+      && atomicSyncSafety.oldChunkUnchanged
+      && atomicSyncSafety.orphanChunks.length === 0,
+    `failed sync publication must preserve the previous cloud snapshot: ${JSON.stringify(atomicSyncSafety)}`,
   );
 
   const githubBootstrapSafety = await page.evaluate(async () => {
@@ -1118,6 +1254,13 @@ try {
     .some((entry) => entry.name.endsWith('/js/settings-ui.js')));
   assert(!settingsLoadedOnApps, 'settings module should remain lazy after entering apps');
 
+  await page.evaluate(async () => {
+    localStorage.setItem('startpage-github-token', 'ghp_clear_test_token');
+    localStorage.setItem('startpage-github-gist-id', 'gist-to-clear');
+    localStorage.setItem('startpage-github-gist-baseline', 'gist-to-clear');
+    const credentials = await import('./js/credential-store.js');
+    credentials.clearCredentialCache();
+  });
   await page.locator('#settings-btn').click();
   await page.waitForSelector('#settings-dialog[open]');
   assert(
@@ -1125,6 +1268,7 @@ try {
       .some((entry) => entry.name.endsWith('/js/settings-ui.js'))),
     'settings action should load its feature module on demand',
   );
+  await page.locator('.settings-sync-tab[data-sync-tab="github"]').click();
   const githubField = await page.evaluate(() => ({
     hidden: document.getElementById('github-gist-field')?.hidden,
     readOnly: document.getElementById('github-sync-gist-id')?.readOnly,
@@ -1138,8 +1282,25 @@ try {
       && githubField.readOnly === false
       && githubField.wallpaperSources.includes('library')
       && githubField.saveLabel === '保存连接'
-      && githubField.syncLabel === '同步数据',
+      && githubField.syncLabel === '比较并同步',
     `Gist ID must be editable on a second computer: ${JSON.stringify(githubField)}`);
+  await page.locator('#github-sync-gist-id').fill('');
+  await page.locator('#github-save-connection-btn').click();
+  await page.waitForFunction(() =>
+    document.getElementById('github-sync-status')?.textContent?.includes('连接已保存'));
+  const clearedGist = await page.evaluate(() => ({
+    gistId: localStorage.getItem('startpage-github-gist-id'),
+    baseline: localStorage.getItem('startpage-github-gist-baseline'),
+  }));
+  assert(clearedGist.gistId == null && clearedGist.baseline === 'pending:auto',
+    `clearing Gist ID must switch back to safe auto-discovery: ${JSON.stringify(clearedGist)}`);
+  await page.evaluate(async () => {
+    localStorage.removeItem('startpage-github-token');
+    localStorage.removeItem('startpage-github-gist-id');
+    localStorage.removeItem('startpage-github-gist-baseline');
+    const credentials = await import('./js/credential-store.js');
+    credentials.clearCredentialCache();
+  });
   await page.locator('#settings-dialog .settings-actions .modal-close').click();
   await page.waitForFunction(() => !document.getElementById('settings-dialog')?.open);
 

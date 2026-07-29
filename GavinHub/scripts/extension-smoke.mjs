@@ -101,7 +101,9 @@ try {
     }]);
     await new Promise((resolve) => setTimeout(resolve, 1400));
     const root = (await chrome.storage.sync.get('gavinhubSync')).gavinhubSync;
-    const keys = Array.from({ length: root?.chunks || 0 }, (_, index) => `gavinhubSync_c${index}`);
+    const generation = root?.generation || '';
+    const keys = Array.from({ length: root?.chunks || 0 }, (_, index) =>
+      generation ? `gavinhubSync_c${generation}_${index}` : `gavinhubSync_c${index}`);
     const chunks = await chrome.storage.sync.get(keys);
     const payload = JSON.parse(keys.map((key) => chunks[key] || '').join(''));
     return {

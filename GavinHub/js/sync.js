@@ -13,7 +13,11 @@ const SYNC_CHUNK_PREFIX = 'gavinhubSync_c';
 const SYNC_LOCAL_AT_KEY = KEYS.syncLocalAt;
 const SYNC_REVISIONS_KEY = KEYS.syncRevisions;
 const SYNC_CHUNK_SAFE_CHARS = 1200;
-const SYNC_TOTAL_SAFE_CHARS = 90000;
+const SYNC_TOTAL_SAFE_BYTES = 42000;
+const SYNC_MAX_CHUNKS = 96;
+const SYNC_WRITER_ID = typeof globalThis.crypto?.randomUUID === 'function'
+  ? globalThis.crypto.randomUUID()
+  : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
 const SYNC_DATA_KEYS = [
   KEYS.shortcuts,
@@ -30,8 +34,13 @@ let lastSyncError = '';
 let applyingRemote = false;
 let pushTimer = null;
 let stopPeriodicSync = null;
-const localPushVersions = new Set();
 const runSyncExclusive = createAsyncQueue();
+let syncWriteSequence = 0;
+
+function normalizeRevision(value) {
+  const revision = Number(value);
+  return Number.isSafeInteger(revision) && revision > 0 ? revision : 0;
+}
 
 function hasChromeSync() {
   return typeof chrome !== 'undefined' && chrome.storage?.sync;
@@ -60,8 +69,7 @@ function extractSyncSettings(allSettings = {}) {
 }
 
 function getLocalSyncAt() {
-  const value = Number(localStorage.getItem(SYNC_LOCAL_AT_KEY));
-  return Number.isFinite(value) ? value : 0;
+  return normalizeRevision(localStorage.getItem(SYNC_LOCAL_AT_KEY));
 }
 
 function setLocalSyncAt(timestamp) {
@@ -72,7 +80,7 @@ function getLocalRevisions() {
   const raw = readLocalJson(SYNC_REVISIONS_KEY);
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
   return Object.fromEntries(Object.entries(raw)
-    .map(([key, value]) => [key, Number(value) || 0]));
+    .map(([key, value]) => [key, normalizeRevision(value)]));
 }
 
 function setLocalRevisions(revisions) {
@@ -103,7 +111,7 @@ function buildSyncPayload() {
   for (const key of SYNC_KEYS) {
     const field = payloadField(key);
     const fallback = hasValue(payload[field]) ? localAt : 0;
-    payload.revisions[key] = Number(storedRevisions[key]) || fallback;
+    payload.revisions[key] = normalizeRevision(storedRevisions[key]) || fallback;
   }
   payload.updatedAt = Math.max(localAt, ...Object.values(payload.revisions));
   return payload;
@@ -111,14 +119,14 @@ function buildSyncPayload() {
 
 function normalizeSyncPayload(payload) {
   if (!payload || (payload.v !== SYNC_VERSION && payload.v !== LEGACY_SYNC_VERSION)) return null;
-  const updatedAt = Number(payload.updatedAt) || 0;
+  const updatedAt = normalizeRevision(payload.updatedAt);
   const revisions = {};
   for (const key of SYNC_KEYS) {
     const field = payloadField(key);
     const hasExplicitRevision = payload.v === SYNC_VERSION
       && Object.prototype.hasOwnProperty.call(payload.revisions || {}, key);
     revisions[key] = hasExplicitRevision
-      ? Math.max(0, Number(payload.revisions[key]) || 0)
+      ? normalizeRevision(payload.revisions[key])
       : (field in payload ? updatedAt : 0);
   }
   return {
@@ -136,16 +144,16 @@ export function mergeSyncBundles(localPayload, remotePayload) {
   const merged = { v: SYNC_VERSION, updatedAt: 0, revisions: {} };
   for (const key of SYNC_KEYS) {
     const field = payloadField(key);
-    const localRevision = Number(local.revisions[key]) || 0;
-    const remoteRevision = Number(remote.revisions[key]) || 0;
+    const localRevision = normalizeRevision(local.revisions[key]);
+    const remoteRevision = normalizeRevision(remote.revisions[key]);
     const useRemote = remoteRevision > localRevision
       || (!(field in local) && field in remote);
     merged[field] = useRemote ? remote[field] : local[field];
     merged.revisions[key] = Math.max(localRevision, remoteRevision);
   }
   merged.updatedAt = Math.max(
-    Number(local.updatedAt) || 0,
-    Number(remote.updatedAt) || 0,
+    normalizeRevision(local.updatedAt),
+    normalizeRevision(remote.updatedAt),
     ...Object.values(merged.revisions),
   );
   return merged;
@@ -181,8 +189,8 @@ function applyRemotePayload(payload, { force = false } = {}) {
   try {
     for (const key of SYNC_KEYS) {
       const field = payloadField(key);
-      const remoteRevision = Number(normalized.revisions[key]) || 0;
-      const localRevision = Number(localRevisions[key]) || 0;
+      const remoteRevision = normalizeRevision(normalized.revisions[key]);
+      const localRevision = normalizeRevision(localRevisions[key]);
       if (!force && remoteRevision <= localRevision) continue;
 
       if (key === KEYS.settings) {
@@ -223,19 +231,21 @@ function storageSet(obj) {
 }
 
 function storageGet(keys) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     chrome.storage.sync.get(keys, (result) => {
-      void chrome.runtime.lastError;
-      resolve(result || {});
+      const error = chrome.runtime?.lastError;
+      if (error) reject(new Error(error.message));
+      else resolve(result || {});
     });
   });
 }
 
 function storageRemove(keys) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     chrome.storage.sync.remove(keys, () => {
-      void chrome.runtime.lastError;
-      resolve();
+      const error = chrome.runtime?.lastError;
+      if (error) reject(new Error(error.message));
+      else resolve();
     });
   });
 }
@@ -258,50 +268,99 @@ function splitIntoSyncChunks(value) {
   return chunks;
 }
 
-async function clearOldChunks(keepCount = 0) {
-  const probeKeys = [];
-  for (let index = keepCount; index < keepCount + 96; index += 1) {
-    probeKeys.push(`${SYNC_CHUNK_PREFIX}${index}`);
+function normalizeChunkCount(value) {
+  const count = Number(value);
+  return Number.isInteger(count) && count > 0 && count <= SYNC_MAX_CHUNKS ? count : 0;
+}
+
+function validChunkGeneration(value) {
+  return typeof value === 'string' && /^[a-z0-9-]{1,96}$/i.test(value) ? value : '';
+}
+
+function chunkKey(generation, index) {
+  return generation
+    ? `${SYNC_CHUNK_PREFIX}${generation}_${index}`
+    : `${SYNC_CHUNK_PREFIX}${index}`;
+}
+
+function chunkKeysForMeta(meta, { includeLegacyRemainder = false } = {}) {
+  if (meta?.format !== 'chunked') return [];
+  const generation = validChunkGeneration(meta.generation);
+  const count = normalizeChunkCount(meta.chunks);
+  if (generation && count) {
+    return Array.from({ length: count }, (_, index) => chunkKey(generation, index));
   }
-  const existing = await storageGet(probeKeys);
-  const toRemove = Object.keys(existing);
-  if (toRemove.length) await storageRemove(toRemove);
+  if (!generation && count) {
+    const legacyCount = includeLegacyRemainder ? SYNC_MAX_CHUNKS : count;
+    return Array.from({ length: legacyCount }, (_, index) => chunkKey('', index));
+  }
+  return [];
 }
 
 async function storageSetSyncChunked(payload) {
   const json = JSON.stringify(payload);
-  if (json.length > SYNC_TOTAL_SAFE_CHARS) {
+  const payloadBytes = typeof TextEncoder === 'function'
+    ? new TextEncoder().encode(json).byteLength
+    : json.length * 2;
+  if (payloadBytes > SYNC_TOTAL_SAFE_BYTES) {
     const error = new Error('payload-too-large');
     error.code = 'too-large';
     throw error;
   }
   const chunks = splitIntoSyncChunks(json);
+  if (!chunks.length || chunks.length > SYNC_MAX_CHUNKS) {
+    const error = new Error('payload-too-large');
+    error.code = 'too-large';
+    throw error;
+  }
+  const previousRoot = await storageGet([SYNC_ROOT_KEY]);
+  const previousMeta = previousRoot?.[SYNC_ROOT_KEY];
+  syncWriteSequence += 1;
+  const generation = `${Date.now().toString(36)}-${syncWriteSequence.toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const toSet = {};
   chunks.forEach((chunk, index) => {
-    toSet[`${SYNC_CHUNK_PREFIX}${index}`] = chunk;
+    toSet[chunkKey(generation, index)] = chunk;
   });
-  await storageSet(toSet);
-  await clearOldChunks(chunks.length);
-  await storageSet({
-    [SYNC_ROOT_KEY]: {
-      v: SYNC_VERSION,
-      updatedAt: payload.updatedAt,
-      format: 'chunked',
-      chunks: chunks.length,
-    },
-  });
+  const newChunkKeys = Object.keys(toSet);
+  try {
+    await storageSet(toSet);
+    await storageSet({
+      [SYNC_ROOT_KEY]: {
+        v: SYNC_VERSION,
+        updatedAt: payload.updatedAt,
+        format: 'chunked',
+        chunks: chunks.length,
+        generation,
+        writerId: SYNC_WRITER_ID,
+      },
+    });
+  } catch (error) {
+    await storageRemove(newChunkKeys).catch(() => {});
+    throw error;
+  }
+
+  const staleKeys = chunkKeysForMeta(previousMeta, { includeLegacyRemainder: true })
+    .filter((key) => !newChunkKeys.includes(key));
+  if (staleKeys.length) {
+    await storageRemove(staleKeys).catch((error) => {
+      console.warn('[GavinHub] stale sync chunk cleanup failed', error);
+    });
+  }
 }
 
 async function storageGetSync() {
   const root = await storageGet([SYNC_ROOT_KEY]);
   const meta = root?.[SYNC_ROOT_KEY];
   if (!meta) return null;
-  if (meta.format === 'chunked' && meta.chunks > 0) {
-    const keys = Array.from({ length: meta.chunks }, (_, index) => `${SYNC_CHUNK_PREFIX}${index}`);
+  if (meta.format === 'chunked') {
+    const count = normalizeChunkCount(meta.chunks);
+    const generation = validChunkGeneration(meta.generation);
+    if (!count || (meta.generation && !generation)) return null;
+    const keys = Array.from({ length: count }, (_, index) => chunkKey(generation, index));
     const parts = await storageGet(keys);
     let json = '';
-    for (let index = 0; index < meta.chunks; index += 1) {
-      const piece = parts[`${SYNC_CHUNK_PREFIX}${index}`];
+    for (let index = 0; index < count; index += 1) {
+      const piece = parts[chunkKey(generation, index)];
       if (typeof piece !== 'string') return null;
       json += piece;
     }
@@ -316,10 +375,8 @@ async function storageGetSync() {
 
 async function commitPayloadToCloud(payload) {
   const version = payload.updatedAt;
-  localPushVersions.add(version);
   await storageSetSyncChunked(payload);
   setLocalSyncAt(Math.max(getLocalSyncAt(), version));
-  window.setTimeout(() => localPushVersions.delete(version), 5000);
 }
 
 async function pullSyncOnStartupTask() {
@@ -359,9 +416,13 @@ export function pullSyncOnStartup() {
   return runSyncExclusive(pullSyncOnStartupTask);
 }
 
+/** Serializes Edge and third-party sync providers against the same local datasets. */
+export function runSyncTransaction(task) {
+  return runSyncExclusive(task);
+}
+
 async function pushToSyncTask({ force = false } = {}) {
   if (!hasChromeSync() || applyingRemote) return false;
-  let pushVersion = 0;
   try {
     const local = buildSyncPayload();
     if (!force && !localHasUserData() && isEmptyPayload(local)) return false;
@@ -370,12 +431,10 @@ async function pushToSyncTask({ force = false } = {}) {
     if (remote && hasNewerRevisions(remote, local)) {
       applyRemotePayload(merged, { force: true });
     }
-    pushVersion = merged.updatedAt;
     await commitPayloadToCloud(merged);
     lastSyncError = '';
     return true;
   } catch (error) {
-    if (pushVersion) localPushVersions.delete(pushVersion);
     lastSyncError = error?.code === 'too-large'
       ? '数据过大，Edge 账号同步失败，请改用「文件」或「GitHub」同步'
       : (error?.message || 'Edge 同步失败');
@@ -465,8 +524,7 @@ let syncListenerBound = false;
 
 function handleSyncStorageChange(changes, area) {
   if (area !== 'sync' || !changes[SYNC_ROOT_KEY]) return;
-  const changedAt = Number(changes[SYNC_ROOT_KEY].newValue?.updatedAt) || 0;
-  if (changedAt && localPushVersions.has(changedAt)) return;
+  if (changes[SYNC_ROOT_KEY].newValue?.writerId === SYNC_WRITER_ID) return;
   void runSyncExclusive(async () => {
     try {
       const remote = normalizeSyncPayload(await storageGetSync());

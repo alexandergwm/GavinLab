@@ -116,7 +116,10 @@ assert(settingsUi.includes('export function initSettingsUI'), 'settings-ui.js sh
 
 const wpLib = read('js/wallpaper-library.js');
 assert(wpLib.includes('return { open }'), 'wallpaper-library.js should return { open }');
-assert(wpLib.includes('const iconObjectUrls = new Map()'), 'cached icon object URLs should be session-scoped');
+const mediaStore = read('js/media-store.js');
+assert(mediaStore.includes('const iconObjectUrls = new Map()'), 'cached icon object URLs should be session-scoped');
+assert(!read('js/wallpaper.js').includes("from './wallpaper-library.js'"),
+  'wallpaper startup must not import the wallpaper library UI');
 
 const shortcutUi = read('js/shortcut-ui.js');
 assert(shortcutUi.includes('iconFetchGeneration'), 'shortcut icon requests should reject stale results');

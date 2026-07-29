@@ -10,7 +10,7 @@ import {
 import {
   getLibraryWallpaper,
   libraryEntryToWallpaper,
-} from './wallpaper-library.js';
+} from './media-store.js';
 import {
   UNSPLASH_CURATED,
   PEXELS_CURATED,

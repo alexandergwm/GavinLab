@@ -221,12 +221,6 @@
           <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
         </svg>
       </button>
-      <button class="icon-btn" type="button" title="个人" aria-label="个人" disabled>
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-          <circle cx="12" cy="7" r="4"/>
-        </svg>
-      </button>
       <button id="settings-btn" class="icon-btn" type="button" title="设置" aria-label="设置">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="3"/>
@@ -257,7 +251,7 @@
         </section>
 
         <section class="page-panel page-apps" data-page="apps">
-          <div id="shortcuts-grid" class="shortcuts-grid" role="list"></div>
+          <nav id="shortcuts-grid" class="shortcuts-grid" aria-label="快捷方式"></nav>
         </section>
       </div>
       <!-- 极早强制：新标签页必须从主页开始 -->
@@ -352,7 +346,7 @@
           <ol class="settings-github-steps">
             <li><button type="button" id="github-open-token-btn" class="settings-link-btn">打开 GitHub 创建 Token</button>（推荐 classic，勾选 <code>gist</code>）</li>
             <li>复制 <code>ghp_</code> 或 <code>github_pat_</code> 开头 Token 粘贴下方</li>
-            <li>先保存连接；需要交换数据时再点「同步数据」</li>
+            <li>先保存连接；需要交换数据时再点「比较并同步」</li>
           </ol>
           <label class="settings-field">
             <span>GitHub Token</span>
@@ -364,7 +358,7 @@
           </label>
           <div class="settings-github-actions">
             <button type="button" id="github-save-connection-btn" class="settings-sync-btn">保存连接</button>
-            <button type="button" id="github-sync-merge-btn" class="settings-sync-btn settings-sync-btn--primary">同步数据</button>
+            <button type="button" id="github-sync-merge-btn" class="settings-sync-btn settings-sync-btn--primary">比较并同步</button>
           </div>
           <p id="github-sync-status" class="settings-hint settings-sync-manual-hint" hidden></p>
         </div>

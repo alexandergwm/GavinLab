@@ -1,7 +1,7 @@
 /** 长期目标 — 替代日历侧栏的倒计时/纪念日 */
 import { KEYS } from './keys.js';
 import { readJson, writeJson } from './storage.js';
-import { parseDateKey, toDateKey } from './todos.js';
+import { dateKeyOrdinal, parseDateKey, toDateKey } from './date-utils.js';
 
 const STORAGE_KEY = KEYS.goals;
 const MIGRATED_FLAG = 'startpage-goals-migrated-from-countdowns';
@@ -20,7 +20,7 @@ function validDateKey(value) {
 
 function resetNextId(items) {
   const maxId = items.reduce((max, item) => {
-    const id = Number(item.id);
+    const id = Number(item?.id);
     return Number.isSafeInteger(id) && id > max ? id : max;
   }, 0);
   nextId = maxId + 1;
@@ -40,6 +40,24 @@ function normalizeGoal(item = {}) {
     notes: String(item.notes || '').trim().slice(0, 5000),
     createdAt: Number.isFinite(createdAt) && createdAt > 0 ? createdAt : Date.now(),
   };
+}
+
+function normalizeGoalList(raw = []) {
+  resetNextId(raw);
+  const seen = new Set();
+  const items = [];
+  for (const item of raw) {
+    const goal = normalizeGoal(item);
+    if (!goal?.title) continue;
+    let key = String(goal.id);
+    if (seen.has(key)) {
+      goal.id = nextId++;
+      key = String(goal.id);
+    }
+    seen.add(key);
+    items.push(goal);
+  }
+  return items;
 }
 
 function migrateFromCountdownsList(legacy) {
@@ -103,14 +121,16 @@ export function loadGoals() {
   let items;
 
   if (Array.isArray(raw) && raw.length > 0) {
-    items = raw.map(normalizeGoal).filter((g) => g?.title);
+    items = normalizeGoalList(raw);
+    if (JSON.stringify(items) !== JSON.stringify(raw)) saveAll(items);
     markMigrated();
   } else if (!hasMigrated()) {
     items = migrateFromCountdowns();
     markMigrated();
     saveAll(items);
   } else {
-    items = Array.isArray(raw) ? raw.map(normalizeGoal).filter((g) => g?.title) : [];
+    items = Array.isArray(raw) ? normalizeGoalList(raw) : [];
+    if (Array.isArray(raw) && JSON.stringify(items) !== JSON.stringify(raw)) saveAll(items);
   }
 
   resetNextId(items);
@@ -159,10 +179,7 @@ export function toggleGoalDone(id) {
 
 function daysUntil(dateKey) {
   if (!dateKey) return null;
-  const target = parseDateKey(dateKey);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.round((target - today) / 86400000);
+  return dateKeyOrdinal(dateKey) - dateKeyOrdinal(toDateKey(new Date()));
 }
 
 export function getGoalDeadlineLabel(targetDate) {

@@ -1,5 +1,5 @@
 import { fetchSiteIcon, bindIconWithFallback, isUnacceptableStoredIcon, getKnownSiteIcon, NETEASE_ICON_URL, isFullBleedKnownIcon } from './favicon.js';
-import { getIconObjectUrl, getIconBlobCache, saveIconBlobCache } from './wallpaper-library.js';
+import { getIconObjectUrl, getIconBlobCache, saveIconBlobCache } from './media-store.js';
 import { writeJson } from './storage.js';
 
 import { KEYS } from './keys.js';
@@ -7,6 +7,7 @@ import { KEYS } from './keys.js';
 const SHORTCUTS_KEY = KEYS.shortcuts;
 const DOCK_KEY = KEYS.dock;
 const iconRenderTokens = new WeakMap();
+const iconCacheRequests = new Map();
 
 function svgDataUrl(svg) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
@@ -327,23 +328,27 @@ export async function fetchIconFromWeb(url) {
 /** Background: fetch the image bytes for a known good icon url and store blob in local cache for future instant loads. */
 async function ensureIconCached(iconSrc) {
   if (!iconSrc) return;
-  try {
-    const cached = await getIconBlobCache(iconSrc);
-    if (cached) return;
-    // fetch as blob; use cors first, fallback to no-cors (may still work for blob if opaque? but prefer cors)
-    let res;
+  const pending = iconCacheRequests.get(iconSrc);
+  if (pending) return pending;
+  const request = (async () => {
     try {
-      res = await fetch(iconSrc, { mode: 'cors', cache: 'force-cache' });
+      const cached = await getIconBlobCache(iconSrc);
+      if (cached) return;
+      const res = await fetch(iconSrc, { mode: 'cors', cache: 'force-cache' });
+      if (!res?.ok) return;
+      const blob = await res.blob();
+      if (blob?.size > 50) {
+        await saveIconBlobCache(iconSrc, blob);
+      }
     } catch {
-      res = await fetch(iconSrc, { cache: 'force-cache' });
+      /* non-fatal; next visit will try remote again */
     }
-    if (!res || !res.ok) return;
-    const blob = await res.blob();
-    if (blob && blob.size > 50) {
-      await saveIconBlobCache(iconSrc, blob);
-    }
-  } catch {
-    /* non-fatal; next visit will try remote again */
+  })();
+  iconCacheRequests.set(iconSrc, request);
+  try {
+    await request;
+  } finally {
+    if (iconCacheRequests.get(iconSrc) === request) iconCacheRequests.delete(iconSrc);
   }
 }
 
@@ -522,7 +527,7 @@ export function softenColor(hex) {
   const sr = 136;
   const sg = 153;
   const sb = 170;
-  const t = 0.22;
+  const t = 0.12;
   return rgbToHex(r + (sr - r) * t, g + (sg - g) * t, b + (sb - b) * t);
 }
 
@@ -582,13 +587,19 @@ function prepareImageIconContainer(container, iconSrc = '') {
   delete container.dataset.len;
 }
 
-function createIconImage({ lazy = false } = {}) {
+function createIconImage() {
   const img = document.createElement('img');
   img.alt = '';
   img.draggable = false;
-  if (lazy) img.loading = 'lazy';
   img.decoding = 'async';
   return img;
+}
+
+function loadAcceptedIcon(src) {
+  return new Promise((resolve) => {
+    const img = createIconImage();
+    bindIconWithFallback(img, src, () => resolve(null), () => resolve(img));
+  });
 }
 
 function renderLetterAvatar(container, item) {
@@ -610,9 +621,9 @@ function renderLetterAvatar(container, item) {
   container.dataset.len = String(Math.min(text.length, 3));
   const accent = softenColor(item.color || deriveLetterColor(letterColorSeed(item.name, item.url)));
   container.style.backgroundColor = '';
-  container.style.color = hexToRgba(accent, 0.92);
-  container.style.setProperty('--shortcut-letter-tint', hexToRgba(accent, 0.16));
-  container.style.setProperty('--shortcut-letter-stroke', hexToRgba(accent, 0.18));
+  container.style.color = hexToRgba(accent, 1);
+  container.style.setProperty('--shortcut-letter-tint', hexToRgba(accent, 0.22));
+  container.style.setProperty('--shortcut-letter-stroke', hexToRgba(accent, 0.24));
 
   const span = document.createElement('span');
   span.className = 'shortcut-icon-letter';
@@ -620,8 +631,7 @@ function renderLetterAvatar(container, item) {
   container.appendChild(span);
 }
 
-export function renderIconInto(container, item, pageUrl = item.url, options = {}) {
-  const { eager = false } = options;
+export function renderIconInto(container, item, pageUrl = item.url) {
   const renderToken = {};
   iconRenderTokens.set(container, renderToken);
   const isCurrentRender = () => iconRenderTokens.get(container) === renderToken;
@@ -640,77 +650,31 @@ export function renderIconInto(container, item, pageUrl = item.url, options = {}
 
   const iconSrc = item.icon && !isUnacceptableStoredIcon(item.icon, pageUrl || item.url) ? item.icon : '';
   if (iconSrc) {
-    if (eager) {
-      prepareImageIconContainer(container, iconSrc);
-      const img = createIconImage();
-      const toLetter = () => {
-        if (!isCurrentRender()) return;
-        renderLetterAvatar(container, {
-          ...item,
-          letter: item.letter || deriveLetterLabel(item.name, item.url || pageUrl),
-          color: item.color || deriveLetterColor(letterColorSeed(item.name, item.url || pageUrl)),
-        });
-      };
-      bindIconWithFallback(img, iconSrc, toLetter, () => {
-        if (!isCurrentRender()) return;
-        classifyIconImage(container, img, iconSrc);
-        void ensureIconCached(iconSrc);
-      });
-      container.appendChild(img);
-
-      void (async () => {
-        try {
-          const cachedUrl = await getIconObjectUrl(iconSrc);
-          if (cachedUrl && img.isConnected && isCurrentRender()) img.src = cachedUrl;
-        } catch { /* ignore */ }
-      })();
-      return;
-    }
-
-    // Lazy approach: paint letter immediately for responsiveness. Upgrade to image once we have (cached or remote).
+    // Keep the letter placeholder until a detached image has loaded and passed validation.
     renderLetterAvatar(container, item);
 
-    (async () => {
-      let usedCached = false;
+    void (async () => {
+      let img = null;
+      let loadedFromRemote = false;
       try {
         const cachedUrl = await getIconObjectUrl(iconSrc);
         if (!isCurrentRender()) return;
         if (cachedUrl) {
-          usedCached = true;
-          prepareImageIconContainer(container, iconSrc);
-          const img = createIconImage({ lazy: true });
-          img.src = cachedUrl;
-          const finish = () => {
-            if (isCurrentRender()) classifyIconImage(container, img, iconSrc);
-          };
-          img.addEventListener('load', finish, { once: true });
-          if (img.complete) finish();
-          container.appendChild(img);
-          return;
+          img = await loadAcceptedIcon(cachedUrl);
         }
       } catch { /* ignore, fall to remote */ }
 
-      if (usedCached) return;
-
-      // First time for this icon (or no cache): load remote, on success cache the blob for future.
-      // Use same bind logic which will replace the letter content.
       if (!isCurrentRender()) return;
-      const toLetter = () => {
-        if (!isCurrentRender()) return;
-        renderLetterAvatar(container, {
-          ...item,
-          letter: item.letter || deriveLetterLabel(item.name, item.url || pageUrl),
-          color: item.color || deriveLetterColor(letterColorSeed(item.name, item.url || pageUrl)),
-        });
-      };
-      const img = createIconImage({ lazy: true });
-      bindIconWithFallback(img, iconSrc, toLetter, () => {
-        if (!isCurrentRender()) return;
-        classifyIconImage(container, img, iconSrc);
-        void ensureIconCached(iconSrc);
-      });
+      if (!img) {
+        img = await loadAcceptedIcon(iconSrc);
+        loadedFromRemote = Boolean(img);
+      }
+      if (!img || !isCurrentRender()) return;
+
       prepareImageIconContainer(container, iconSrc);
       container.appendChild(img);
+      classifyIconImage(container, img, iconSrc);
+      if (loadedFromRemote) void ensureIconCached(iconSrc);
     })();
 
     return;
@@ -734,7 +698,6 @@ export function renderShortcuts(container, shortcuts, handlers) {
     el.rel = 'noopener noreferrer';
     el.dataset.id = item.id;
     el.draggable = false;
-    el.setAttribute('role', 'listitem');
 
     const icon = document.createElement('div');
     icon.className = 'shortcut-icon';
@@ -758,7 +721,6 @@ export function renderShortcuts(container, shortcuts, handlers) {
   const addBtn = document.createElement('button');
   addBtn.className = 'shortcut-item shortcut-add';
   addBtn.type = 'button';
-  addBtn.setAttribute('role', 'listitem');
 
   const addIcon = document.createElement('div');
   addIcon.className = 'shortcut-icon';

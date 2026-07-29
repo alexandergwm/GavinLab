@@ -321,6 +321,14 @@ body.page-apps-active .header-actions {
   transition: transform 0.25s cubic-bezier(0.2, 0, 0, 1);
 }
 
+.shortcut-item:focus-visible,
+.icon-btn:focus-visible,
+.wallpaper-thumb:focus-visible,
+.wallpaper-next-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--stage-color) 82%, transparent);
+  outline-offset: 3px;
+}
+
 .shortcut-icon {
   position: relative;
   width: 72px;

@@ -117,9 +117,10 @@ async function refreshSyncStatus() {
 
 function readGithubFormConfig(saved = {}) {
   const token = document.getElementById('github-sync-token')?.value?.trim() || saved.token || '';
+  const gistInput = document.getElementById('github-sync-gist-id');
   return {
     token,
-    gistId: document.getElementById('github-sync-gist-id')?.value || saved.gistId || '',
+    gistId: gistInput ? gistInput.value.trim() : (saved.gistId || ''),
   };
 }
 
@@ -128,7 +129,8 @@ async function syncGithubFormFromStorage() {
   const gistId = document.getElementById('github-sync-gist-id');
   const gistField = document.getElementById('github-gist-field');
   if (!github || !gistId) return;
-  import('./github-sync.js').then(async (mod) => {
+  try {
+    const mod = await import('./github-sync.js');
     const cfg = await mod.loadGithubSyncConfig();
     github.value = '';
     github.placeholder = cfg.token
@@ -136,7 +138,7 @@ async function syncGithubFormFromStorage() {
       : '粘贴 ghp_…';
     gistId.value = cfg.gistId;
     if (gistField) gistField.hidden = false;
-  }).catch(() => {});
+  } catch { /* keep the form usable if secure storage is temporarily unavailable */ }
 }
 
 function revealGistId(gistId) {
@@ -169,7 +171,7 @@ function setGithubActionsBusy(busy, active = '') {
   }
   if (syncButton) {
     syncButton.disabled = busy;
-    syncButton.textContent = busy && active === 'sync' ? '同步中…' : '同步数据';
+    syncButton.textContent = busy && active === 'sync' ? '同步中…' : '比较并同步';
   }
 }
 
@@ -181,6 +183,7 @@ async function saveGithubConnection() {
 
   try {
     const saved = await githubSync.saveGithubConnection(config);
+    await syncGithubFormFromStorage();
     if (saved.gistId) revealGistId(saved.gistId);
     setGithubSyncStatus('连接已保存；未上传或下载任何数据', false);
   } catch (err) {
@@ -200,6 +203,7 @@ async function runGithubSync(api) {
 
   try {
     const result = await githubSync.syncWithGithub(config);
+    await syncGithubFormFromStorage();
     if (result.gistId) revealGistId(result.gistId);
     setGithubSyncStatus(githubSync.formatGithubSyncResult(result), false);
     if (result.reloaded) {

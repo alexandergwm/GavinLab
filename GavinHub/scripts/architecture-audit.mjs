@@ -57,6 +57,12 @@ function visit(name, path = []) {
 }
 for (const name of jsFiles) visit(name);
 
+for (const name of ['wallpaper.js', 'wallpaper-fetch.js', 'shortcuts.js']) {
+  if ((graph.get(name) || []).includes('wallpaper-library.js')) {
+    errors.push(`${name}: eagerly imports the wallpaper library UI`);
+  }
+}
+
 const html = read(join(root, 'index.html'));
 const newtabHtml = read(join(root, 'newtab.html'));
 const manifest = JSON.parse(read(join(root, 'manifest.json')));
