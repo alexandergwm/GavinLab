@@ -89,6 +89,11 @@ page.on('request', (request) => {
   }
 });
 await page.addInitScript(() => {
+  localStorage.setItem('startpage-github-sync-setup', JSON.stringify({
+    version: 1,
+    mode: 'local',
+    completedAt: 1,
+  }));
   window.__longTasks = [];
   window.__bootVisualFrames = [];
   new PerformanceObserver((list) => {
@@ -658,13 +663,23 @@ try {
     )['startpage-todos']);
 
     localStorage.setItem('startpage-github-token', 'ghp_saved_token');
-    const github = await import('./js/github-sync.js');
-    try {
-      await github.syncWithGithub({ token: 'ghp_replacement_token', gistId: 'network-test' });
-    } catch { /* the test aborts external requests */ }
-    const savedToken = localStorage.getItem('startpage-github-token');
-    localStorage.removeItem('startpage-github-token');
+    localStorage.setItem('startpage-github-gist-id', 'working-gist');
+    localStorage.setItem('startpage-github-gist-baseline', 'working-gist');
     const credentials = await import('./js/credential-store.js');
+    credentials.clearCredentialCache();
+    const coordinator = await import('./js/sync-coordinator.js');
+    try {
+      await coordinator.configureGithubSync({
+        token: 'ghp_replacement_token',
+        gistId: 'network-test',
+      });
+    } catch { /* the test aborts external requests */ }
+    const github = await import('./js/github-sync.js');
+    const savedConnection = await github.loadGithubSyncConfig();
+    const savedBaseline = localStorage.getItem('startpage-github-gist-baseline');
+    localStorage.removeItem('startpage-github-token');
+    localStorage.removeItem('startpage-github-gist-id');
+    localStorage.removeItem('startpage-github-gist-baseline');
     credentials.clearCredentialCache();
     const sync = await import('./js/sync.js');
     let periodicRuns = 0;
@@ -720,7 +735,9 @@ try {
       mutationAt,
       futureRevision,
       skewSafeRevision,
-      savedToken,
+      savedToken: savedConnection.token,
+      savedGist: savedConnection.gistId,
+      savedBaseline,
       mergedTodo: merged['startpage-todos']?.[0]?.text,
       mergedShortcut: merged['startpage-shortcuts']?.[0]?.id,
       syncVersion: sync.exportSyncBundle().v,
@@ -736,7 +753,12 @@ try {
   assert(syncSafety.mutationAt > 100, 'local sync timestamp should advance after a synced data change');
   assert(syncSafety.skewSafeRevision > syncSafety.futureRevision,
     'local revisions must stay monotonic when another device clock is ahead');
-  assert(syncSafety.savedToken === 'ghp_saved_token', 'failed GitHub sync must not overwrite a working token');
+  assert(
+    syncSafety.savedToken === 'ghp_saved_token'
+      && syncSafety.savedGist === 'working-gist'
+      && syncSafety.savedBaseline === 'working-gist',
+    'failed GitHub reconnect must restore the complete working connection',
+  );
   assert(
     syncSafety.mergedTodo === 'local todo'
       && syncSafety.mergedShortcut === 'remote shortcut'
@@ -1268,26 +1290,41 @@ try {
       .some((entry) => entry.name.endsWith('/js/settings-ui.js'))),
     'settings action should load its feature module on demand',
   );
-  await page.locator('.settings-sync-tab[data-sync-tab="github"]').click();
-  const githubField = await page.evaluate(() => ({
-    hidden: document.getElementById('github-gist-field')?.hidden,
-    readOnly: document.getElementById('github-sync-gist-id')?.readOnly,
+  const syncSettings = await page.evaluate(() => ({
+    legacyTabs: document.querySelectorAll('.settings-sync-tab').length,
+    title: document.getElementById('github-auto-sync-title')?.textContent,
+    syncLabel: document.getElementById('github-sync-now-btn')?.textContent,
+    reconnectLabel: document.getElementById('github-reconnect-btn')?.textContent,
+    hasRecovery: Boolean(document.querySelector('.settings-recovery')),
     wallpaperSources: [...document.getElementById('wallpaper-source')?.options || []]
       .map((option) => option.value),
-    saveLabel: document.getElementById('github-save-connection-btn')?.textContent,
-    syncLabel: document.getElementById('github-sync-merge-btn')?.textContent,
   }));
   assert(
-    githubField.hidden === false
-      && githubField.readOnly === false
-      && githubField.wallpaperSources.includes('library')
-      && githubField.saveLabel === '保存连接'
-      && githubField.syncLabel === '比较并同步',
-    `Gist ID must be editable on a second computer: ${JSON.stringify(githubField)}`);
-  await page.locator('#github-sync-gist-id').fill('');
-  await page.locator('#github-save-connection-btn').click();
-  await page.waitForFunction(() =>
-    document.getElementById('github-sync-status')?.textContent?.includes('连接已保存'));
+    syncSettings.legacyTabs === 0
+      && syncSettings.title === '仅保存在本机'
+      && syncSettings.syncLabel === '立即同步'
+      && syncSettings.reconnectLabel === '连接 GitHub'
+      && syncSettings.hasRecovery
+      && syncSettings.wallpaperSources.includes('library'),
+    `settings should expose one automatic-sync status surface: ${JSON.stringify(syncSettings)}`);
+  await page.locator('#github-reconnect-btn').click();
+  await page.waitForSelector('#sync-setup-dialog[open]');
+  const setupField = await page.evaluate(() => ({
+    gistReadOnly: document.getElementById('sync-setup-gist-id')?.readOnly,
+    gistValue: document.getElementById('sync-setup-gist-id')?.value,
+    connectLabel: document.getElementById('sync-setup-connect')?.textContent,
+    localLabel: document.getElementById('sync-setup-local')?.textContent,
+  }));
+  assert(
+    setupField.gistReadOnly === false
+      && setupField.gistValue === 'gist-to-clear'
+      && setupField.connectLabel === '连接并恢复'
+      && setupField.localLabel === '取消',
+    `reconnect should reopen the editable first-run form: ${JSON.stringify(setupField)}`);
+  await page.evaluate(async () => {
+    const github = await import('./js/github-sync.js');
+    await github.saveGithubConnection({ token: 'ghp_clear_test_token', gistId: '' });
+  });
   const clearedGist = await page.evaluate(() => ({
     gistId: localStorage.getItem('startpage-github-gist-id'),
     baseline: localStorage.getItem('startpage-github-gist-baseline'),
@@ -1301,8 +1338,8 @@ try {
     const credentials = await import('./js/credential-store.js');
     credentials.clearCredentialCache();
   });
-  await page.locator('#settings-dialog .settings-actions .modal-close').click();
-  await page.waitForFunction(() => !document.getElementById('settings-dialog')?.open);
+  await page.locator('#sync-setup-local').click();
+  await page.waitForFunction(() => !document.getElementById('sync-setup-dialog')?.open);
 
   await page.evaluate(() => localStorage.removeItem('startpage-shortcuts'));
   await page.locator('.dock-tab[data-page="home"]').click();
@@ -1616,6 +1653,27 @@ try {
     mobileCalendar.scrollWidth > mobileCalendar.clientWidth,
     `narrow calendar should scroll horizontally instead of crushing columns: ${JSON.stringify(mobileCalendar)}`,
   );
+
+  const firstRunPage = await browser.newPage({ viewport: { width: 1120, height: 760 } });
+  await firstRunPage.route('https://**/*', (route) => route.abort());
+  await firstRunPage.goto(url, { waitUntil: 'domcontentloaded' });
+  await firstRunPage.waitForFunction(() => document.body.classList.contains('search-focused'), null, {
+    timeout: 8000,
+  });
+  assert(
+    !(await firstRunPage.locator('#sync-setup-dialog').evaluate((dialog) => dialog.open)),
+    'first-run setup must not interrupt the initial search focus animation',
+  );
+  await firstRunPage.waitForSelector('#sync-setup-dialog[open]', { timeout: 4000 });
+  assert(
+    await firstRunPage.locator('#sync-setup-local').textContent() === '仅保存在本机',
+    'a pristine install should offer the one-time local-only choice',
+  );
+  await firstRunPage.locator('#sync-setup-local').click();
+  const firstRunChoice = await firstRunPage.evaluate(() =>
+    JSON.parse(localStorage.getItem('startpage-github-sync-setup') || 'null')?.mode);
+  assert(firstRunChoice === 'local', 'the first-run choice should be remembered on this device');
+  await firstRunPage.close();
 
   const severeErrors = errors.filter((message) =>
     !message.includes('ERR_FAILED')

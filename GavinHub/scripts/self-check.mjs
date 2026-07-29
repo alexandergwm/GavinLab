@@ -96,7 +96,8 @@ assert(app.includes("from './page-router.js'"), 'app.js should use the cancellab
 assert(app.includes('context.motion?.wait'), 'page transitions should settle through the motion controller');
 assert(app.includes('page-transitioning'), 'page transitions should expose a unified visual state');
 assert(app.includes('prepareWallpaperEffects'), 'apps navigation should wait for final wallpaper effects');
-assert(app.includes('STARTUP_SYNC_BUDGET_MS'), 'app.js should cap sync work on the critical startup path');
+assert(!app.includes('pullSyncOnStartup'), 'cloud sync must stay off the critical startup path');
+assert(app.includes('initSyncExperience'), 'app.js should start sync after the visual startup settles');
 assert(app.includes('Promise.all([initCore(), searchReady])'), 'search and core startup should run in parallel');
 assert(app.includes('getCurrentPage: () => pageRouter.getCurrentPage()'), 'keyboard routing should use the live router state');
 assert(!app.includes('getCurrentPage: () => tabPage'), 'keyboard routing must not reference removed tabPage state');
@@ -243,6 +244,13 @@ assert(read('js/app.js').includes("motionController.begin('page'"), 'page naviga
 assert(read('js/dialog-ui.js').includes("motionController.begin('dialog'"), 'dialogs should use the motion controller');
 assert(existsSync(join(root, 'js/credential-store.js')), 'missing extension-private credential store');
 assert(read('js/credential-store.js').includes('chrome.storage.local'), 'GitHub token should use extension-local storage');
+assert(existsSync(join(root, 'js/sync-coordinator.js')), 'missing GitHub sync coordinator');
+assert(existsSync(join(root, 'js/sync-setup-ui.js')), 'missing first-run sync setup UI');
+const syncCoordinator = read('js/sync-coordinator.js');
+assert(syncCoordinator.includes('startGithubAutoSync'), 'sync coordinator should own automatic sync scheduling');
+assert(syncCoordinator.includes('requestGithubAutoSync'), 'local mutations should be able to request a debounced sync');
+assert(read('js/storage.js').includes("import('./sync-coordinator.js')"),
+  'persisted local changes should schedule the GitHub sync coordinator');
 assert(read('js/sync.js').includes('const SYNC_VERSION = 2'), 'sync payload should use per-dataset revision format');
 assert(read('js/sync.js').includes('mergeSyncBundles'), 'sync should merge independent datasets');
 const githubSync = read('js/github-sync.js');
@@ -250,7 +258,7 @@ assert(githubSync.includes('findGithubSyncGists'), 'GitHub sync should discover 
 assert(githubSync.includes('githubGistBaseline'), 'GitHub sync should track whether a Gist has completed safe bootstrap');
 assert(githubSync.includes('saveGithubConnection'), 'GitHub connection saving should be independent from data sync');
 assert(githubSync.includes("new Error('multiple-gists')"), 'GitHub sync must stop before writing when backup identity is ambiguous');
-assert(app.includes('initialGithubSyncScheduled'), 'saved GitHub credentials should trigger an idle startup sync');
+assert(app.includes('coordinator.startGithubAutoSync'), 'saved GitHub credentials should trigger an idle startup sync');
 assert(existsSync(join(root, 'js/page-registry.js')), 'missing extensible page registry');
 assert(read('js/runtime.js').includes('getPageDefinition'), 'runtime should prepare pages from registry metadata');
 

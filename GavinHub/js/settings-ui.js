@@ -14,140 +14,14 @@ import { closeDialog as closeModal, openDialog as openModal } from './dialog-ui.
 
 let inited = false;
 let settingsController = null;
-let syncTabsBound = false;
-const SYNC_TAB_KEY = 'startpage-sync-ui-tab';
-const FILE_TAB_KEY = 'startpage-sync-file-tab';
 
-function setSyncTab(tab) {
-  const tabs = document.querySelectorAll('.settings-sync-tab[data-sync-tab]');
-  const panels = {
-    edge: document.getElementById('sync-panel-edge'),
-    file: document.getElementById('sync-panel-file'),
-    github: document.getElementById('sync-panel-github'),
-  };
-  if (!panels[tab]) return;
-
-  tabs.forEach((btn) => {
-    const active = btn.dataset.syncTab === tab;
-    btn.classList.toggle('active', active);
-    btn.setAttribute('aria-selected', active ? 'true' : 'false');
-  });
-
-  Object.entries(panels).forEach(([id, panel]) => {
-    if (!panel) return;
-    panel.hidden = id !== tab;
-  });
-
-  try {
-    localStorage.setItem(SYNC_TAB_KEY, tab);
-  } catch { /* ignore */ }
-}
-
-function setFileTab(tab) {
-  const hints = {
-    export: '下载 json 配置文件，拷到其他电脑',
-    import: '选择之前导出的 json 文件，覆盖本机配置',
-  };
-  const labels = {
-    export: '导出配置',
-    import: '选择文件导入',
-  };
-
-  document.querySelectorAll('.settings-sync-subtab[data-file-tab]').forEach((btn) => {
-    const active = btn.dataset.fileTab === tab;
-    btn.classList.toggle('active', active);
-    btn.setAttribute('aria-selected', active ? 'true' : 'false');
-  });
-
-  const hint = document.getElementById('sync-file-hint');
-  const actionBtn = document.getElementById('sync-file-action-btn');
-  if (hint) hint.textContent = hints[tab] || hints.export;
-  if (actionBtn) {
-    actionBtn.textContent = labels[tab] || labels.export;
-    actionBtn.dataset.fileAction = tab;
-  }
-
-  try {
-    localStorage.setItem(FILE_TAB_KEY, tab);
-  } catch { /* ignore */ }
-}
-
-function restoreSyncTabs() {
-  let saved = 'file';
-  try {
-    saved = localStorage.getItem(SYNC_TAB_KEY) || 'file';
-  } catch { /* ignore */ }
-  setSyncTab(['edge', 'file', 'github'].includes(saved) ? saved : 'file');
-
-  let fileTab = 'export';
-  try {
-    fileTab = localStorage.getItem(FILE_TAB_KEY) || 'export';
-  } catch { /* ignore */ }
-  setFileTab(['export', 'import'].includes(fileTab) ? fileTab : 'export');
-}
-
-function bindSyncTabs() {
-  if (syncTabsBound) return;
-  syncTabsBound = true;
-
-  document.querySelector('.settings-sync-tabs')?.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-sync-tab]');
-    if (btn) setSyncTab(btn.dataset.syncTab);
-  });
-
-  document.querySelector('.settings-sync-subtabs')?.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-file-tab]');
-    if (btn) setFileTab(btn.dataset.fileTab);
-  });
-
-  restoreSyncTabs();
-}
-
-async function refreshSyncStatus() {
-  const el = document.getElementById('sync-status');
-  if (!el) return;
-  try {
-    const sync = await import('./sync.js');
-    const full = await sync.getSyncStatusText();
-    el.textContent = full.split('。')[0] || full;
-  } catch {
-    el.textContent = 'Edge 账号同步需登录浏览器账号';
-  }
-}
-
-function readGithubFormConfig(saved = {}) {
-  const token = document.getElementById('github-sync-token')?.value?.trim() || saved.token || '';
-  const gistInput = document.getElementById('github-sync-gist-id');
-  return {
-    token,
-    gistId: gistInput ? gistInput.value.trim() : (saved.gistId || ''),
-  };
-}
-
-async function syncGithubFormFromStorage() {
-  const github = document.getElementById('github-sync-token');
-  const gistId = document.getElementById('github-sync-gist-id');
-  const gistField = document.getElementById('github-gist-field');
-  if (!github || !gistId) return;
-  try {
-    const mod = await import('./github-sync.js');
-    const cfg = await mod.loadGithubSyncConfig();
-    github.value = '';
-    github.placeholder = cfg.token
-      ? '已保存 GitHub Token，留空沿用；粘贴新 Token 可替换'
-      : '粘贴 ghp_…';
-    gistId.value = cfg.gistId;
-    if (gistField) gistField.hidden = false;
-  } catch { /* keep the form usable if secure storage is temporarily unavailable */ }
-}
-
-function revealGistId(gistId) {
-  const gistInput = document.getElementById('github-sync-gist-id');
-  const gistField = document.getElementById('github-gist-field');
-  if (!gistInput || !gistId) return;
-  gistInput.value = gistId;
-  if (gistField) gistField.hidden = false;
-}
+const SYNC_ACTION_LABELS = {
+  downloaded: '已从云端恢复',
+  uploaded: '本机更新已上传',
+  'uploaded-new': '已创建云端备份',
+  merged: '两端更新已合并',
+  'up-to-date': '本机与云端一致',
+};
 
 function setGithubSyncStatus(text, isError = false) {
   const el = document.getElementById('github-sync-status');
@@ -162,57 +36,78 @@ function setGithubSyncStatus(text, isError = false) {
   el.classList.toggle('is-error', isError);
 }
 
-function setGithubActionsBusy(busy, active = '') {
-  const saveButton = document.getElementById('github-save-connection-btn');
-  const syncButton = document.getElementById('github-sync-merge-btn');
-  if (saveButton) {
-    saveButton.disabled = busy;
-    saveButton.textContent = busy && active === 'save' ? '保存中…' : '保存连接';
-  }
-  if (syncButton) {
-    syncButton.disabled = busy;
-    syncButton.textContent = busy && active === 'sync' ? '同步中…' : '比较并同步';
-  }
+function formatSyncTime(timestamp) {
+  if (!timestamp) return '';
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(timestamp));
 }
 
-async function saveGithubConnection() {
-  const githubSync = await import('./github-sync.js');
-  const config = readGithubFormConfig(await githubSync.loadGithubSyncConfig());
-  setGithubActionsBusy(true, 'save');
-  setGithubSyncStatus('正在保存连接…', false);
+async function refreshGithubSyncOverview() {
+  const title = document.getElementById('github-auto-sync-title');
+  const detail = document.getElementById('github-auto-sync-detail');
+  const dot = document.getElementById('github-auto-sync-dot');
+  const syncButton = document.getElementById('github-sync-now-btn');
+  const reconnectButton = document.getElementById('github-reconnect-btn');
+  if (!title || !detail || !dot) return;
 
   try {
-    const saved = await githubSync.saveGithubConnection(config);
-    await syncGithubFormFromStorage();
-    if (saved.gistId) revealGistId(saved.gistId);
-    setGithubSyncStatus('连接已保存；未上传或下载任何数据', false);
-  } catch (err) {
-    setGithubSyncStatus(githubSync.formatGithubSyncError(err), true);
-  } finally {
-    setGithubActionsBusy(false);
+    const coordinator = await import('./sync-coordinator.js');
+    const overview = await coordinator.getSyncOverview();
+    dot.className = 'settings-sync-dot';
+    if (overview.connected) {
+      const hasError = Boolean(overview.status?.error);
+      title.textContent = hasError ? 'GitHub 自动同步暂时中断' : 'GitHub 自动同步已开启';
+      dot.classList.add(hasError ? 'is-error' : 'is-connected');
+      const statusLabel = hasError
+        ? '请检查网络或重新连接'
+        : (SYNC_ACTION_LABELS[overview.status?.action] || '等待首次同步');
+      const at = formatSyncTime(overview.status?.at);
+      detail.textContent = at ? `${statusLabel} · ${at}` : statusLabel;
+    } else if (overview.mode === 'local') {
+      title.textContent = '仅保存在本机';
+      detail.textContent = '连接 GitHub 后可在其他设备自动恢复';
+      dot.classList.add('is-local');
+    } else {
+      title.textContent = 'GitHub 连接已失效';
+      detail.textContent = '请重新连接以继续自动同步';
+      dot.classList.add('is-error');
+    }
+    if (syncButton) syncButton.disabled = !overview.connected;
+    if (reconnectButton) reconnectButton.textContent = overview.connected ? '重新连接' : '连接 GitHub';
+  } catch {
+    title.textContent = '无法读取同步状态';
+    detail.textContent = '本机数据不会受到影响';
+    dot.classList.add('is-error');
+    if (syncButton) syncButton.disabled = true;
   }
 }
 
 async function runGithubSync(api) {
-  const githubSync = await import('./github-sync.js');
-  const config = readGithubFormConfig(await githubSync.loadGithubSyncConfig());
-  const button = document.getElementById('github-sync-merge-btn');
+  const button = document.getElementById('github-sync-now-btn');
   if (button?.disabled) return;
-  setGithubActionsBusy(true, 'sync');
+  button.disabled = true;
+  button.textContent = '同步中…';
   setGithubSyncStatus('正在比较本机与云端数据…', false);
 
   try {
-    const result = await githubSync.syncWithGithub(config);
-    await syncGithubFormFromStorage();
-    if (result.gistId) revealGistId(result.gistId);
+    const [coordinator, githubSync] = await Promise.all([
+      import('./sync-coordinator.js'),
+      import('./github-sync.js'),
+    ]);
+    const result = await coordinator.runConfiguredGithubSync();
     setGithubSyncStatus(githubSync.formatGithubSyncResult(result), false);
-    if (result.reloaded) {
-      api.onDataSynced?.();
-    }
+    if (result.reloaded) api.onDataSynced?.();
+    await refreshGithubSyncOverview();
   } catch (err) {
+    const githubSync = await import('./github-sync.js');
     setGithubSyncStatus(githubSync.formatGithubSyncError(err), true);
   } finally {
-    setGithubActionsBusy(false);
+    button.textContent = '立即同步';
+    await refreshGithubSyncOverview();
   }
 }
 
@@ -260,7 +155,7 @@ export function initSettingsUI(api) {
   const rotationSelect = document.getElementById('wallpaper-rotation');
   const greetingCheckbox = document.getElementById('show-greeting');
 
-  /* 禁止 Enter 提交表单误关设置（GitHub token 等输入框） */
+  /* 禁止 Enter 提交表单误关设置。 */
   form?.addEventListener('submit', (e) => e.preventDefault());
 
   const syncForm = () => {
@@ -284,10 +179,8 @@ export function initSettingsUI(api) {
 
   const open = () => {
     syncForm();
-    syncGithubFormFromStorage();
     setGithubSyncStatus('');
-    restoreSyncTabs();
-    void refreshSyncStatus();
+    void refreshGithubSyncOverview();
     openModal(dialog);
   };
 
@@ -331,20 +224,16 @@ export function initSettingsUI(api) {
   });
 
   const importFile = document.getElementById('sync-import-file');
-  const fileActionBtn = document.getElementById('sync-file-action-btn');
-
-  fileActionBtn?.addEventListener('click', async () => {
-    const action = fileActionBtn.dataset.fileAction || 'export';
-    if (action === 'import') {
-      importFile?.click();
-      return;
-    }
+  document.getElementById('sync-export-btn')?.addEventListener('click', async () => {
     try {
       const sync = await import('./sync.js');
       sync.downloadSyncBundleFile();
     } catch {
       window.alert('导出失败，请稍后重试');
     }
+  });
+  document.getElementById('sync-import-btn')?.addEventListener('click', () => {
+    importFile?.click();
   });
 
   importFile?.addEventListener('change', async () => {
@@ -362,20 +251,19 @@ export function initSettingsUI(api) {
     }
   });
 
-  document.getElementById('github-open-token-btn')?.addEventListener('click', () => {
-    const url = 'https://github.com/settings/tokens/new?description=GavinHub&scopes=gist';
-    window.open(url, '_blank', 'noopener,noreferrer');
-  });
-
-  document.getElementById('github-sync-merge-btn')?.addEventListener('click', () => {
+  document.getElementById('github-sync-now-btn')?.addEventListener('click', () => {
     void runGithubSync(api);
   });
 
-  document.getElementById('github-save-connection-btn')?.addEventListener('click', () => {
-    void saveGithubConnection();
+  document.getElementById('github-reconnect-btn')?.addEventListener('click', async () => {
+    const setup = await import('./sync-setup-ui.js');
+    closeModal(dialog);
+    await setup.openSyncSetup({ onDataSynced: api.onDataSynced });
   });
 
-  bindSyncTabs();
+  document.addEventListener('gavinhub:sync-state-change', () => {
+    if (dialog?.open) void refreshGithubSyncOverview();
+  });
 
   settingsController = { open, sync: syncForm };
   return settingsController;

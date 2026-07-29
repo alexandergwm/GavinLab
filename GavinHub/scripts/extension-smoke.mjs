@@ -92,32 +92,91 @@ try {
     throw new Error(`credential migration failed: ${JSON.stringify(credentialMigration)}`);
   }
   const syncRoundTrip = await indexPage.evaluate(async () => {
-    const storage = await import('./js/storage.js');
-    storage.writeJson('startpage-shortcuts', [{
-      id: 'sync-extension-test',
-      type: 'link',
-      name: 'Sync Test',
-      url: 'https://example.com',
-    }]);
-    await new Promise((resolve) => setTimeout(resolve, 1400));
-    const root = (await chrome.storage.sync.get('gavinhubSync')).gavinhubSync;
-    const generation = root?.generation || '';
-    const keys = Array.from({ length: root?.chunks || 0 }, (_, index) =>
-      generation ? `gavinhubSync_c${generation}_${index}` : `gavinhubSync_c${index}`);
-    const chunks = await chrome.storage.sync.get(keys);
-    const payload = JSON.parse(keys.map((key) => chunks[key] || '').join(''));
-    return {
-      version: payload.v,
-      shortcutId: payload['startpage-shortcuts']?.[0]?.id,
-      revision: payload.revisions?.['startpage-shortcuts'],
+    const originalFetch = window.fetch;
+    const remote = {
+      v: 2,
+      updatedAt: 500,
+      revisions: {
+        'startpage-settings': 0,
+        'startpage-shortcuts': 500,
+        'startpage-dock': 0,
+        'startpage-todos': 0,
+        'startpage-goals': 0,
+        'startpage-important-dates': 0,
+      },
+      settings: {},
+      'startpage-shortcuts': [{
+        id: 'remote-extension-test',
+        type: 'link',
+        name: 'Remote Test',
+        url: 'https://example.com/remote',
+      }],
+      'startpage-dock': null,
+      'startpage-todos': null,
+      'startpage-goals': null,
+      'startpage-important-dates': null,
     };
+    let patchedPayload = null;
+    window.fetch = async (input, init = {}) => {
+      const url = String(input?.url || input);
+      const method = init.method || 'GET';
+      if (url.endsWith('/gists/extension-smoke-gist') && method === 'GET') {
+        return new Response(JSON.stringify({
+          id: 'extension-smoke-gist',
+          files: { 'gavinhub-sync.json': { content: JSON.stringify(remote) } },
+        }), { status: 200 });
+      }
+      if (url.endsWith('/gists/extension-smoke-gist') && method === 'PATCH') {
+        patchedPayload = JSON.parse(JSON.parse(init.body).files['gavinhub-sync.json'].content);
+        return new Response(JSON.stringify({ id: 'extension-smoke-gist' }), { status: 200 });
+      }
+      throw new Error(`unexpected sync request: ${method} ${url}`);
+    };
+
+    try {
+      const credentials = await import('./js/credential-store.js');
+      credentials.clearCredentialCache();
+      localStorage.removeItem('startpage-github-sync-setup');
+      localStorage.removeItem('startpage-github-sync-status');
+      localStorage.removeItem('startpage-github-gist-id');
+      localStorage.removeItem('startpage-github-gist-baseline');
+      const coordinator = await import('./js/sync-coordinator.js');
+      const storage = await import('./js/storage.js');
+      const first = await coordinator.configureGithubSync({
+        token: 'ghp_extension_sync_test',
+        gistId: 'extension-smoke-gist',
+      });
+      const restoredId = JSON.parse(localStorage.getItem('startpage-shortcuts') || '[]')[0]?.id;
+      storage.writeJson('startpage-shortcuts', [{
+        id: 'sync-extension-test',
+        type: 'link',
+        name: 'Sync Test',
+        url: 'https://example.com',
+      }]);
+      const second = await coordinator.runConfiguredGithubSync();
+      const stored = await chrome.storage.local.get('gavinhubCredentials');
+      const setup = JSON.parse(localStorage.getItem('startpage-github-sync-setup') || 'null');
+      return {
+        firstAction: first.action,
+        secondAction: second.action,
+        restoredId,
+        uploadedId: patchedPayload?.['startpage-shortcuts']?.[0]?.id,
+        storedToken: stored.gavinhubCredentials?.githubToken || '',
+        setupMode: setup?.mode,
+      };
+    } finally {
+      window.fetch = originalFetch;
+    }
   });
   if (
-    syncRoundTrip.version !== 2
-    || syncRoundTrip.shortcutId !== 'sync-extension-test'
-    || !(syncRoundTrip.revision > 0)
+    syncRoundTrip.firstAction !== 'downloaded'
+    || syncRoundTrip.secondAction !== 'uploaded'
+    || syncRoundTrip.restoredId !== 'remote-extension-test'
+    || syncRoundTrip.uploadedId !== 'sync-extension-test'
+    || syncRoundTrip.storedToken !== 'ghp_extension_sync_test'
+    || syncRoundTrip.setupMode !== 'github'
   ) {
-    throw new Error(`storage.sync round trip failed: ${JSON.stringify(syncRoundTrip)}`);
+    throw new Error(`GitHub sync round trip failed: ${JSON.stringify(syncRoundTrip)}`);
   }
   if (errors.length) throw new Error(errors.join('\n'));
   console.log(`EXTENSION SMOKE OK: ${extensionId}`);

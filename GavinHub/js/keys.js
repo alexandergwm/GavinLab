@@ -21,6 +21,8 @@ export const KEYS = {
   githubToken: 'startpage-github-token',
   githubGistId: 'startpage-github-gist-id',
   githubGistBaseline: 'startpage-github-gist-baseline',
+  githubSyncSetup: 'startpage-github-sync-setup',
+  githubSyncStatus: 'startpage-github-sync-status',
   syncLocalAt: 'startpage-sync-local-at',
   syncRevisions: 'startpage-sync-revisions',
 };

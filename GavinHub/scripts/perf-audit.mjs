@@ -88,6 +88,11 @@ try {
   for (const profile of profiles) {
     const page = await browser.newPage({ viewport: profile.viewport });
     await page.addInitScript(() => {
+      localStorage.setItem('startpage-github-sync-setup', JSON.stringify({
+        version: 1,
+        mode: 'local',
+        completedAt: 1,
+      }));
       window.__perfAudit = { longTasks: [], layoutShift: 0 };
       new PerformanceObserver((list) => {
         window.__perfAudit.longTasks.push(...list.getEntries().map((entry) => entry.duration));

@@ -9,7 +9,7 @@
 - **每日壁纸**：默认使用 Bing 每日壁纸 API，失败时回退本地图片
 - **壁纸信息**：应用页右上角悬停显示壁纸标题与描述
 - **日历与待办**：周/月视图、重复事项和长期目标
-- **多端同步**：Edge 账号、JSON 文件或 GitHub Gist；启动后及可见时每 5 分钟自动校验
+- **自动同步**：首次连接 GitHub Gist 后静默同步，本地修改会自动合并上传
 - **本地持久化**：设置、快捷方式和待办均保存在浏览器本地
 
 ## 快速开始
@@ -23,9 +23,9 @@ python3 -m http.server 8080
 
 浏览器访问 `http://localhost:3000`（serve 默认端口）或 `http://localhost:8080`。
 
-GitHub 的“保存连接”只保存 Token 与 Gist ID，不上传或下载数据；“比较并同步”会明确报告本次是上传、下载、合并还是没有变化。首次同步会先查找并恢复账号中已有的 GavinHub Gist，确认基线后才允许上传本地修改。若发现多个备份，会停止写入并要求明确填写 Gist ID。
+首次安装可连接 GitHub Token 与 Gist ID，或选择仅保存在本机。连接时会先查找并恢复已有 GavinHub Gist，确认基线后才允许上传本地修改；若发现多个备份，会停止写入并要求明确填写 Gist ID。连接成功后不再显示同步方式选择，启动、重新可见、本地修改及每 5 分钟会自动校验。设置中只保留同步状态、重新连接和文件备份恢复。
 
-Edge 账号同步使用双快照原子分块，并保留约 42 KB 的安全数据预算；超过预算时会保留旧云端快照并提示改用文件或 GitHub，同步不会写入半套数据。
+Token 仅保存在扩展私有的 `chrome.storage.local` 中，不会写入 Gist、导出文件或 Git 仓库。重新连接失败时会回滚到原有 Token、Gist ID 与同步基线。
 
 ## Edge 扩展（新标签页）
 
@@ -61,8 +61,9 @@ GavinHub/
 │   ├── weather-modal.js # 按需天气详情
 │   ├── shortcuts.js    # 快捷方式与 Dock
 │   ├── calendar.js     # 日历与待办
-│   ├── sync.js         # Edge / 文件同步
+│   ├── sync.js         # 同步数据格式、合并与文件备份
 │   ├── github-sync.js  # GitHub Gist 同步
+│   ├── sync-coordinator.js # 首次连接、自动调度与状态
 │   └── storage.js      # 本地存储
 ├── scripts/            # 检查与扩展打包
 └── assets/             # 静态资源

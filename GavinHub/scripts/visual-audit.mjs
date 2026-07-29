@@ -140,7 +140,7 @@ async function capture(page, profile, state) {
   if (state === 'apps') {
     assert(layout.tileSizeSpread < 1, `${profile} app tiles changed size: ${layout.tileSizeSpread}`);
   }
-  if (state === 'calendar' || state.startsWith('settings')) {
+  if (state === 'calendar' || state.startsWith('settings') || state === 'sync-setup') {
     assert(layout.openDialogs === 1 && layout.dialog, `${profile}/${state} dialog is not visible`);
   }
   return layout;
@@ -159,6 +159,11 @@ try {
   for (const profile of profiles) {
     const page = await browser.newPage({ viewport: profile.viewport });
     await page.addInitScript(() => {
+      localStorage.setItem('startpage-github-sync-setup', JSON.stringify({
+        version: 1,
+        mode: 'local',
+        completedAt: 1,
+      }));
       const NativeDate = Date;
       const fixed = new NativeDate('2026-07-24T10:08:00+08:00').getTime();
       globalThis.Date = class extends NativeDate {
@@ -206,10 +211,13 @@ try {
     await page.locator('#settings-btn').click();
     await page.waitForSelector('#settings-dialog[open]');
     await capture(page, profile.name, 'settings');
-    await page.locator('.settings-sync-tab[data-sync-tab="github"]').click();
-    await capture(page, profile.name, 'settings-github');
-    await page.keyboard.press('Escape');
-    await page.waitForFunction(() => !document.getElementById('settings-dialog')?.open);
+    await page.locator('.settings-recovery summary').click();
+    await capture(page, profile.name, 'settings-recovery');
+    await page.locator('#github-reconnect-btn').click();
+    await page.waitForSelector('#sync-setup-dialog[open]');
+    await capture(page, profile.name, 'sync-setup');
+    await page.locator('#sync-setup-local').click();
+    await page.waitForFunction(() => !document.getElementById('sync-setup-dialog')?.open);
     assert(await page.locator('dialog[open]').count() === 0, `${profile.name} dialog left a visible frame`);
 
     await page.close();

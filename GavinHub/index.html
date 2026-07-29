@@ -321,52 +321,54 @@
         <input id="show-greeting" type="checkbox">
       </label>
       <div class="settings-sync-block">
-        <p class="settings-sync-block-title">多端同步</p>
-        <div class="settings-sync-tabs" role="tablist" aria-label="同步方式">
-          <button type="button" class="settings-sync-tab" role="tab" data-sync-tab="edge" aria-selected="false">Edge</button>
-          <button type="button" class="settings-sync-tab active" role="tab" data-sync-tab="file" aria-selected="true">文件</button>
-          <button type="button" class="settings-sync-tab" role="tab" data-sync-tab="github" aria-selected="false">GitHub</button>
-        </div>
-
-        <div id="sync-panel-edge" class="settings-sync-panel" role="tabpanel" hidden>
-          <p id="sync-status" class="settings-hint settings-sync-panel-hint">正在检查同步状态…</p>
-        </div>
-
-        <div id="sync-panel-file" class="settings-sync-panel active" role="tabpanel">
-          <div class="settings-sync-subtabs" role="tablist" aria-label="文件同步">
-            <button type="button" class="settings-sync-subtab active" data-file-tab="export" aria-selected="true">导出</button>
-            <button type="button" class="settings-sync-subtab" data-file-tab="import" aria-selected="false">导入</button>
+        <p class="settings-sync-block-title">自动同步</p>
+        <div class="settings-sync-summary">
+          <span id="github-auto-sync-dot" class="settings-sync-dot" aria-hidden="true"></span>
+          <div>
+            <strong id="github-auto-sync-title">正在检查…</strong>
+            <p id="github-auto-sync-detail">读取本机连接状态</p>
           </div>
-          <p id="sync-file-hint" class="settings-hint settings-sync-panel-hint">下载 json 配置文件，拷到其他电脑</p>
-          <button type="button" id="sync-file-action-btn" class="settings-sync-btn settings-sync-btn--primary settings-sync-file-action">导出配置</button>
+        </div>
+        <div class="settings-github-actions">
+          <button type="button" id="github-sync-now-btn" class="settings-sync-btn settings-sync-btn--primary">立即同步</button>
+          <button type="button" id="github-reconnect-btn" class="settings-sync-btn">重新连接</button>
+        </div>
+        <p id="github-sync-status" class="settings-hint settings-sync-manual-hint" hidden></p>
+        <details class="settings-recovery">
+          <summary>备份与恢复</summary>
+          <p class="settings-hint">仅在连接失效或手动迁移时使用</p>
+          <div class="settings-recovery-actions">
+            <button type="button" id="sync-export-btn" class="settings-sync-btn">导出备份</button>
+            <button type="button" id="sync-import-btn" class="settings-sync-btn">导入备份</button>
+          </div>
           <input type="file" id="sync-import-file" accept="application/json,.json" hidden>
-        </div>
-
-        <div id="sync-panel-github" class="settings-sync-panel" role="tabpanel" hidden>
-          <ol class="settings-github-steps">
-            <li><button type="button" id="github-open-token-btn" class="settings-link-btn">打开 GitHub 创建 Token</button>（推荐 classic，勾选 <code>gist</code>）</li>
-            <li>复制 <code>ghp_</code> 或 <code>github_pat_</code> 开头 Token 粘贴下方</li>
-            <li>先保存连接；需要交换数据时再点「比较并同步」</li>
-          </ol>
-          <label class="settings-field">
-            <span>GitHub Token</span>
-            <input type="password" id="github-sync-token" placeholder="粘贴 ghp_…" autocomplete="off" spellcheck="false">
-          </label>
-          <label class="settings-field settings-field--gist" id="github-gist-field">
-            <span>Gist ID</span>
-            <input type="text" id="github-sync-gist-id" placeholder="可选：只有多个备份时需填写" spellcheck="false" autocapitalize="off">
-          </label>
-          <div class="settings-github-actions">
-            <button type="button" id="github-save-connection-btn" class="settings-sync-btn">保存连接</button>
-            <button type="button" id="github-sync-merge-btn" class="settings-sync-btn settings-sync-btn--primary">比较并同步</button>
-          </div>
-          <p id="github-sync-status" class="settings-hint settings-sync-manual-hint" hidden></p>
-        </div>
-        <p class="settings-hint settings-sync-scope-hint">同步：快捷方式、Dock、待办、长期目标等（不含壁纸与搜索模式）</p>
+        </details>
+        <p class="settings-hint settings-sync-scope-hint">自动同步快捷方式、Dock、待办与长期目标</p>
       </div>
       <menu class="settings-actions">
         <button type="button" class="modal-close">关闭</button>
       </menu>
+    </form>
+  </dialog>
+
+  <dialog id="sync-setup-dialog" class="modal-dialog sync-setup-dialog" data-dialog-style="settings">
+    <form id="sync-setup-form" class="sync-setup-form">
+      <h2>连接 GavinHub</h2>
+      <p class="sync-setup-intro">连接 GitHub 后，会先恢复已有云端数据，再开启静默自动同步。</p>
+      <label class="settings-field">
+        <span>GitHub Token</span>
+        <input type="password" id="sync-setup-token" placeholder="粘贴 ghp_…" autocomplete="off" spellcheck="false">
+      </label>
+      <label class="settings-field settings-field--gist">
+        <span>Gist ID</span>
+        <input type="text" id="sync-setup-gist-id" placeholder="留空可自动查找或创建" spellcheck="false" autocapitalize="off">
+      </label>
+      <button type="button" id="sync-setup-open-token" class="settings-link-btn">创建具有 gist 权限的 Token</button>
+      <p id="sync-setup-status" class="settings-hint settings-sync-manual-hint" hidden></p>
+      <div class="sync-setup-actions">
+        <button type="button" id="sync-setup-local" class="settings-sync-btn">仅保存在本机</button>
+        <button type="submit" id="sync-setup-connect" class="settings-sync-btn settings-sync-btn--primary">连接并恢复</button>
+      </div>
     </form>
   </dialog>
 

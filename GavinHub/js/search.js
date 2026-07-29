@@ -978,7 +978,9 @@ export function initSearch({ getSettings: settingsGetter, onSettingsChange: sett
   };
 
   const applySearchFocusAmbience = () => {
+    const wasFocused = document.body.classList.contains('search-focused');
     document.body.classList.add('search-focused');
+    if (!wasFocused) document.dispatchEvent(new CustomEvent('gavinhub:search-focused'));
     refreshSearchSuggestions();
     if (!inputEl.value.trim()) searchQuote.show(getSettings().searchMode);
   };

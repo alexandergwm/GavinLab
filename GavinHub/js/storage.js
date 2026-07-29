@@ -1,6 +1,6 @@
 import { KEYS } from './keys.js';
 
-let syncModulePromise = null;
+let syncCoordinatorPromise = null;
 const SYNCED_STORAGE_KEYS = new Set([
   KEYS.settings,
   KEYS.shortcuts,
@@ -28,10 +28,10 @@ function scheduleSyncForKey(key = KEYS.settings) {
     localStorage.setItem(KEYS.syncRevisions, JSON.stringify(revisions));
   } catch { /* storage may be unavailable in restricted contexts */ }
   queueMicrotask(() => {
-    syncModulePromise ||= import('./sync.js');
-    syncModulePromise.then((sync) => {
-      if (sync.isSyncKey(key)) sync.scheduleSyncPush();
-    }).catch(() => {});
+    syncCoordinatorPromise ||= import('./sync-coordinator.js');
+    syncCoordinatorPromise
+      .then((sync) => sync.requestGithubAutoSync())
+      .catch(() => {});
   });
 }
 

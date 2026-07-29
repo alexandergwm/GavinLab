@@ -4,7 +4,7 @@ import { initKeyboard } from './keyboard.js';
 import { onPageEnter, pageModules, preloadPageModule, preparePage } from './runtime.js';
 import { focusSearchInput, scheduleInitialSearchFocus, initSearchFocusHooks, dismissSearchForPageLeave } from './search-focus.js';
 import { initDialogController, prepareDialogStyles } from './dialog-ui.js';
-import { loadOptionalModules, nextPaint, runWhenIdle, settleWithin } from './lifecycle.js';
+import { loadOptionalModules, nextPaint, runWhenIdle } from './lifecycle.js';
 import { createPageRouter } from './page-router.js';
 import { motionController } from './motion-controller.js';
 import { getPageDefinition, listPageIds } from './page-registry.js';
@@ -12,7 +12,6 @@ import { getPageDefinition, listPageIds } from './page-registry.js';
 const settingsStore = createSettingsStore();
 const INITIAL_PAGE = 'home';
 const PAGE_CYCLE = listPageIds();
-const STARTUP_SYNC_BUDGET_MS = 120;
 
 /** @type {typeof import('./wallpaper.js')} */
 let wallpaper;
@@ -329,37 +328,64 @@ function refreshSyncedUi() {
   }).catch(() => {});
 }
 
-async function runGithubAutoSync() {
-  const github = await import('./github-sync.js');
-  const config = await github.loadGithubSyncConfig();
-  if (!config.token) return;
-  const result = await github.syncWithGithub(config);
-  if (!result.reloaded) return;
-  settingsStore.reload();
-  refreshSyncedUi();
+function initSyncExperience() {
+  let cancelIdle = null;
+  let stopAutoSync = null;
+  let setupTimer = 0;
+  let setupFallbackTimer = 0;
+  const onDataSynced = () => {
+    settingsStore.reload();
+    refreshSyncedUi();
+  };
+  const start = () => {
+    cancelIdle = runWhenIdle(async () => {
+      try {
+        const [coordinator, setupUi] = await Promise.all([
+          import('./sync-coordinator.js'),
+          import('./sync-setup-ui.js'),
+        ]);
+        stopAutoSync = coordinator.startGithubAutoSync({ onApplied: onDataSynced });
+        let setupScheduled = false;
+        const scheduleSetup = () => {
+          if (setupScheduled) return;
+          setupScheduled = true;
+          window.clearTimeout(setupFallbackTimer);
+          setupTimer = window.setTimeout(
+            () => void setupUi.maybeOpenSyncSetup({ onDataSynced }),
+            720,
+          );
+        };
+        if (document.body.classList.contains('search-focused')) scheduleSetup();
+        else {
+          document.addEventListener('gavinhub:search-focused', scheduleSetup, { once: true });
+          setupFallbackTimer = window.setTimeout(scheduleSetup, 2400);
+        }
+      } catch (error) {
+        console.warn('[GavinHub] sync experience failed to start', error);
+      }
+    }, { timeout: 1800, fallbackDelay: 160 });
+  };
+
+  if (document.body.classList.contains('boot-glass-stable')) start();
+  else document.addEventListener('boot-glass-stable', start, { once: true });
+  window.addEventListener('pagehide', () => {
+    document.removeEventListener('boot-glass-stable', start);
+    window.clearTimeout(setupTimer);
+    window.clearTimeout(setupFallbackTimer);
+    cancelIdle?.();
+    stopAutoSync?.();
+  }, { once: true });
 }
 
 async function initCore() {
-  const syncModulePromise = import('./sync.js').catch((error) => {
-    console.error('[GavinHub] sync module failed to load', error);
-    return null;
+  const modules = await loadOptionalModules({
+    wallpaper: () => import('./wallpaper.js'),
+    shortcuts: () => import('./shortcuts.js'),
+    dockUi: () => import('./dock-ui.js'),
+    metaBar: () => import('./meta-bar.js'),
+    layoutMode: () => import('./layout-mode.js'),
+    weatherUi: () => import('./weather-ui.js'),
   });
-  const syncPullPromise = syncModulePromise.then(async (syncMod) => ({
-    syncMod,
-    result: await syncMod?.pullSyncOnStartup?.() || { applied: false, reason: 'unavailable' },
-  }));
-
-  const [modules, syncGate] = await Promise.all([
-    loadOptionalModules({
-      wallpaper: () => import('./wallpaper.js'),
-      shortcuts: () => import('./shortcuts.js'),
-      dockUi: () => import('./dock-ui.js'),
-      metaBar: () => import('./meta-bar.js'),
-      layoutMode: () => import('./layout-mode.js'),
-      weatherUi: () => import('./weather-ui.js'),
-    }),
-    settleWithin(syncPullPromise, STARTUP_SYNC_BUDGET_MS),
-  ]);
 
   wallpaper = modules.wallpaper;
   shortcuts = modules.shortcuts;
@@ -369,51 +395,6 @@ async function initCore() {
   );
   if (document.body.classList.contains('boot-opening-stable')) prepareInitialFocusEffect();
   else document.addEventListener('boot-opening-stable', prepareInitialFocusEffect, { once: true });
-  if (syncGate.settled && syncGate.value?.result?.applied) settingsStore.reload();
-
-  const onSyncedDataApplied = () => {
-    settingsStore.reload();
-    const refresh = () => runWhenIdle(refreshSyncedUi, { timeout: 500, fallbackDelay: 40 });
-    if (document.body.classList.contains('boot-glass-stable')) refresh();
-    else document.addEventListener('boot-glass-stable', refresh, { once: true });
-  };
-  let periodicSyncRegistered = false;
-  let initialGithubSyncScheduled = false;
-  const registerSyncListener = (syncMod) => {
-    syncMod?.initSyncListener?.(onSyncedDataApplied);
-    if (!syncMod || periodicSyncRegistered) return;
-    periodicSyncRegistered = true;
-    syncMod.startPeriodicSync?.({
-      intervalMs: 5 * 60 * 1000,
-      onApplied: onSyncedDataApplied,
-      extraSync: runGithubAutoSync,
-    });
-    if (!initialGithubSyncScheduled) {
-      initialGithubSyncScheduled = true;
-      const schedule = () => runWhenIdle(
-        () => void runGithubAutoSync().catch((error) => {
-          console.warn('[GavinHub] initial GitHub sync failed', error);
-        }),
-        { timeout: 1500, fallbackDelay: 120 },
-      );
-      if (document.body.classList.contains('boot-glass-stable')) schedule();
-      else document.addEventListener('boot-glass-stable', schedule, { once: true });
-    }
-  };
-
-  if (syncGate.settled) {
-    registerSyncListener(syncGate.value?.syncMod);
-  } else {
-    void syncPullPromise.then(({ syncMod, result }) => {
-      registerSyncListener(syncMod);
-      if (!result.applied) return;
-      settingsStore.reload();
-      const refresh = () => runWhenIdle(refreshSyncedUi, { timeout: 500, fallbackDelay: 40 });
-      if (document.body.classList.contains('boot-glass-stable')) refresh();
-      else document.addEventListener('boot-glass-stable', refresh, { once: true });
-    });
-  }
-
   modules.metaBar?.initMetaBar(async () => {
     const [cal] = await Promise.all([
       pageModules.calendar(),
@@ -427,6 +408,7 @@ async function initCore() {
 
   initFavorite();
   initDialogController();
+  initSyncExperience();
   modules.weatherUi?.initWeather?.();
   initGlobalKeyboard();
   initLazyFeatureActions();
