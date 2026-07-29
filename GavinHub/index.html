@@ -22,7 +22,10 @@
     .search-suggestions, .search-quote { display: none !important; }
     body.boot-awakening:not(.boot-ui-settled) .stage,
     body.boot-awakening:not(.boot-ui-settled) #search-form,
-    body.boot-awakening:not(.boot-ui-settled) #dock { visibility: hidden !important; }
+    body.boot-awakening:not(.boot-ui-settled) #dock {
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
   </style>
   <!-- 壁纸关键样式必须在 CSS 文件到达前生效，否则首帧会闪 -->
   <style id="boot-wallpaper-critical">
@@ -32,13 +35,13 @@
       position: absolute; inset: 0; width: 100%; height: 100%;
       object-fit: cover; object-position: center;
       opacity: 0; backface-visibility: hidden;
-      transition: opacity 0.56s cubic-bezier(0.25, 0.8, 0.25, 1);
+      transition: opacity 0.64s cubic-bezier(0.25, 0.8, 0.25, 1);
     }
     #wallpaper-img.wallpaper-show { opacity: 1; }
     body.boot-awakening .scene-vignette { opacity: 0; }
     body.boot-awakening.boot-vignette-visible .scene-vignette {
       opacity: 0.88;
-      transition: opacity 0.56s cubic-bezier(0.25, 0.8, 0.25, 1) 0s;
+      transition: opacity 0.64s cubic-bezier(0.25, 0.8, 0.25, 1) 0s;
     }
   </style>
   <script>
@@ -88,7 +91,7 @@
 </head>
 <body data-text-theme="on-dark" data-text-tone="light" class="boot-awakening">
   <div id="wallpaper" class="wallpaper" aria-hidden="true">
-    <img id="wallpaper-img" class="wallpaper-img" alt="" decoding="sync" fetchpriority="high" />
+    <img id="wallpaper-img" class="wallpaper-img" alt="" decoding="async" fetchpriority="high" />
   </div>
   <script>
   (function () {
@@ -153,6 +156,17 @@
           });
         });
       }
+      function decodeAndAwaken() {
+        var expectedSrc = img.currentSrc || img.src;
+        var reveal = function () {
+          if ((img.currentSrc || img.src) === expectedSrc) awaken();
+        };
+        if (typeof img.decode !== 'function') {
+          reveal();
+          return;
+        }
+        img.decode().then(reveal, reveal);
+      }
       function useFallback() {
         if (settled || (img.complete && img.naturalWidth > 0)) return;
         window.__BOOT_WALLPAPER_READY = false;
@@ -166,10 +180,10 @@
         }
         settleBootUi();
       }
-      img.addEventListener('load', awaken);
+      img.addEventListener('load', decodeAndAwaken);
       img.addEventListener('error', useFallback);
       img.src = url;
-      if (img.complete && img.naturalWidth > 0) awaken();
+      if (img.complete && img.naturalWidth > 0) decodeAndAwaken();
       fallbackTimer = window.setTimeout(useFallback, 450);
     } catch (e2) {
       window.__BOOT_WALLPAPER_READY = false;
@@ -338,7 +352,7 @@
           <ol class="settings-github-steps">
             <li><button type="button" id="github-open-token-btn" class="settings-link-btn">打开 GitHub 创建 Token</button>（推荐 classic，勾选 <code>gist</code>）</li>
             <li>复制 <code>ghp_</code> 或 <code>github_pat_</code> 开头 Token 粘贴下方</li>
-            <li>点「保存并同步」：会先查找已有备份；没有时才新建私有 Gist</li>
+            <li>先保存连接；需要交换数据时再点「同步数据」</li>
           </ol>
           <label class="settings-field">
             <span>GitHub Token</span>
@@ -348,7 +362,10 @@
             <span>Gist ID</span>
             <input type="text" id="github-sync-gist-id" placeholder="可选：只有多个备份时需填写" spellcheck="false" autocapitalize="off">
           </label>
-          <button type="button" id="github-sync-merge-btn" class="settings-sync-btn settings-sync-btn--primary settings-sync-file-action">保存并同步</button>
+          <div class="settings-github-actions">
+            <button type="button" id="github-save-connection-btn" class="settings-sync-btn">保存连接</button>
+            <button type="button" id="github-sync-merge-btn" class="settings-sync-btn settings-sync-btn--primary">同步数据</button>
+          </div>
           <p id="github-sync-status" class="settings-hint settings-sync-manual-hint" hidden></p>
         </div>
         <p class="settings-hint settings-sync-scope-hint">同步：快捷方式、Dock、待办、长期目标等（不含壁纸与搜索模式）</p>

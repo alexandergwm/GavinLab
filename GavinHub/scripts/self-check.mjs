@@ -201,10 +201,11 @@ assert(wpEffects.includes('PREVIEW_WAIT_MS'), 'wallpaper effects should bound pr
 assert(wp.includes('wallpaper-effects-ready'), 'wallpaper should publish effect readiness');
 
 const bootUi = read('js/boot-ui.js');
-assert(bootUi.includes('BOOT_WALLPAPER_FADE_MS = 560'), 'wallpaper reveal should use the unified boot timeline');
-assert(bootUi.includes('BOOT_UI_FADE_MS = 560'), 'UI reveal should use the unified boot timeline');
-assert(bootUi.includes('BOOT_VIGNETTE_FADE_MS = 560'), 'vignette reveal should use the unified boot timeline');
+assert(bootUi.includes('BOOT_WALLPAPER_FADE_MS = 640'), 'wallpaper reveal should use the unified boot timeline');
+assert(bootUi.includes('BOOT_UI_FADE_MS = 640'), 'UI reveal should use the unified boot timeline');
+assert(bootUi.includes('BOOT_VIGNETTE_FADE_MS = 640'), 'vignette reveal should use the unified boot timeline');
 assert(read('js/boot.js').includes("'wallpaper-effects-ready'"), 'search focus should wait for wallpaper effects');
+assert(read('js/boot.js').includes("'boot-opening-stable'"), 'expensive wallpaper effects should wait until opening motion settles');
 
 const background = read('js/background.js');
 assert(background.includes('chrome.tabs.update'), 'NTP handoff should reuse the existing tab');
@@ -244,6 +245,7 @@ assert(read('js/sync.js').includes('mergeSyncBundles'), 'sync should merge indep
 const githubSync = read('js/github-sync.js');
 assert(githubSync.includes('findGithubSyncGists'), 'GitHub sync should discover an existing backup before creating one');
 assert(githubSync.includes('githubGistBaseline'), 'GitHub sync should track whether a Gist has completed safe bootstrap');
+assert(githubSync.includes('saveGithubConnection'), 'GitHub connection saving should be independent from data sync');
 assert(githubSync.includes("new Error('multiple-gists')"), 'GitHub sync must stop before writing when backup identity is ambiguous');
 assert(app.includes('initialGithubSyncScheduled'), 'saved GitHub credentials should trigger an idle startup sync');
 assert(existsSync(join(root, 'js/page-registry.js')), 'missing extensible page registry');

@@ -81,9 +81,9 @@
   --icon-shadow-hover: 0 6px 20px rgba(0, 0, 0, 0.15);
   --dock-icon-radius: var(--icon-squircle-radius);
   --stage-top: 13vh;
-  --boot-wallpaper-duration: 0.56s;
-  --boot-ui-duration: 0.56s;
-  --boot-vignette-duration: 0.56s;
+  --boot-wallpaper-duration: 0.64s;
+  --boot-ui-duration: 0.64s;
+  --boot-vignette-duration: 0.64s;
   --boot-ui-delay-stage: 0s;
   --boot-ui-delay-search: 0s;
   --boot-ui-delay-dock: 0s;
@@ -92,10 +92,10 @@
   --search-form-top: calc(
     var(--stage-top) + clamp(52px, 7.2vw, 68px) + 6px + clamp(12px, 1.6vw, 14px) * 1.5 + 18px
   );
-  --stage-color: rgba(255, 255, 255, 0.94);
-  --stage-shadow: 0 1px 3px rgba(0, 0, 0, 0.58), 0 5px 20px rgba(0, 0, 0, 0.2);
+  --stage-color: #fff;
+  --stage-shadow: 0 1px 2px rgba(0, 0, 0, 0.68), 0 0 1px rgba(0, 0, 0, 0.32);
   --meta-color: rgba(255, 255, 255, 0.78);
-  --meta-shadow: 0 1px 3px rgba(0, 0, 0, 0.62), 0 3px 12px rgba(0, 0, 0, 0.2);
+  --meta-shadow: 0 1px 2px rgba(0, 0, 0, 0.72);
   --meta-sep-opacity: 0.42;
   --label-shadow: none;
 }
@@ -104,27 +104,27 @@ body[data-text-theme='on-light'],
 body[data-text-tone='dark']:not([data-text-theme='on-mixed']) {
   --text-primary: #2d3748;
   --stage-color: rgba(45, 55, 72, 0.92);
-  --stage-shadow: 0 1px 3px rgba(255, 255, 255, 0.82), 0 3px 14px rgba(255, 255, 255, 0.5);
+  --stage-shadow: 0 1px 1px rgba(255, 255, 255, 0.82), 0 0 1px rgba(255, 255, 255, 0.46);
   --meta-color: rgba(45, 55, 72, 0.76);
-  --meta-shadow: 0 1px 3px rgba(255, 255, 255, 0.86), 0 2px 10px rgba(255, 255, 255, 0.48);
+  --meta-shadow: 0 1px 1px rgba(255, 255, 255, 0.86);
   --meta-sep-opacity: 0.34;
 }
 
 body[data-text-theme='on-dark'] {
   --text-primary: #fff;
-  --stage-color: rgba(255, 255, 255, 0.94);
-  --stage-shadow: 0 1px 3px rgba(0, 0, 0, 0.58), 0 5px 20px rgba(0, 0, 0, 0.2);
+  --stage-color: #fff;
+  --stage-shadow: 0 1px 2px rgba(0, 0, 0, 0.68), 0 0 1px rgba(0, 0, 0, 0.32);
   --meta-color: rgba(255, 255, 255, 0.78);
-  --meta-shadow: 0 1px 3px rgba(0, 0, 0, 0.62), 0 3px 12px rgba(0, 0, 0, 0.2);
+  --meta-shadow: 0 1px 2px rgba(0, 0, 0, 0.72);
   --meta-sep-opacity: 0.42;
 }
 
 body[data-text-theme='on-mixed'] {
   --text-primary: rgba(255, 255, 255, 0.98);
-  --stage-color: rgba(255, 255, 255, 0.94);
-  --stage-shadow: 0 1px 4px rgba(0, 0, 0, 0.72), 0 4px 18px rgba(0, 0, 0, 0.3);
+  --stage-color: #fff;
+  --stage-shadow: 0 1px 2px rgba(0, 0, 0, 0.82), 0 0 1px rgba(0, 0, 0, 0.48);
   --meta-color: rgba(255, 255, 255, 0.78);
-  --meta-shadow: 0 1px 4px rgba(0, 0, 0, 0.74), 0 3px 12px rgba(0, 0, 0, 0.26);
+  --meta-shadow: 0 1px 2px rgba(0, 0, 0, 0.84);
   --meta-sep-opacity: 0.42;
 }
 
@@ -328,7 +328,7 @@ body.boot-awakening:not(.boot-ui-settled) .stage {
 
 body.boot-awakening:not(.boot-ui-settled) .search-form,
 body.boot-awakening:not(.boot-ui-settled) .dock {
-  visibility: hidden;
+  opacity: 0;
   pointer-events: none;
 }
 
@@ -343,8 +343,13 @@ body.boot-awakening:not(.boot-ui-settled) .dock {
 
 body.boot-awakening.boot-ui-settled .search-form,
 body.boot-awakening.boot-ui-settled .dock {
-  visibility: visible;
   pointer-events: auto;
+}
+
+body.boot-awakening .stage,
+body.boot-awakening .search-form,
+body.boot-awakening .dock {
+  will-change: opacity, transform;
 }
 
 body.boot-awakening .search-form,
@@ -392,27 +397,33 @@ body.boot-awakening.boot-ui-settled .dock {
 
 @keyframes boot-awaken-ui-move {
   from {
+    opacity: 0;
     transform: translate3d(0, 5px, 0);
   }
   to {
+    opacity: 1;
     transform: translate3d(0, 0, 0);
   }
 }
 
 @keyframes boot-awaken-dock {
   from {
+    opacity: 0;
     transform: translateX(-50%) translate3d(0, 5px, 0);
   }
   to {
+    opacity: 1;
     transform: translateX(-50%) translate3d(0, 0, 0);
   }
 }
 
 @keyframes boot-awaken-dock-sidebar {
   from {
+    opacity: 0;
     transform: translateY(-50%) translate3d(0, 5px, 0);
   }
   to {
+    opacity: 1;
     transform: translateY(-50%) translate3d(0, 0, 0);
   }
 }

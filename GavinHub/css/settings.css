@@ -137,6 +137,12 @@
   margin-top: 0;
 }
 
+.settings-github-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
 .settings-sync-manual-hint {
   margin: 6px 0 0;
   font-size: 11px;
@@ -167,6 +173,12 @@
 .settings-sync-btn:disabled {
   cursor: wait;
   opacity: 0.68;
+}
+
+@media (max-width: 420px) {
+  .settings-github-actions {
+    grid-template-columns: 1fr;
+  }
 }
 
 .settings-sync-btn--primary {

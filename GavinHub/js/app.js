@@ -28,6 +28,10 @@ const settingsApi = {
   onDataImported: () => {
     location.reload();
   },
+  onDataSynced: () => {
+    settingsStore.reload();
+    refreshSyncedUi();
+  },
   onWallpaperRotationChange: () => startWallpaperRotation(),
 };
 
@@ -267,15 +271,12 @@ function initContextMenu() {
 }
 
 function prewarmSecondaryFeatures() {
+  let started = false;
   let cancelModuleIdle = null;
   let cancelEffectsIdle = null;
-  const moduleTimer = window.setTimeout(() => {
-    if (document.hidden) return;
-    cancelModuleIdle = runWhenIdle(
-      () => preloadPageModule('apps', getPageContext()),
-      { timeout: 500, fallbackDelay: 80 },
-    );
-  }, 180);
+  let moduleTimer = 0;
+  let effectsTimer = 0;
+  const dock = document.getElementById('dock');
 
   const prewarmEffects = () => {
     if (document.hidden) return;
@@ -284,8 +285,6 @@ function prewarmSecondaryFeatures() {
       { timeout: 900, fallbackDelay: 120 },
     );
   };
-  const effectsTimer = window.setTimeout(prewarmEffects, 320);
-  const dock = document.getElementById('dock');
   const onDockIntent = (event) => {
     if (!event.target.closest?.('.dock-tab[data-page="apps"]')) return;
     window.clearTimeout(effectsTimer);
@@ -293,12 +292,29 @@ function prewarmSecondaryFeatures() {
     void wallpaper?.prewarmWallpaperEffects?.();
     dock?.removeEventListener('pointerover', onDockIntent);
   };
-  dock?.addEventListener('pointerover', onDockIntent, { passive: true });
+
+  const start = () => {
+    if (started) return;
+    started = true;
+    moduleTimer = window.setTimeout(() => {
+      if (document.hidden) return;
+      cancelModuleIdle = runWhenIdle(
+        () => preloadPageModule('apps', getPageContext()),
+        { timeout: 500, fallbackDelay: 80 },
+      );
+    }, 180);
+    effectsTimer = window.setTimeout(prewarmEffects, 320);
+    dock?.addEventListener('pointerover', onDockIntent, { passive: true });
+  };
+
+  if (document.body.classList.contains('boot-glass-stable')) start();
+  else document.addEventListener('boot-glass-stable', start, { once: true });
 
   window.addEventListener('pagehide', () => {
     window.clearTimeout(moduleTimer);
     window.clearTimeout(effectsTimer);
     dock?.removeEventListener('pointerover', onDockIntent);
+    document.removeEventListener('boot-glass-stable', start);
     cancelModuleIdle?.();
     cancelEffectsIdle?.();
   }, { once: true });
@@ -347,7 +363,12 @@ async function initCore() {
 
   wallpaper = modules.wallpaper;
   shortcuts = modules.shortcuts;
-  wallpaper?.syncSearchFocusWallpaper?.();
+  const prepareInitialFocusEffect = () => runWhenIdle(
+    () => wallpaper?.syncSearchFocusWallpaper?.(),
+    { timeout: 220, fallbackDelay: 32 },
+  );
+  if (document.body.classList.contains('boot-opening-stable')) prepareInitialFocusEffect();
+  else document.addEventListener('boot-opening-stable', prepareInitialFocusEffect, { once: true });
   if (syncGate.settled && syncGate.value?.result?.applied) settingsStore.reload();
 
   const onSyncedDataApplied = () => {

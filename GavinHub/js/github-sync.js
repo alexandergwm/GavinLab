@@ -15,6 +15,7 @@ import {
 const GIST_FILENAME = 'gavinhub-sync.json';
 const GIST_DESCRIPTION = 'GavinHub StartPage sync';
 const GITHUB_API = 'https://api.github.com';
+const PENDING_BASELINE = 'pending:';
 const runGithubSyncExclusive = createAsyncQueue();
 
 export async function loadGithubSyncConfig() {
@@ -57,6 +58,26 @@ function setGithubBaseline(gistId) {
     if (gistId) localStorage.setItem(KEYS.githubGistBaseline, gistId);
     else localStorage.removeItem(KEYS.githubGistBaseline);
   } catch { /* ignore restricted storage */ }
+}
+
+export async function saveGithubConnection(config) {
+  const previous = await loadGithubSyncConfig();
+  const normalized = readConfigFromForm(config || previous);
+  const previousBaseline = getGithubBaseline();
+  const sameConnection = previous.gistId === normalized.gistId;
+  let nextBaseline = previousBaseline;
+
+  if (!previousBaseline && previous.token && previous.gistId && sameConnection) {
+    // Preserve upgrade compatibility for devices linked before baseline tracking existed.
+    nextBaseline = previous.gistId;
+  } else if (!sameConnection || !previous.token) {
+    // A new connection must complete pull-first bootstrap before it may write.
+    nextBaseline = `${PENDING_BASELINE}${normalized.gistId || 'auto'}`;
+  }
+
+  await saveGithubSyncConfig(normalized);
+  setGithubBaseline(nextBaseline);
+  return normalized;
 }
 
 async function githubRequest(path, { token, method = 'GET', body } = {}) {
@@ -224,16 +245,16 @@ export function formatGithubSyncResult(result) {
   switch (result?.action) {
     case 'downloaded':
       return result.discovered
-        ? '已找到已有备份并从 GitHub 恢复'
-        : '已从 GitHub 拉取最新配置';
+        ? '已找到云端备份并下载到本机；未上传本机数据'
+        : '云端数据较新，已下载到本机';
     case 'uploaded':
-      return '已上传到 GitHub';
+      return '本机数据较新，已上传到云端';
     case 'uploaded-new':
-      return '已创建 GitHub 备份并上传';
+      return '云端没有备份，已新建并上传本机数据';
     case 'merged':
-      return '已合并本地与 GitHub 的最新修改';
+      return '两端都有更新，已合并并写入本机与云端';
     case 'up-to-date':
-      return '本地与 GitHub 已是最新';
+      return '本机与云端一致，本次没有上传或下载';
     default:
       return '同步完成';
   }
@@ -244,7 +265,7 @@ export function formatGithubSyncError(err) {
   if (err?.message === 'bad-token-format') {
     return 'Token 格式不对，请用 classic 的 ghp_…，或 fine-grained 的 github_pat_…';
   }
-  if (err?.message === 'no-gist') return '请先填写 Gist ID，或点「保存并同步」自动创建';
+  if (err?.message === 'no-gist') return '请先填写 Gist ID，或直接同步以自动查找或创建';
   if (err?.message === 'gist-empty') return 'Gist 中找不到同步文件';
   if (err?.message === 'multiple-gists') {
     const ids = (err.candidates || []).slice(0, 3).map((item) => item.id).join('、');

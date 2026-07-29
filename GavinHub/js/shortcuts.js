@@ -561,7 +561,7 @@ function classifyIconImage(container, img, iconSrc = '') {
   }
 }
 
-function prepareImageIconContainer(container) {
+function prepareImageIconContainer(container, iconSrc = '') {
   container.innerHTML = '';
   container.classList.remove(
     'shortcut-icon--letter',
@@ -571,6 +571,12 @@ function prepareImageIconContainer(container) {
     'shortcut-icon--transparent',
   );
   container.classList.add('shortcut-icon--image');
+  if (Object.values(TRANSPARENT_SITE_ICONS).includes(iconSrc)) {
+    container.classList.add('shortcut-icon--transparent');
+  }
+  if (isFullBleedKnownIcon(iconSrc)) {
+    container.classList.add('shortcut-icon--square');
+  }
   container.style.backgroundColor = '';
   container.style.color = '';
   delete container.dataset.len;
@@ -635,7 +641,7 @@ export function renderIconInto(container, item, pageUrl = item.url, options = {}
   const iconSrc = item.icon && !isUnacceptableStoredIcon(item.icon, pageUrl || item.url) ? item.icon : '';
   if (iconSrc) {
     if (eager) {
-      prepareImageIconContainer(container);
+      prepareImageIconContainer(container, iconSrc);
       const img = createIconImage();
       const toLetter = () => {
         if (!isCurrentRender()) return;
@@ -671,7 +677,7 @@ export function renderIconInto(container, item, pageUrl = item.url, options = {}
         if (!isCurrentRender()) return;
         if (cachedUrl) {
           usedCached = true;
-          prepareImageIconContainer(container);
+          prepareImageIconContainer(container, iconSrc);
           const img = createIconImage({ lazy: true });
           img.src = cachedUrl;
           const finish = () => {
@@ -703,7 +709,7 @@ export function renderIconInto(container, item, pageUrl = item.url, options = {}
         classifyIconImage(container, img, iconSrc);
         void ensureIconCached(iconSrc);
       });
-      prepareImageIconContainer(container);
+      prepareImageIconContainer(container, iconSrc);
       container.appendChild(img);
     })();
 

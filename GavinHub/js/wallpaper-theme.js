@@ -73,7 +73,7 @@ function analyzeDrawable(drawable, width, height) {
     28,
   );
   const tonalSpread = stats.p75 - stats.p25;
-  const mixed = tonalSpread >= 92 || (stats.p25 < 88 && stats.p75 > 168);
+  const mixed = tonalSpread >= 72 || (stats.p25 < 112 && stats.p75 > 156);
   const theme = mixed
     ? 'on-mixed'
     : stats.median >= LIGHT_TEXT_LUMINANCE ? 'on-light' : 'on-dark';

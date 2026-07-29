@@ -52,12 +52,16 @@ function watchBootGlassStable() {
   };
   const markOpeningReady = () => {
     openingReady = true;
+    if (!document.body.classList.contains('boot-opening-stable')) {
+      document.body.classList.add('boot-opening-stable');
+      document.dispatchEvent(new CustomEvent('boot-opening-stable'));
+    }
     finishBootSequence();
   };
 
   if (!effectsReady) {
     document.addEventListener('wallpaper-effects-ready', markEffectsReady, { once: true });
-    effectsFallbackTimer = window.setTimeout(markEffectsReady, 1400);
+    effectsFallbackTimer = window.setTimeout(markEffectsReady, 2200);
   }
 
   if (prefersReducedMotion()) {

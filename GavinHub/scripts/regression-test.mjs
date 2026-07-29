@@ -107,8 +107,10 @@ await page.addInitScript(() => {
     const clock = document.getElementById('clock');
     const dateText = document.getElementById('date-text');
     const weatherText = document.getElementById('weather-summary');
+    const dockLetter = document.querySelector('.dock-link[data-dock-id="sci-hub"] .shortcut-icon--dock');
     if (searchBox && dock) {
       const clockStyle = clock ? getComputedStyle(clock) : null;
+      const dockLetterStyle = dockLetter ? getComputedStyle(dockLetter) : null;
       window.__bootVisualFrames.push({
         searchVisible: getComputedStyle(document.getElementById('search-form')).visibility !== 'hidden',
         searchGlass: getComputedStyle(searchBox).backdropFilter,
@@ -119,6 +121,9 @@ await page.addInitScript(() => {
         clockFont: clockStyle ? `${clockStyle.fontFamily}|${clockStyle.fontSize}|${clockStyle.fontWeight}` : '',
         dateText: dateText?.textContent || '',
         weatherText: weatherText?.textContent || '',
+        dockLetterStyle: dockLetterStyle
+          ? `${dockLetterStyle.width}|${dockLetterStyle.height}|${dockLetterStyle.display}|${dockLetterStyle.backdropFilter}|${dockLetterStyle.borderRadius}`
+          : '',
       });
     }
     if (performance.now() - startedAt < 1600) requestAnimationFrame(sampleBootVisuals);
@@ -185,6 +190,7 @@ try {
       clockFont: unique('clockFont'),
       dateText: unique('dateText'),
       weatherText: unique('weatherText'),
+      dockLetterStyle: unique('dockLetterStyle'),
     };
   });
   assert(
@@ -201,6 +207,10 @@ try {
       && bootVisualState.dateText.every(Boolean)
       && !bootVisualState.weatherText.includes('加载中…'),
     `visible startup typography must stay stable: ${JSON.stringify(bootVisualState)}`,
+  );
+  assert(
+    bootVisualState.dockLetterStyle.length === 1,
+    `dock icons must not change geometry or material when apps CSS arrives: ${JSON.stringify(bootVisualState.dockLetterStyle)}`,
   );
   const settingsLoadedAtStartup = await page.evaluate(() => performance.getEntriesByType('resource')
     .some((entry) => entry.name.endsWith('/js/settings-ui.js')));
@@ -786,7 +796,10 @@ try {
         throw new Error(`unexpected GitHub request: ${method} ${url}`);
       };
 
-      const first = await github.syncWithGithub({ token: 'ghp_bootstrap_token', gistId: '' });
+      await github.saveGithubConnection({ token: 'ghp_bootstrap_token', gistId: '' });
+      const baselineAfterSave = localStorage.getItem('startpage-github-gist-baseline');
+      const writesAfterSave = writes;
+      const first = await github.syncWithGithub();
       const firstTodo = JSON.parse(localStorage.getItem('startpage-todos') || '[]')[0]?.text;
       const writesAfterBootstrap = writes;
       const discoveredGist = localStorage.getItem('startpage-github-gist-id');
@@ -821,6 +834,8 @@ try {
       return {
         firstAction: first.action,
         firstDiscovered: first.discovered,
+        baselineAfterSave,
+        writesAfterSave,
         firstTodo,
         writesAfterBootstrap,
         discoveredGist,
@@ -844,6 +859,8 @@ try {
   assert(
     githubBootstrapSafety.firstAction === 'downloaded'
       && githubBootstrapSafety.firstDiscovered
+      && githubBootstrapSafety.baselineAfterSave === 'pending:auto'
+      && githubBootstrapSafety.writesAfterSave === 0
       && githubBootstrapSafety.firstTodo === 'remote truth'
       && githubBootstrapSafety.writesAfterBootstrap === 0
       && githubBootstrapSafety.discoveredGist === 'canonical-gist'
@@ -1113,11 +1130,15 @@ try {
     readOnly: document.getElementById('github-sync-gist-id')?.readOnly,
     wallpaperSources: [...document.getElementById('wallpaper-source')?.options || []]
       .map((option) => option.value),
+    saveLabel: document.getElementById('github-save-connection-btn')?.textContent,
+    syncLabel: document.getElementById('github-sync-merge-btn')?.textContent,
   }));
   assert(
     githubField.hidden === false
       && githubField.readOnly === false
-      && githubField.wallpaperSources.includes('library'),
+      && githubField.wallpaperSources.includes('library')
+      && githubField.saveLabel === '保存连接'
+      && githubField.syncLabel === '同步数据',
     `Gist ID must be editable on a second computer: ${JSON.stringify(githubField)}`);
   await page.locator('#settings-dialog .settings-actions .modal-close').click();
   await page.waitForFunction(() => !document.getElementById('settings-dialog')?.open);

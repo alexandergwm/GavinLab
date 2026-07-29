@@ -322,8 +322,10 @@ body.page-apps-active .header-actions {
 }
 
 .shortcut-icon {
+  position: relative;
   width: 72px;
   height: 72px;
+  aspect-ratio: 1;
   border-radius: var(--icon-squircle-radius);
   background: #fff;
   border: none;
@@ -334,6 +336,7 @@ body.page-apps-active .header-actions {
   transition: transform 0.2s, box-shadow 0.2s;
   overflow: hidden;
   flex-shrink: 0;
+  contain: layout paint;
 }
 
 .shortcut-icon--image {
@@ -360,6 +363,8 @@ body.page-apps-active .header-actions {
   user-select: none;
   -webkit-user-select: none;
   -webkit-user-drag: none;
+  backface-visibility: hidden;
+  transform: translateZ(0);
 }
 
 .shortcut-icon--round img {
@@ -373,7 +378,9 @@ body.page-apps-active .header-actions {
 }
 
 .shortcut-icon--lowres img {
-  transform: scale(1.12);
+  object-fit: contain;
+  padding: 6px;
+  transform: translateZ(0);
   image-rendering: -webkit-optimize-contrast;
 }
 

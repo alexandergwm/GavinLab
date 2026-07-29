@@ -160,38 +160,55 @@ function setGithubSyncStatus(text, isError = false) {
   el.classList.toggle('is-error', isError);
 }
 
+function setGithubActionsBusy(busy, active = '') {
+  const saveButton = document.getElementById('github-save-connection-btn');
+  const syncButton = document.getElementById('github-sync-merge-btn');
+  if (saveButton) {
+    saveButton.disabled = busy;
+    saveButton.textContent = busy && active === 'save' ? '保存中…' : '保存连接';
+  }
+  if (syncButton) {
+    syncButton.disabled = busy;
+    syncButton.textContent = busy && active === 'sync' ? '同步中…' : '同步数据';
+  }
+}
+
+async function saveGithubConnection() {
+  const githubSync = await import('./github-sync.js');
+  const config = readGithubFormConfig(await githubSync.loadGithubSyncConfig());
+  setGithubActionsBusy(true, 'save');
+  setGithubSyncStatus('正在保存连接…', false);
+
+  try {
+    const saved = await githubSync.saveGithubConnection(config);
+    if (saved.gistId) revealGistId(saved.gistId);
+    setGithubSyncStatus('连接已保存；未上传或下载任何数据', false);
+  } catch (err) {
+    setGithubSyncStatus(githubSync.formatGithubSyncError(err), true);
+  } finally {
+    setGithubActionsBusy(false);
+  }
+}
+
 async function runGithubSync(api) {
   const githubSync = await import('./github-sync.js');
   const config = readGithubFormConfig(await githubSync.loadGithubSyncConfig());
   const button = document.getElementById('github-sync-merge-btn');
   if (button?.disabled) return;
-  if (button) {
-    button.disabled = true;
-    button.textContent = '同步中…';
-  }
-  setGithubSyncStatus('正在连接 GitHub…', false);
+  setGithubActionsBusy(true, 'sync');
+  setGithubSyncStatus('正在比较本机与云端数据…', false);
 
   try {
     const result = await githubSync.syncWithGithub(config);
     if (result.gistId) revealGistId(result.gistId);
-
-    const gistId = document.getElementById('github-sync-gist-id')?.value?.trim();
-    let statusText = githubSync.formatGithubSyncResult(result);
-    if (gistId && (result.action === 'uploaded' || result.action === 'uploaded-new')) {
-      statusText += `。公司电脑填同一 Token 和 Gist ID 即可`;
-    }
-    setGithubSyncStatus(statusText, false);
+    setGithubSyncStatus(githubSync.formatGithubSyncResult(result), false);
     if (result.reloaded) {
-      closeModal('settings-dialog');
-      api.onDataImported?.();
+      api.onDataSynced?.();
     }
   } catch (err) {
     setGithubSyncStatus(githubSync.formatGithubSyncError(err), true);
   } finally {
-    if (button) {
-      button.disabled = false;
-      button.textContent = '保存并同步';
-    }
+    setGithubActionsBusy(false);
   }
 }
 
@@ -348,6 +365,10 @@ export function initSettingsUI(api) {
 
   document.getElementById('github-sync-merge-btn')?.addEventListener('click', () => {
     void runGithubSync(api);
+  });
+
+  document.getElementById('github-save-connection-btn')?.addEventListener('click', () => {
+    void saveGithubConnection();
   });
 
   bindSyncTabs();
