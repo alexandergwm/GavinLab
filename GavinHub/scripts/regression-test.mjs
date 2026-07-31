@@ -53,9 +53,10 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const errors = [];
 let completionRequests = 0;
 
-const [baseCss, dialogsCss] = await Promise.all([
+const [baseCss, dialogsCss, defaultWallpaperBytes] = await Promise.all([
   readFile(join(root, 'css/base.css'), 'utf8'),
   readFile(join(root, 'css/dialogs.css'), 'utf8'),
+  readFile(join(root, 'assets/default-wallpaper.jpg')),
 ]);
 assert(baseCss.includes('--boot-ui-delay-search: 0s;'),
   'search reveal must remain synchronized with the rest of the startup UI');
@@ -283,6 +284,87 @@ try {
     wallpaperRace === 'race-selected-wallpaper',
     `a delayed wallpaper refresh must not overwrite the latest user selection: ${wallpaperRace}`,
   );
+
+  let nextWallpaperCase = 'success';
+  const nextWallpaperApiRoute = (route) => route.fulfill({
+    contentType: 'application/json',
+    body: JSON.stringify({
+      url: `https://images.example.test/${nextWallpaperCase}-hi.jpg`,
+      end_date: nextWallpaperCase === 'success' ? '20260730' : '20260729',
+      title: `${nextWallpaperCase} wallpaper`,
+    }),
+  });
+  const nextWallpaperImageRoute = (route) => {
+    const requestUrl = new URL(route.request().url());
+    const isPreview = requestUrl.searchParams.has('w');
+    if (nextWallpaperCase === 'success' || isPreview) {
+      return route.fulfill({
+        contentType: 'image/jpeg',
+        headers: { 'access-control-allow-origin': '*' },
+        body: defaultWallpaperBytes,
+      });
+    }
+    return route.abort();
+  };
+  await page.route('https://images.example.test/**', nextWallpaperImageRoute);
+  await page.route('https://bing.biturl.top/**', nextWallpaperApiRoute);
+  await page.evaluate(async () => {
+    const wallpaper = await import('./js/wallpaper.js');
+    window.__wallpaperSwitchTest = {
+      current: { ...wallpaper.getCurrentWallpaper() },
+      settings: localStorage.getItem('startpage-settings'),
+      meta: localStorage.getItem('startpage-wallpaper-last'),
+    };
+    await wallpaper.loadNextWallpaper();
+  });
+  await page.waitForFunction(() => {
+    const meta = JSON.parse(localStorage.getItem('startpage-wallpaper-last') || 'null');
+    return meta?.url?.includes('/success-hi.jpg') && !meta.url.includes('w=');
+  });
+  const successfulSwitch = await page.evaluate(() => ({
+    currentUrl: document.getElementById('wallpaper-img')?.getAttribute('src') || '',
+    storedUrl: JSON.parse(localStorage.getItem('startpage-wallpaper-last') || 'null')?.url || '',
+  }));
+  assert(
+    successfulSwitch.currentUrl.includes('/success-hi.jpg')
+      && !successfulSwitch.currentUrl.includes('w=')
+      && successfulSwitch.storedUrl === successfulSwitch.currentUrl,
+    `a completed wallpaper switch must persist the final image: ${JSON.stringify(successfulSwitch)}`,
+  );
+
+  nextWallpaperCase = 'failure';
+  await page.evaluate(async () => {
+    const wallpaper = await import('./js/wallpaper.js');
+    await wallpaper.loadNextWallpaper();
+  });
+  await page.waitForFunction(() => {
+    const meta = JSON.parse(localStorage.getItem('startpage-wallpaper-last') || 'null');
+    return meta?.url?.includes('/failure-hi.jpg') && meta.url.includes('w=');
+  });
+  const failedSwitch = await page.evaluate(() => ({
+    currentUrl: document.getElementById('wallpaper-img')?.getAttribute('src') || '',
+    storedUrl: JSON.parse(localStorage.getItem('startpage-wallpaper-last') || 'null')?.url || '',
+  }));
+  assert(
+    failedSwitch.currentUrl.includes('/failure-hi.jpg')
+      && failedSwitch.currentUrl.includes('w=')
+      && failedSwitch.storedUrl === failedSwitch.currentUrl,
+    `a failed high-resolution upgrade must retain its decoded preview: ${JSON.stringify(failedSwitch)}`,
+  );
+  await page.evaluate(() => {
+    const state = window.__wallpaperSwitchTest;
+    delete window.__wallpaperSwitchTest;
+    return import('./js/wallpaper.js').then((wallpaper) => {
+      wallpaper.applyWallpaper(state.current, { skipPersist: true, adaptImmediate: true });
+      if (state.settings == null) localStorage.removeItem('startpage-settings');
+      else localStorage.setItem('startpage-settings', state.settings);
+      if (state.meta == null) localStorage.removeItem('startpage-wallpaper-last');
+      else localStorage.setItem('startpage-wallpaper-last', state.meta);
+    });
+  });
+  await page.unroute('https://images.example.test/**', nextWallpaperImageRoute);
+  await page.unroute('https://bing.biturl.top/**', nextWallpaperApiRoute);
+
   const lifecycleSafety = await page.evaluate(async () => {
     const [{ createFeatureRegistry }, dialogs, { createWallpaperEffects }, lifecycle, wallpaperLibrary] = await Promise.all([
       import('./js/feature-registry.js'),
@@ -314,13 +396,13 @@ try {
       document.getElementById('search-focus-overlay'),
     ].filter(Boolean);
     const previousBackgrounds = effectLayers.map((layer) => layer.style.backgroundImage);
-    let stalePreviewDisposals = 0;
+    let stalePreviewCompletions = 0;
     const effects = createWallpaperEffects({
-      createPreviews: () => Promise.resolve({
-        apps: 'blob:stale-app-preview',
-        focus: 'blob:stale-focus-preview',
-        dispose: () => { stalePreviewDisposals += 1; },
-      }),
+      createFocusPreview: async () => {
+        await Promise.resolve();
+        stalePreviewCompletions += 1;
+        return new Blob(['stale-focus-preview'], { type: 'image/jpeg' });
+      },
     });
     effects.sync({ url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==' });
     effects.dispose();
@@ -331,6 +413,50 @@ try {
     effectLayers.forEach((layer, index) => {
       layer.style.backgroundImage = previousBackgrounds[index];
     });
+
+    const mediaStore = await import('./js/media-store.js');
+    const persistentEffectKey = 'regression-focus-effect-v2';
+    const persistentBlob = await fetch('assets/default-wallpaper-preview.jpg')
+      .then((response) => response.blob());
+    await mediaStore.saveWallpaperEffectBlobCache(
+      persistentEffectKey,
+      persistentBlob,
+    );
+    let persistentPreviewCreates = 0;
+    const persistentEffects = createWallpaperEffects({
+      createFocusPreview: async () => {
+        persistentPreviewCreates += 1;
+        return persistentBlob;
+      },
+      getPersistentKey: () => persistentEffectKey,
+      loadPersistentPreview: mediaStore.getWallpaperEffectBlobCache,
+      savePersistentPreview: mediaStore.saveWallpaperEffectBlobCache,
+    });
+    await persistentEffects.sync({ url: 'data:image/jpeg;base64,AA==', effectKey: 'persistent' });
+    const persistentPreviewApplied = document.getElementById('search-focus-overlay')
+      ?.style.backgroundImage.includes('blob:');
+    persistentEffects.dispose();
+    effectLayers.forEach((layer, index) => {
+      layer.style.backgroundImage = previousBackgrounds[index];
+    });
+
+    const damagedEffectKey = 'regression-damaged-effect-v2';
+    await mediaStore.saveWallpaperEffectBlobCache(
+      damagedEffectKey,
+      new Blob(['not-an-image'], { type: 'image/jpeg' }),
+    );
+    let damagedPreviewCreates = 0;
+    const damagedEffects = createWallpaperEffects({
+      createFocusPreview: async () => {
+        damagedPreviewCreates += 1;
+        return persistentBlob;
+      },
+      getPersistentKey: () => damagedEffectKey,
+      loadPersistentPreview: mediaStore.getWallpaperEffectBlobCache,
+      savePersistentPreview: mediaStore.saveWallpaperEffectBlobCache,
+    });
+    await damagedEffects.sync({ url: 'assets/default-wallpaper-preview.jpg', effectKey: 'damaged' });
+    damagedEffects.dispose();
 
     const enqueue = lifecycle.createAsyncQueue();
     let activeTasks = 0;
@@ -365,8 +491,11 @@ try {
       retryValue: retryValue.value,
       retryStatus: registry.getStatus('retryable').status,
       cancelledDialogOpen: dialog.open,
-      stalePreviewDisposals,
+      stalePreviewCompletions,
       stalePreviewApplied,
+      persistentPreviewCreates,
+      persistentPreviewApplied,
+      damagedPreviewCreates,
       maxActiveTasks,
       queueOrder,
       stableLibraryUrl: firstLibraryUrl === secondLibraryUrl && firstLibraryUrl.startsWith('blob:'),
@@ -382,8 +511,16 @@ try {
   assert(!lifecycleSafety.cancelledDialogOpen,
     'closing a dialog while its stylesheet loads must cancel the pending open');
   assert(
-    lifecycleSafety.stalePreviewDisposals === 1 && !lifecycleSafety.stalePreviewApplied,
+    lifecycleSafety.stalePreviewCompletions === 1 && !lifecycleSafety.stalePreviewApplied,
     `disposed wallpaper effects must reject late previews: ${JSON.stringify(lifecycleSafety)}`,
+  );
+  assert(
+    lifecycleSafety.persistentPreviewCreates === 0 && lifecycleSafety.persistentPreviewApplied,
+    `wallpaper effects should reuse their cross-tab cache: ${JSON.stringify(lifecycleSafety)}`,
+  );
+  assert(
+    lifecycleSafety.damagedPreviewCreates === 1,
+    `damaged wallpaper effects must regenerate instead of poisoning later tabs: ${JSON.stringify(lifecycleSafety)}`,
   );
   assert(
     lifecycleSafety.maxActiveTasks === 1 && lifecycleSafety.queueOrder.join(',') === '1,2,3',
@@ -427,6 +564,23 @@ try {
   assert(
     wallpaperThemes.join(',') === 'on-light,on-dark,on-mixed',
     `wallpaper text themes must cover light, dark, and mixed scenes: ${wallpaperThemes}`,
+  );
+  const wallpaperUrlKinds = await page.evaluate(async () => {
+    const [data, image] = await Promise.all([
+      import('./js/wallpaper-data.js'),
+      import('./js/wallpaper-image.js'),
+    ]);
+    return {
+      absolute: data.absoluteBingUrl('//www.bing.com/th?id=OHR.Test_UHD.jpg'),
+      remote: image.isRemoteWallpaperUrl('//www.bing.com/th?id=OHR.Test_UHD.jpg'),
+      local: image.isLocalWallpaperUrl('assets/default-wallpaper.jpg'),
+    };
+  });
+  assert(
+    wallpaperUrlKinds.absolute === 'https://www.bing.com/th?id=OHR.Test_UHD.jpg'
+      && wallpaperUrlKinds.remote
+      && wallpaperUrlKinds.local,
+    `wallpaper URLs must distinguish protocol-relative remotes from packaged assets: ${JSON.stringify(wallpaperUrlKinds)}`,
   );
   const baseline = await page.evaluate(() => {
     const navigation = performance.getEntriesByType('navigation')[0];
@@ -1101,12 +1255,25 @@ try {
   await page.waitForFunction(() => document.body.classList.contains('page-apps-active'));
   await page.waitForFunction(() =>
     document.querySelector('.page-panel.page-apps')?.getBoundingClientRect().height > 0);
+  const appsBackdropState = await page.evaluate(async () => ({
+    backdrop: document.getElementById('wallpaper-blur')?.style.backgroundImage || '',
+    current: (await import('./js/wallpaper.js')).getCurrentWallpaper(),
+    imageSrc: document.getElementById('wallpaper-img')?.getAttribute('src') || '',
+  }));
   assert(
-    await page.locator('#wallpaper-blur').evaluate(
-      (layer, focusedPreview) => layer.style.backgroundImage === focusedPreview,
-      focusedBackdropState.preview,
-    ),
-    'apps navigation should reveal a final preview instead of a provisional wallpaper',
+    appsBackdropState.backdrop.includes('blob:'),
+    `apps navigation must have an immediate composited wallpaper fallback: ${JSON.stringify(appsBackdropState)}`,
+  );
+  await page.waitForFunction((focusBackdrop) => {
+    const backdrop = document.getElementById('wallpaper-blur')?.style.backgroundImage || '';
+    return backdrop.includes('blob:') && backdrop !== focusBackdrop;
+  }, focusedBackdropState.preview, { timeout: 1800 });
+  const appsBackdrop = await page.locator('#wallpaper-blur').evaluate(
+    (layer) => layer.style.backgroundImage,
+  );
+  assert(
+    appsBackdrop.includes('blob:') && appsBackdrop !== focusedBackdropState.preview,
+    `apps navigation should use its independent high-resolution wallpaper preview: ${JSON.stringify({ ...appsBackdropState, focusBackdrop: focusedBackdropState.preview })}`,
   );
   assert(await page.locator('.page-panel[data-page="apps"]').evaluate((el) => el.classList.contains('active')),
     'apps page should activate');
@@ -1519,6 +1686,62 @@ try {
         && Math.abs(frame.center - frame.viewport / 2) < 1),
     `desktop dock should stay centered throughout startup: ${JSON.stringify(desktopDockFrames.slice(0, 4))}`,
   );
+
+  const slowPreviewRoute = async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await route.abort();
+  };
+  await page.route('https://invalid.example.test/slow-preview.jpg', slowPreviewRoute);
+  await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 48;
+    canvas.height = 27;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#53657a';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    localStorage.setItem('startpage-wallpaper-last', JSON.stringify({
+      id: 'slow-preview-wallpaper',
+      cacheKey: 'slow-preview-cache',
+      type: 'image',
+      source: 'bing',
+      dateKey: '20991231',
+      url: 'https://invalid.example.test/slow-preview.jpg',
+      textTheme: 'on-dark',
+    }));
+    localStorage.setItem('startpage-wallpaper-boot-preview', JSON.stringify({
+      version: 2,
+      key: 'slow-preview-cache',
+      sourceUrl: 'https://invalid.example.test/slow-preview.jpg',
+      dataUrl: canvas.toDataURL('image/jpeg', 0.7),
+      savedAt: Date.now(),
+    }));
+  });
+  const previewBootStartedAt = Date.now();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => document.body.classList.contains('boot-ui-settled'), null, {
+    timeout: 1000,
+  });
+  const previewBoot = await page.evaluate(() => ({
+    ready: window.__BOOT_WALLPAPER_READY,
+    previewReady: Boolean(window.__BOOT_WALLPAPER_PREVIEW),
+    previewHidden: document.getElementById('wallpaper-preview')?.classList.contains('is-hidden'),
+    previewBackground: document.getElementById('wallpaper-preview')?.style.backgroundImage || '',
+    src: document.getElementById('wallpaper-img')?.getAttribute('src') || '',
+  }));
+  assert(
+    Date.now() - previewBootStartedAt < 700
+      && previewBoot.ready
+      && previewBoot.previewReady
+      && !previewBoot.previewHidden
+      && previewBoot.previewBackground.includes('data:image/jpeg')
+      && previewBoot.src.includes('slow-preview.jpg'),
+    `a cached startup frame should reveal immediately without switching images: ${JSON.stringify(previewBoot)}`,
+  );
+  await page.unroute('https://invalid.example.test/slow-preview.jpg', slowPreviewRoute);
+  await page.evaluate(() => {
+    localStorage.removeItem('startpage-wallpaper-boot-preview');
+    localStorage.removeItem('startpage-wallpaper-last');
+  });
 
   await page.evaluate(() => {
     localStorage.setItem('startpage-wallpaper-last', JSON.stringify({

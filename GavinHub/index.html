@@ -31,17 +31,23 @@
   <style id="boot-wallpaper-critical">
     html, body { background: #323232 !important; }
     #wallpaper { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+    #wallpaper-preview {
+      position: absolute; inset: -10px; background-size: cover; background-position: center;
+      opacity: 1; transform: scale(1.015); filter: blur(4px);
+      transition: opacity 0.42s cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+    #wallpaper-preview.is-hidden { opacity: 0; }
     #wallpaper-img {
       position: absolute; inset: 0; width: 100%; height: 100%;
       object-fit: cover; object-position: center;
       opacity: 0; backface-visibility: hidden;
-      transition: opacity 0.64s cubic-bezier(0.25, 0.8, 0.25, 1);
+      transition: opacity 0.56s cubic-bezier(0.25, 0.8, 0.25, 1);
     }
     #wallpaper-img.wallpaper-show { opacity: 1; }
     body.boot-awakening .scene-vignette { opacity: 0; }
     body.boot-awakening.boot-vignette-visible .scene-vignette {
       opacity: 0.88;
-      transition: opacity 0.64s cubic-bezier(0.25, 0.8, 0.25, 1) 0s;
+      transition: opacity 0.56s cubic-bezier(0.25, 0.8, 0.25, 1) 0s;
     }
   </style>
   <script>
@@ -91,37 +97,54 @@
 </head>
 <body data-text-theme="on-dark" data-text-tone="light" class="boot-awakening">
   <div id="wallpaper" class="wallpaper" aria-hidden="true">
+    <div id="wallpaper-preview" class="wallpaper-preview"></div>
     <img id="wallpaper-img" class="wallpaper-img" alt="" decoding="async" fetchpriority="high" />
   </div>
   <script>
   (function () {
     var DEFAULT = 'assets/default-wallpaper.jpg';
+    var DEFAULT_PREVIEW = 'assets/default-wallpaper-preview.jpg';
+    var DEFAULT_KEY = 'local-default';
     var url = DEFAULT;
     var isGradient = false;
     var gradientCss = '';
-    var wpKey = 'default';
+    var wpKey = DEFAULT_KEY;
+    var previewData = '';
     try {
       var raw = localStorage.getItem('startpage-wallpaper-last');
       if (raw) {
         var meta = JSON.parse(raw);
-        wpKey = meta.id || meta.dateKey || meta.cacheKey || (meta.url || '').slice(-48) || 'cached';
+        wpKey = meta.cacheKey || meta.id || meta.dateKey || (meta.url || '').slice(-48) || 'cached';
         if (meta && meta.type === 'gradient' && meta.css) {
           isGradient = true;
           gradientCss = meta.css;
         } else if (meta && meta.url && !/^blob:/i.test(meta.url)) {
           url = meta.url;
         }
+        var previewRaw = localStorage.getItem('startpage-wallpaper-boot-preview');
+        if (previewRaw) {
+          var previewMeta = JSON.parse(previewRaw);
+          if (previewMeta && previewMeta.version === 2 && previewMeta.key === wpKey && previewMeta.dataUrl) {
+            previewData = previewMeta.dataUrl;
+          }
+        }
       }
     } catch (e) { /* 默认壁纸 */ }
+    if (!previewData && url === DEFAULT) previewData = DEFAULT_PREVIEW;
     try {
       window.__BOOT_WALLPAPER_URL = url;
       window.__BOOT_WALLPAPER_KEY = wpKey;
+      window.__BOOT_WALLPAPER_PREVIEW = previewData;
+      window.__BOOT_WALLPAPER_PREVIEW_KEY = previewData ? wpKey : '';
       var wp = document.getElementById('wallpaper');
       var img = document.getElementById('wallpaper-img');
+      var preview = document.getElementById('wallpaper-preview');
+      if (previewData && preview) preview.style.backgroundImage = 'url("' + previewData + '")';
       if (isGradient && wp) {
         wp.classList.add('is-gradient');
         wp.style.backgroundImage = gradientCss;
         if (img) img.hidden = true;
+        if (preview) preview.classList.add('is-hidden');
         requestAnimationFrame(function () {
           requestAnimationFrame(function () {
             document.body.classList.add('boot-vignette-visible', 'boot-ui-settled', 'boot-done');
@@ -152,6 +175,9 @@
         requestAnimationFrame(function () {
           requestAnimationFrame(function () {
             img.classList.add('wallpaper-show');
+            if (preview) preview.classList.add('is-hidden');
+            document.body.classList.add('boot-wallpaper-full-ready');
+            document.dispatchEvent(new CustomEvent('boot-wallpaper-loaded', { detail: { url: img.currentSrc || img.src } }));
             scheduleBootUiReveal();
           });
         });
@@ -168,13 +194,26 @@
         img.decode().then(reveal, reveal);
       }
       function useFallback() {
-        if (settled || (img.complete && img.naturalWidth > 0)) return;
+        if (img.complete && img.naturalWidth > 0) return;
+        if (previewData) {
+          window.__BOOT_WALLPAPER_READY = true;
+          settleBootUi();
+          return;
+        }
+        if (settled) return;
         window.__BOOT_WALLPAPER_READY = false;
         if (!fallbackStarted) {
           fallbackStarted = true;
           awakenScheduled = false;
           window.__BOOT_WALLPAPER_URL = DEFAULT;
-          window.__BOOT_WALLPAPER_KEY = 'default';
+          window.__BOOT_WALLPAPER_KEY = DEFAULT_KEY;
+          window.__BOOT_WALLPAPER_PREVIEW = DEFAULT_PREVIEW;
+          window.__BOOT_WALLPAPER_PREVIEW_KEY = DEFAULT_KEY;
+          if (preview) {
+            preview.style.backgroundImage = 'url("' + DEFAULT_PREVIEW + '")';
+            preview.classList.remove('is-hidden');
+          }
+          settleBootUi();
           img.src = DEFAULT;
           return;
         }
@@ -184,7 +223,11 @@
       img.addEventListener('error', useFallback);
       img.src = url;
       if (img.complete && img.naturalWidth > 0) decodeAndAwaken();
-      fallbackTimer = window.setTimeout(useFallback, 450);
+      if (previewData) {
+        requestAnimationFrame(function () { requestAnimationFrame(settleBootUi); });
+      } else {
+        fallbackTimer = window.setTimeout(useFallback, 520);
+      }
     } catch (e2) {
       window.__BOOT_WALLPAPER_READY = false;
       document.body.classList.add('boot-vignette-visible', 'boot-ui-settled', 'boot-done');

@@ -27,6 +27,7 @@ const INCLUDE = [
   'css/todo-dialog.css',
   'css/weather.css',
   'assets/default-wallpaper.jpg',
+  'assets/default-wallpaper-preview.jpg',
   'assets/search-arxiv.png',
   'assets/search-google.svg',
   'assets/search-bing.svg',
@@ -86,6 +87,7 @@ function verifyPackage(outRoot) {
     throw new Error('missing index.html');
   }
   for (const asset of [
+    'assets/default-wallpaper-preview.jpg',
     'assets/search-arxiv.png',
     'assets/search-google.svg',
     'assets/search-bing.svg',

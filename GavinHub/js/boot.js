@@ -85,7 +85,7 @@ function watchBootGlassStable() {
       }
     };
     dock?.addEventListener('animationend', onAnim);
-    window.setTimeout(finish, BOOT_UI_FADE_MS + 160);
+    window.setTimeout(finish, BOOT_UI_FADE_MS + 120);
   });
 }
 

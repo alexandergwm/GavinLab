@@ -5,6 +5,7 @@ export const KEYS = {
   wallpaperFavorites: 'startpage-wallpaper-favorites',
   wallpaperRotation: 'startpage-wallpaper-rotation',
   wallpaperLast: 'startpage-wallpaper-last',
+  wallpaperBootPreview: 'startpage-wallpaper-boot-preview',
   wallpaperRecent: 'startpage-wallpaper-recent',
   bingWallpaperIdx: 'startpage-bing-wallpaper-idx',
   shortcuts: 'startpage-shortcuts',

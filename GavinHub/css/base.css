@@ -81,9 +81,9 @@
   --icon-shadow-hover: 0 6px 20px rgba(0, 0, 0, 0.15);
   --dock-icon-radius: var(--icon-squircle-radius);
   --stage-top: 13vh;
-  --boot-wallpaper-duration: 0.64s;
-  --boot-ui-duration: 0.64s;
-  --boot-vignette-duration: 0.64s;
+  --boot-wallpaper-duration: 0.56s;
+  --boot-ui-duration: 0.56s;
+  --boot-vignette-duration: 0.56s;
   --boot-ui-delay-stage: 0s;
   --boot-ui-delay-search: 0s;
   --boot-ui-delay-dock: 0s;
@@ -176,6 +176,21 @@ body {
 
 .wallpaper.is-gradient {
   background-color: #323232;
+}
+
+.wallpaper-preview {
+  position: absolute;
+  inset: -10px;
+  background-position: center;
+  background-size: cover;
+  opacity: 1;
+  transform: scale(1.015);
+  filter: blur(4px);
+  transition: opacity 0.42s var(--boot-reveal-ease);
+}
+
+.wallpaper-preview.is-hidden {
+  opacity: 0;
 }
 
 .wallpaper-img {

@@ -3,7 +3,11 @@
 const DB_NAME = 'wallpaper-db';
 const STORE_NAME = 'wallpapers';
 const CACHE_STORE = 'wallpaper-cache';
+const EFFECT_CACHE_STORE = 'wallpaper-effect-cache';
 const ICON_CACHE_STORE = 'icon-cache';
+const CACHE_TIMESTAMP_INDEX = 'savedAt';
+const MAX_WALLPAPER_CACHE_ITEMS = 6;
+const MAX_EFFECT_CACHE_ITEMS = 12;
 
 const libraryObjectUrls = new Map();
 const iconObjectUrls = new Map();
@@ -21,14 +25,24 @@ window.addEventListener('pagehide', () => {
 function openDb() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 3);
+    const req = indexedDB.open(DB_NAME, 4);
+    let settled = false;
     req.onupgradeneeded = (event) => {
       const db = event.target.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'id' });
       }
-      if (!db.objectStoreNames.contains(CACHE_STORE)) {
-        db.createObjectStore(CACHE_STORE, { keyPath: 'cacheKey' });
+      const cacheStore = db.objectStoreNames.contains(CACHE_STORE)
+        ? event.target.transaction.objectStore(CACHE_STORE)
+        : db.createObjectStore(CACHE_STORE, { keyPath: 'cacheKey' });
+      if (!cacheStore.indexNames.contains(CACHE_TIMESTAMP_INDEX)) {
+        cacheStore.createIndex(CACHE_TIMESTAMP_INDEX, 'savedAt');
+      }
+      const effectStore = db.objectStoreNames.contains(EFFECT_CACHE_STORE)
+        ? event.target.transaction.objectStore(EFFECT_CACHE_STORE)
+        : db.createObjectStore(EFFECT_CACHE_STORE, { keyPath: 'effectKey' });
+      if (!effectStore.indexNames.contains(CACHE_TIMESTAMP_INDEX)) {
+        effectStore.createIndex(CACHE_TIMESTAMP_INDEX, 'savedAt');
       }
       if (!db.objectStoreNames.contains(ICON_CACHE_STORE)) {
         db.createObjectStore(ICON_CACHE_STORE, { keyPath: 'iconKey' });
@@ -36,6 +50,11 @@ function openDb() {
     };
     req.onsuccess = () => {
       const db = req.result;
+      if (settled) {
+        db.close();
+        return;
+      }
+      settled = true;
       db.onversionchange = () => {
         db.close();
         dbPromise = null;
@@ -43,11 +62,43 @@ function openDb() {
       resolve(db);
     };
     req.onerror = () => {
+      if (settled) return;
+      settled = true;
       dbPromise = null;
       reject(req.error);
     };
+    req.onblocked = () => {
+      if (settled) return;
+      settled = true;
+      dbPromise = null;
+      reject(new Error('wallpaper database upgrade blocked by another tab'));
+    };
   });
   return dbPromise;
+}
+
+async function pruneStore(storeName, maxItems) {
+  try {
+    const db = await openDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(storeName, 'readwrite');
+      const store = tx.objectStore(storeName);
+      const index = store.index(CACHE_TIMESTAMP_INDEX);
+      let kept = 0;
+      const req = index.openKeyCursor(null, 'prev');
+      req.onsuccess = () => {
+        const cursor = req.result;
+        if (!cursor) return;
+        kept += 1;
+        if (kept > maxItems) store.delete(cursor.primaryKey);
+        cursor.continue();
+      };
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    /* cache pruning is best-effort */
+  }
 }
 
 export async function saveWallpaperBlobCache(cacheKey, blob) {
@@ -56,7 +107,21 @@ export async function saveWallpaperBlobCache(cacheKey, blob) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(CACHE_STORE, 'readwrite');
     tx.objectStore(CACHE_STORE).put({ cacheKey, blob, savedAt: Date.now() });
-    tx.oncomplete = () => resolve();
+    tx.oncomplete = () => {
+      resolve();
+      void pruneStore(CACHE_STORE, MAX_WALLPAPER_CACHE_ITEMS);
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function deleteWallpaperBlobCache(cacheKey) {
+  if (!cacheKey) return;
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(CACHE_STORE, 'readwrite');
+    tx.objectStore(CACHE_STORE).delete(cacheKey);
+    tx.oncomplete = resolve;
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -67,6 +132,31 @@ export async function getWallpaperBlobCache(cacheKey) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(CACHE_STORE, 'readonly');
     const req = tx.objectStore(CACHE_STORE).get(cacheKey);
+    req.onsuccess = () => resolve(req.result?.blob || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function saveWallpaperEffectBlobCache(effectKey, blob) {
+  if (!effectKey || !blob?.size) return;
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(EFFECT_CACHE_STORE, 'readwrite');
+    tx.objectStore(EFFECT_CACHE_STORE).put({ effectKey, blob, savedAt: Date.now() });
+    tx.oncomplete = () => {
+      resolve();
+      void pruneStore(EFFECT_CACHE_STORE, MAX_EFFECT_CACHE_ITEMS);
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function getWallpaperEffectBlobCache(effectKey) {
+  if (!effectKey) return null;
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(EFFECT_CACHE_STORE, 'readonly');
+    const req = tx.objectStore(EFFECT_CACHE_STORE).get(effectKey);
     req.onsuccess = () => resolve(req.result?.blob || null);
     req.onerror = () => reject(req.error);
   });

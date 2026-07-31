@@ -192,6 +192,10 @@ assert(wp.includes("from './wallpaper-effects.js'"), 'wallpaper.js should delega
 assert(!wp.includes('effectPreviewCache'), 'wallpaper.js should not own effect preview caching');
 assert(wpTheme.includes('viewportRegionToImageRegion'), 'wallpaper-theme.js should map viewport regions');
 assert(wp.includes('fetchNextBingWallpaper'), 'wallpaper.js should use fetchNextBingWallpaper');
+assert(!wp.includes("from './wallpaper-fetch.js'"),
+  'cached wallpaper startup should not statically load network source adapters');
+assert(wp.includes("import('./wallpaper-fetch.js')"),
+  'wallpaper source adapters should load only when network work is needed');
 assert(wp.includes('async function fetchWallpaperForSource'), 'wallpaper force refresh should use a defined source loader');
 assert(wp.includes('beginWallpaperIntent'), 'wallpaper async entrypoints should share latest-intent guards');
 assert(wpImage.includes('canvas.toBlob'), 'wallpaper effect previews should encode asynchronously');
@@ -201,13 +205,20 @@ assert(wpImage.includes('APPS_EFFECT_BLUR_PX'), 'apps glass should use a real hi
 assert(wpEffects.includes('export function createWallpaperEffects'), 'wallpaper effects should expose its controller');
 assert(wpEffects.includes('previewCache'), 'wallpaper effects should own preview caching');
 assert(wpEffects.includes('dispose'), 'wallpaper effects should expose memory cleanup');
-assert(wpEffects.includes('PREVIEW_WAIT_MS'), 'wallpaper effects should bound preview readiness');
+assert(wpEffects.includes('FOCUS_WAIT_MS') && wpEffects.includes('APPS_WAIT_MS'),
+  'wallpaper effects should bound focus and apps preview readiness independently');
+assert(wpEffects.includes('loadPersistentPreview'),
+  'wallpaper effects should reuse persistent previews across new tabs');
+assert(wpImage.includes('createWallpaperFocusPreview'),
+  'search focus should use a lighter preview than the apps page');
 assert(wp.includes('wallpaper-effects-ready'), 'wallpaper should publish effect readiness');
+assert(read('js/media-store.js').includes('wallpaper-effect-cache'),
+  'wallpaper effect blobs should use their own bounded IndexedDB store');
 
 const bootUi = read('js/boot-ui.js');
-assert(bootUi.includes('BOOT_WALLPAPER_FADE_MS = 640'), 'wallpaper reveal should use the unified boot timeline');
-assert(bootUi.includes('BOOT_UI_FADE_MS = 640'), 'UI reveal should use the unified boot timeline');
-assert(bootUi.includes('BOOT_VIGNETTE_FADE_MS = 640'), 'vignette reveal should use the unified boot timeline');
+assert(bootUi.includes('BOOT_WALLPAPER_FADE_MS = 560'), 'wallpaper reveal should use the unified boot timeline');
+assert(bootUi.includes('BOOT_UI_FADE_MS = 560'), 'UI reveal should use the unified boot timeline');
+assert(bootUi.includes('BOOT_VIGNETTE_FADE_MS = 560'), 'vignette reveal should use the unified boot timeline');
 assert(read('js/boot.js').includes("'wallpaper-effects-ready'"), 'search focus should wait for wallpaper effects');
 assert(read('js/boot.js').includes("'boot-opening-stable'"), 'expensive wallpaper effects should wait until opening motion settles');
 

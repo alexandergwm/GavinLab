@@ -15,29 +15,38 @@ import {
   UNSPLASH_CURATED,
   PEXELS_CURATED,
   buildUnsplashUrl,
-  buildPexelsUrl,
-  lookupCuratedEntryByUrl,
 } from './wallpaper-curated.js';
 import { corsProxyUrls } from './util.js';
 import {
-  isLocalWallpaperUrl,
   isWallpaperUrlReachable,
-  MIN_CACHE_WIDTH,
 } from './wallpaper-image.js';
+import {
+  DEFAULT_WALLPAPER,
+  ONLINE_WALLPAPER_SOURCES,
+  isOnlineWallpaperSource,
+  buildBingPreviewUrl,
+  buildBingUhdUrlFromUrlBase,
+  upgradeBingWallpaperUrl,
+  buildWikipediaPageUrl,
+  upgradeWallpaperUrl,
+  curatedEntryToWallpaper,
+  reconcileCuratedWallpaper,
+} from './wallpaper-data.js';
 
-export const DEFAULT_WALLPAPER = {
-  id: 'local-default',
-  url: 'assets/default-wallpaper.jpg',
-  title: '赫兹桑德海岸',
-  description: '丹麦西海岸赫兹桑德（Hvide Sande）的沙滩与沙丘，从山丘俯瞰北海与绵延海岸。',
-  credit: '© Jo Filmmaker / Unsplash',
-  dateKey: 'local',
-  source: 'local',
-  type: 'image',
+export {
+  DEFAULT_WALLPAPER,
+  ONLINE_WALLPAPER_SOURCES,
+  isOnlineWallpaperSource,
+  buildBingPreviewUrl,
+  buildBingUhdUrlFromUrlBase,
+  upgradeBingWallpaperUrl,
+  upgradeWallpaperUrl,
+  reconcileCuratedWallpaper,
 };
 
-const FETCH_TIMEOUT_MS = 12000;
-const BING_FETCH_TIMEOUT_MS = 12000;
+const FETCH_TIMEOUT_MS = 9000;
+const BING_FETCH_TIMEOUT_MS = 6500;
+const BING_HEDGE_DELAY_MS = 280;
 
 const BUILTIN_WALLPAPERS = UNSPLASH_CURATED.slice(0, 8).map((item) => ({
   id: item.id.replace(/^u-/, 'builtin-'),
@@ -54,132 +63,48 @@ const NATGEO_RSS_URLS = [
   'https://feeds.nationalgeographic.com/ng/Photography/Photo-Of-The-Day',
 ];
 
-export const ONLINE_WALLPAPER_SOURCES = [
-  'unsplash-curated', 'pexels-scenic', 'bing', 'builtin',
-];
-
-export function isOnlineWallpaperSource(source) {
-  return ONLINE_WALLPAPER_SOURCES.includes(normalizeWallpaperSource(source));
-}
-
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-export function buildBingPreviewUrl(fullUrl) {
-  if (!fullUrl) return '';
-  const uhd = upgradeBingWallpaperUrl(fullUrl);
-  if (uhd.includes('_UHD.jpg')) return uhd.replace('_UHD.jpg', '_1920x1080.jpg');
-  if (uhd.includes('_UHD')) return uhd.replace('_UHD', '_1920x1080');
-  try {
-    const parsed = new URL(uhd);
-    parsed.searchParams.set('w', '1280');
-    parsed.searchParams.set('h', '720');
-    return parsed.toString();
-  } catch {
-    return uhd;
-  }
-}
+function firstSuccessfulStaggered(attempts, delayMs = 0) {
+  return new Promise((resolve, reject) => {
+    let started = 0;
+    let failed = 0;
+    let settled = false;
+    let timer = 0;
+    let lastError = new Error('All requests failed');
 
-function bingPreviewUrl(fullUrl) {
-  return buildBingPreviewUrl(fullUrl);
-}
+    const startNext = () => {
+      if (settled || started >= attempts.length) return;
+      window.clearTimeout(timer);
+      const attempt = attempts[started];
+      started += 1;
+      Promise.resolve()
+        .then(attempt)
+        .then((value) => {
+          if (!value) throw new Error('Empty response');
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timer);
+          resolve(value);
+        })
+        .catch((error) => {
+          failed += 1;
+          lastError = error;
+          if (settled) return;
+          if (started < attempts.length) startNext();
+          else if (failed >= attempts.length) reject(lastError);
+        });
+      if (started < attempts.length) timer = window.setTimeout(startNext, delayMs);
+    };
 
-function absoluteBingUrl(url) {
-  if (!url) return url;
-  return url.startsWith('http') ? url : `https://www.bing.com${url}`;
-}
-
-/** 从 Bing 官方 API 的 urlbase 构造 UHD 直链（无 &rf= 等缩略参数） */
-export function buildBingUhdUrlFromUrlBase(urlbase) {
-  if (!urlbase) return '';
-  const path = absoluteBingUrl(urlbase);
-  const idMatch = path.match(/[?&]id=([^&]+)/i);
-  if (!idMatch) return upgradeBingWallpaperUrl(path);
-  const idCore = idMatch[1]
-    .replace(/_1920x1080\.jpg$/i, '')
-    .replace(/_UHD\.jpg$/i, '')
-    .replace(/\.jpg$/i, '');
-  return `https://www.bing.com/th?id=${idCore}_UHD.jpg`;
-}
-
-export function upgradeBingWallpaperUrl(url) {
-  if (!url) return url;
-  if (url.startsWith('blob:') || url.startsWith('data:') || isLocalWallpaperUrl(url)) return url;
-  if (!url.includes('bing.com') && !url.startsWith('/th')) return url;
-
-  let normalized = absoluteBingUrl(url.split('&')[0]);
-  try {
-    const parsed = new URL(normalized);
-    parsed.searchParams.delete('w');
-    parsed.searchParams.delete('h');
-    parsed.searchParams.delete('rf');
-    parsed.searchParams.delete('pid');
-    normalized = `${parsed.origin}${parsed.pathname}${parsed.search}`;
-  } catch {
-    /* keep normalized */
-  }
-
-  if (normalized.includes('_UHD')) return normalized;
-
-  if (normalized.includes('_1920x1080')) {
-    return normalized.replace('_1920x1080', '_UHD');
-  }
-
-  const idMatch = normalized.match(/[?&]id=(OHR\.[^&]+)/i);
-  if (idMatch) {
-    const idCore = idMatch[1]
-      .replace(/_1920x1080\.jpg$/i, '')
-      .replace(/_UHD\.jpg$/i, '')
-      .replace(/\.jpg$/i, '');
-    if (!idCore.endsWith('_UHD')) {
-      return `https://www.bing.com/th?id=${idCore}_UHD.jpg`;
+    if (!attempts.length) {
+      reject(lastError);
+      return;
     }
-  }
-
-  return normalized;
-}
-
-function buildWikipediaPageUrl(title) {
-  if (!title?.trim()) return '';
-  const page = title.trim().replace(/ /g, '_');
-  return `https://en.wikipedia.org/wiki/${encodeURIComponent(page).replace(/%3A/g, ':')}`;
-}
-
-export function upgradeWallpaperUrl(data) {
-  if (!data?.url) return data?.url || '';
-  const url = data.url;
-  if (url.startsWith('blob:') || url.startsWith('data:') || isLocalWallpaperUrl(url)) return url;
-  const source = normalizeWallpaperSource(data.source);
-  if (source === 'bing') return upgradeBingWallpaperUrl(url);
-  if (source === 'unsplash-curated' || source === 'builtin') {
-    const match = data.url.match(/photo-([\d]+-[a-f0-9]+)/i);
-    if (match) return buildUnsplashUrl(match[1]);
-  }
-  if (source === 'pexels-scenic') {
-    const match = data.url.match(/photos\/(\d+)\//);
-    if (match) return buildPexelsUrl(Number(match[1]));
-  }
-  if (source === 'wikimedia' && data.url.includes('/thumb/')) {
-    return data.url.replace(/\/thumb\/(.+)\/\d+px-[^/]+$/, '/$1');
-  }
-  return data.url;
-}
-
-function curatedEntryToWallpaper(entry, source) {
-  const url = source === 'pexels-scenic'
-    ? buildPexelsUrl(entry.pexelsId)
-    : buildUnsplashUrl(entry.photoId);
-  return {
-    id: entry.id,
-    url,
-    title: entry.title,
-    description: entry.description,
-    credit: entry.credit,
-    dateKey: entry.id,
-    source,
-    type: 'image',
-  };
+    startNext();
+  });
 }
 
 export async function ensureReachableWallpaper(data, { sourceHint } = {}) {
@@ -223,24 +148,6 @@ async function pickReachableCuratedWallpaper(pool, source, { random = false, exc
     if (await isWallpaperUrlReachable(data.url)) return data;
   }
   return curatedEntryToWallpaper(candidates[0], source);
-}
-
-export function reconcileCuratedWallpaper(data) {
-  const source = normalizeWallpaperSource(data.source);
-  if (!['unsplash-curated', 'builtin', 'pexels-scenic'].includes(source)) return data;
-
-  const url = upgradeWallpaperUrl(data) || data.url;
-  const entry = lookupCuratedEntryByUrl(url, source);
-  if (!entry) return data;
-
-  const resolvedSource = source === 'builtin' ? 'builtin' : source;
-  const matched = curatedEntryToWallpaper(entry, resolvedSource);
-  return {
-    ...matched,
-    id: data.id || matched.id,
-    dateKey: data.dateKey || matched.dateKey,
-    source: data.source || matched.source,
-  };
 }
 
 export function pickCuratedWallpaper(pool, source, { random = false, excludeRecent = [] } = {}) {
@@ -483,7 +390,7 @@ function buildBingPayloadFromArchiveItem(item, host = 'https://www.bing.com') {
   return {
     id: `bing-${dateKey}`,
     url: fullUrl,
-    previewUrl: bingPreviewUrl(fullUrl),
+    previewUrl: buildBingPreviewUrl(fullUrl),
     title: item.title || '每日风景',
     description: item.copyright?.split('(')[0]?.trim() || item.title || '',
     credit: item.copyright || '',
@@ -530,7 +437,7 @@ async function fetchBingFromBiturl(idx) {
     return {
       id: `bing-${dateKey}`,
       url: fullUrl,
-      previewUrl: bingPreviewUrl(fullUrl),
+      previewUrl: buildBingPreviewUrl(fullUrl),
       title: json.title || json.copyright?.split('(')[0]?.trim() || '每日风景',
       description: json.copyright?.split('(')[0]?.trim() || json.title || '',
       credit: json.copyright || '',
@@ -554,7 +461,7 @@ function normalizeMirrorBingPayload(json, idx) {
   return {
     id: `bing-${String(dateKey).replace(/\D/g, '').slice(0, 8) || idx}`,
     url: fullUrl,
-    previewUrl: bingPreviewUrl(fullUrl),
+    previewUrl: buildBingPreviewUrl(fullUrl),
     title,
     description: credit.split('(')[0]?.trim() || title,
     credit,
@@ -570,23 +477,21 @@ async function fetchBingFromMirror(idx) {
     `https://api.vvhan.com/api/wallpaper/bing?type=json&idx=${idx}`,
     `https://api.oioweb.cn/api/bing/daily/${idx}`,
   ];
-  let lastError = new Error('Mirror fetch failed');
-  for (const apiUrl of mirrors) {
+  const attempts = mirrors.map((apiUrl) => async () => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), BING_FETCH_TIMEOUT_MS);
     try {
       const res = await fetch(apiUrl, { cache: 'default', signal: controller.signal });
-      if (!res.ok) continue;
+      if (!res.ok) throw new Error(`Mirror HTTP ${res.status}`);
       const json = await res.json();
       const payload = normalizeMirrorBingPayload(json, idx);
       if (payload?.url) return payload;
-    } catch (err) {
-      lastError = err;
+      throw new Error('Mirror payload empty');
     } finally {
       clearTimeout(timer);
     }
-  }
-  throw lastError;
+  });
+  return firstSuccessfulStaggered(attempts, 120);
 }
 
 export async function fetchBingWallpaper(idx = 0) {
@@ -596,16 +501,7 @@ export async function fetchBingWallpaper(idx = 0) {
     () => fetchBingOfficialArchive(idx, 'https://www.bing.com'),
     () => fetchBingFromMirror(idx),
   ];
-  let lastError = new Error('No wallpaper data');
-  for (const attempt of attempts) {
-    try {
-      const data = await attempt();
-      if (data?.url) return data;
-    } catch (err) {
-      lastError = err;
-    }
-  }
-  throw lastError;
+  return firstSuccessfulStaggered(attempts, BING_HEDGE_DELAY_MS);
 }
 
 export const BING_WALLPAPER_DAYS = 7;

@@ -98,6 +98,7 @@ const pageRouter = createPageRouter({
     await Promise.all([
       preparePage(nextPage, getPageContext()),
       nextPage === 'apps' ? wallpaper?.prepareWallpaperEffects?.() : null,
+      nextPage === 'apps' ? wallpaper?.initWallpaperInfo?.() : null,
     ]);
   },
   async afterPaint({ fromPage, nextPage }) {
@@ -270,7 +271,8 @@ function initContextMenu() {
 }
 
 function prewarmSecondaryFeatures() {
-  let started = false;
+  let modulesStarted = false;
+  let effectsStarted = false;
   let cancelModuleIdle = null;
   let cancelEffectsIdle = null;
   let moduleTimer = 0;
@@ -281,7 +283,7 @@ function prewarmSecondaryFeatures() {
     if (document.hidden) return;
     cancelEffectsIdle = runWhenIdle(
       () => wallpaper?.prewarmWallpaperEffects?.(),
-      { timeout: 900, fallbackDelay: 120 },
+      { timeout: 500, fallbackDelay: 60 },
     );
   };
   const onDockIntent = (event) => {
@@ -292,28 +294,38 @@ function prewarmSecondaryFeatures() {
     dock?.removeEventListener('pointerover', onDockIntent);
   };
 
-  const start = () => {
-    if (started) return;
-    started = true;
+  const startModules = () => {
+    if (modulesStarted) return;
+    modulesStarted = true;
     moduleTimer = window.setTimeout(() => {
       if (document.hidden) return;
       cancelModuleIdle = runWhenIdle(
-        () => preloadPageModule('apps', getPageContext()),
+        () => Promise.all([
+          preloadPageModule('apps', getPageContext()),
+          wallpaper?.initWallpaperInfo?.(),
+        ]),
         { timeout: 500, fallbackDelay: 80 },
       );
     }, 180);
-    effectsTimer = window.setTimeout(prewarmEffects, 320);
-    dock?.addEventListener('pointerover', onDockIntent, { passive: true });
   };
+  const startEffects = () => {
+    if (effectsStarted) return;
+    effectsStarted = true;
+    effectsTimer = window.setTimeout(prewarmEffects, 80);
+  };
+  dock?.addEventListener('pointerover', onDockIntent, { passive: true });
 
-  if (document.body.classList.contains('boot-glass-stable')) start();
-  else document.addEventListener('boot-glass-stable', start, { once: true });
+  if (document.body.classList.contains('boot-ui-settled')) startModules();
+  else document.addEventListener('boot-ui-settled', startModules, { once: true });
+  if (document.body.classList.contains('wallpaper-effects-ready')) startEffects();
+  else document.addEventListener('wallpaper-effects-ready', startEffects, { once: true });
 
   window.addEventListener('pagehide', () => {
     window.clearTimeout(moduleTimer);
     window.clearTimeout(effectsTimer);
     dock?.removeEventListener('pointerover', onDockIntent);
-    document.removeEventListener('boot-glass-stable', start);
+    document.removeEventListener('boot-ui-settled', startModules);
+    document.removeEventListener('wallpaper-effects-ready', startEffects);
     cancelModuleIdle?.();
     cancelEffectsIdle?.();
   }, { once: true });
@@ -391,10 +403,10 @@ async function initCore() {
   shortcuts = modules.shortcuts;
   const prepareInitialFocusEffect = () => runWhenIdle(
     () => wallpaper?.syncSearchFocusWallpaper?.(),
-    { timeout: 220, fallbackDelay: 32 },
+    { timeout: 140, fallbackDelay: 20 },
   );
-  if (document.body.classList.contains('boot-opening-stable')) prepareInitialFocusEffect();
-  else document.addEventListener('boot-opening-stable', prepareInitialFocusEffect, { once: true });
+  if (document.body.classList.contains('boot-ui-settled')) prepareInitialFocusEffect();
+  else document.addEventListener('boot-ui-settled', prepareInitialFocusEffect, { once: true });
   modules.metaBar?.initMetaBar(async () => {
     const [cal] = await Promise.all([
       pageModules.calendar(),
@@ -422,7 +434,6 @@ async function initCore() {
   await switchPage(pageRouter.getCurrentPage(), { force: true });
 
   if (wallpaper) {
-    wallpaper.initWallpaperInfo();
     document.getElementById('wallpaper-info-btn')?.addEventListener('click', () => {
       openWallpaperLibrary();
     });

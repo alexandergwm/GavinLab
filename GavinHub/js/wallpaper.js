@@ -17,19 +17,17 @@ import {
 import {
   saveWallpaperBlobCache,
   getWallpaperBlobCache,
+  deleteWallpaperBlobCache,
+  saveWallpaperEffectBlobCache,
+  getWallpaperEffectBlobCache,
 } from './media-store.js';
 import {
   DEFAULT_WALLPAPER,
   isOnlineWallpaperSource,
-  fetchWallpaperData,
-  fetchBingWallpaper,
-  fetchNextBingWallpaper,
-  BING_WALLPAPER_DAYS,
-  ensureReachableWallpaper,
   reconcileCuratedWallpaper,
   upgradeWallpaperUrl,
   buildBingPreviewUrl,
-} from './wallpaper-fetch.js';
+} from './wallpaper-data.js';
 import {
   scheduleInitialSearchFocus,
   focusSearchInput,
@@ -39,11 +37,14 @@ import {
   BOOT_UI_REVEAL_DELAY_MS,
 } from './boot-ui.js';
 import {
-  isLocalWallpaperUrl,
+  isRemoteWallpaperUrl,
   isWallpaperUrlReachable,
   loadImageElement,
   measureBlobWidth,
   createWallpaperAppsPreview,
+  createWallpaperFocusPreview,
+  createWallpaperBootPreview,
+  getWallpaperEffectVariant,
   MIN_CACHE_WIDTH,
 } from './wallpaper-image.js';
 import { createWallpaperEffects } from './wallpaper-effects.js';
@@ -72,13 +73,28 @@ const ROTATION_MS = {
   daily: 24 * 60 * 60 * 1000,
   weekly: 7 * 24 * 60 * 60 * 1000,
 };
+const BING_WALLPAPER_DAYS = 7;
+
+let wallpaperFetchModulePromise = null;
+let wallpaperInfoModulePromise = null;
+let wallpaperInfoController = null;
+
+function loadWallpaperFetchModule() {
+  wallpaperFetchModulePromise ||= import('./wallpaper-fetch.js');
+  return wallpaperFetchModulePromise;
+}
 
 const blobUrlCache = new Map();
 
 let preloadedWallpaper = null;
 let preloadIdleHandle = null;
+let preloadDelayTimer = 0;
+let preloadStartListener = null;
 let preloadGeneration = 0;
 let wallpaperIntentRevision = 0;
+let wallpaperPaintRevision = 0;
+let bootPreviewGeneration = 0;
+const wallpaperCacheWrites = new Map();
 const storedBootWallpaper = loadLastWallpaperMeta();
 let currentWallpaper = isValidCachedWallpaperMeta(storedBootWallpaper)
   ? { ...storedBootWallpaper, type: storedBootWallpaper.type || 'image' }
@@ -87,10 +103,21 @@ let initialWallpaperRevealed = document.body.classList.contains('boot-done');
 let wallpaperFocusReadyPromise = Promise.resolve(false);
 let wallpaperAppsReadyPromise = Promise.resolve(false);
 const wallpaperEffects = createWallpaperEffects({
-  createPreview: createWallpaperAppsPreview,
+  createFocusPreview: createWallpaperFocusPreview,
+  createAppsPreview: createWallpaperAppsPreview,
+  getPersistentKey(kind, data) {
+    const identity = data.effectKey || data.url;
+    return identity ? `${getWallpaperEffectVariant(kind)}:${identity}` : '';
+  },
+  loadPersistentPreview: getWallpaperEffectBlobCache,
+  savePersistentPreview: saveWallpaperEffectBlobCache,
 });
 
 window.addEventListener('pagehide', () => {
+  window.clearTimeout(preloadDelayTimer);
+  if (preloadIdleHandle != null && 'cancelIdleCallback' in window) cancelIdleCallback(preloadIdleHandle);
+  else if (preloadIdleHandle != null) window.clearTimeout(preloadIdleHandle);
+  if (preloadStartListener) document.removeEventListener('boot-glass-stable', preloadStartListener);
   wallpaperEffects.dispose();
   blobUrlCache.forEach((url) => URL.revokeObjectURL(url));
   blobUrlCache.clear();
@@ -111,6 +138,38 @@ function canRunBackgroundImageWork() {
   return !document.hidden && !navigator.connection?.saveData;
 }
 
+function loadStoredBootPreview() {
+  try {
+    const value = JSON.parse(localStorage.getItem(KEYS.wallpaperBootPreview) || 'null');
+    return value && value.version === 2 && value.dataUrl ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+async function persistBootWallpaperPreview(data) {
+  if (document.hidden || data?.type === 'gradient' || !data?.url) return;
+  const key = getWallpaperCacheKey(data) || getWallpaperId(data);
+  if (!key) return;
+  const stored = loadStoredBootPreview();
+  if (stored?.key === key && stored.sourceUrl === data.url) return;
+  const generation = ++bootPreviewGeneration;
+  try {
+    const dataUrl = await createWallpaperBootPreview(data.url);
+    if (!dataUrl || dataUrl.length > 300000 || generation !== bootPreviewGeneration) return;
+    if (getWallpaperId(getCurrentWallpaper()) !== getWallpaperId(data)) return;
+    localStorage.setItem(KEYS.wallpaperBootPreview, JSON.stringify({
+      version: 2,
+      key,
+      sourceUrl: data.url,
+      dataUrl,
+      savedAt: Date.now(),
+    }));
+  } catch {
+    /* startup preview is an optional perceived-performance cache */
+  }
+}
+
 function deferAdaptAfterBoot() {
   bootThemeAdaptPending = true;
 }
@@ -128,11 +187,16 @@ async function enhanceBootWallpaperAsync(payload) {
   try {
     const enhanced = await resolveBootWallpaperPayload(payload);
     if (getWallpaperId(getCurrentWallpaper()) !== wallpaperId) return;
-    if (isSameWallpaperImage(getCurrentWallpaper(), enhanced)) return;
-    if (enhanced.url && !isSameWallpaperImage(getCurrentWallpaper(), { ...enhanced, url: enhanced.url })) {
-      applyWallpaper(enhanced, { skipAdapt: true, immediateBlur: false });
+    if (enhanced.url && !isSameWallpaperAsset(getCurrentWallpaper(), enhanced)) {
+      applyWallpaper(enhanced, {
+        skipAdapt: true,
+        immediateBlur: false,
+        preserveUrl: true,
+      });
       deferAdaptAfterBoot();
-    } else if (enhanced._hiResUrl && !isSameWallpaperImage(getCurrentWallpaper(), { ...enhanced, url: enhanced._hiResUrl })) {
+    }
+    if (enhanced._hiResUrl
+      && !isSameWallpaperAsset(getCurrentWallpaper(), { url: enhanced._hiResUrl })) {
       await upgradeToHiResInBackground(enhanced);
     }
   } catch { /* 保留已显示的缓存/默认图 */ }
@@ -142,11 +206,11 @@ async function upgradeToHiResInBackground(payload) {
   const hiResUrl = payload._hiResUrl;
   if (!hiResUrl || hiResUrl === payload.url) return;
   if (!canRunBackgroundImageWork()) return;
-  if (isSameWallpaperImage(getCurrentWallpaper(), { ...payload, url: hiResUrl })) return;
+  if (isSameWallpaperAsset(getCurrentWallpaper(), { url: hiResUrl })) return;
   if (isBootWallpaperDisplayed({ ...payload, url: hiResUrl })) return;
   const wallpaperId = getWallpaperId(payload);
   try {
-    const img = await loadImageElement(hiResUrl, /^https?:/i.test(hiResUrl));
+    const img = await loadImageElement(hiResUrl, isRemoteWallpaperUrl(hiResUrl));
     if (img?.decode) await img.decode().catch(() => {});
     if (getWallpaperId(getCurrentWallpaper()) !== wallpaperId) return;
     applyWallpaper({ ...payload, url: hiResUrl }, { skipAdapt: true, immediateBlur: false });
@@ -179,12 +243,19 @@ async function resolveBootWallpaperPayload(data) {
       const blob = await getWallpaperBlobCache(payload.cacheKey);
       if (blob) {
         const width = await measureBlobWidth(blob);
-        if (width === 0 || width >= MIN_CACHE_WIDTH) {
+        if ((!blob.type || blob.type.startsWith('image/'))
+          && (width === 0 || width >= MIN_CACHE_WIDTH)) {
           const objectUrl = getBlobUrlForCacheKey(payload.cacheKey, blob);
-          const img = await loadImageElement(objectUrl, false);
-          if (img?.decode) await img.decode().catch(() => {});
-          return { ...payload, url: objectUrl };
+          try {
+            const img = await loadImageElement(objectUrl, false, { minWidth: MIN_CACHE_WIDTH });
+            if (img?.decode) await img.decode().catch(() => {});
+            return { ...payload, url: objectUrl };
+          } catch {
+            dropBlobUrlForCacheKey(payload.cacheKey);
+          }
         }
+        await deleteWallpaperBlobCache(payload.cacheKey);
+        dropBlobUrlForCacheKey(payload.cacheKey);
       }
     } catch { /* fall through to HTTP */ }
   }
@@ -194,7 +265,7 @@ async function resolveBootWallpaperPayload(data) {
   const previewUrl = isBing ? buildBingPreviewUrl(hiResUrl) : '';
   const bootUrl = previewUrl && previewUrl !== hiResUrl ? previewUrl : hiResUrl;
 
-  const needsCrossOrigin = /^https?:/i.test(bootUrl);
+  const needsCrossOrigin = isRemoteWallpaperUrl(bootUrl);
   const img = await loadImageElement(bootUrl, needsCrossOrigin);
   if (img?.decode) await img.decode().catch(() => {});
 
@@ -214,6 +285,7 @@ function finishBootReveal() {
 async function fetchBingAndApplyInBackground(fallbackMeta, intent) {
   if (fallbackMeta && !canRunBackgroundImageWork()) return;
   try {
+    const { fetchBingWallpaper } = await loadWallpaperFetchModule();
     const data = await fetchBingWallpaper(0);
     if (!isWallpaperIntentCurrent(intent)) return;
     const next = { ...data, url: upgradeWallpaperUrl(data) };
@@ -227,6 +299,31 @@ async function fetchBingAndApplyInBackground(fallbackMeta, intent) {
       await revealBootWallpaper({ ...DEFAULT_WALLPAPER }, { skipPersist: true });
     }
   }
+}
+
+function scheduleBingRefreshAfterBoot(fallbackMeta, intent) {
+  const start = () => {
+    if (!isWallpaperIntentCurrent(intent)) return;
+    if (document.hidden) {
+      document.addEventListener('visibilitychange', start, { once: true });
+      return;
+    }
+    const run = () => {
+      if (!isWallpaperIntentCurrent(intent)) return;
+      if (document.hidden) {
+        document.addEventListener('visibilitychange', start, { once: true });
+        return;
+      }
+      void fetchBingAndApplyInBackground(fallbackMeta, intent);
+    };
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(run, { timeout: 900 });
+    } else {
+      window.setTimeout(run, 80);
+    }
+  };
+  if (document.body.classList.contains('boot-glass-stable')) start();
+  else document.addEventListener('boot-glass-stable', start, { once: true });
 }
 
 function getLocalDateKey(d = new Date()) {
@@ -257,195 +354,14 @@ function isValidCachedWallpaperMeta(meta) {
   return true;
 }
 
-function randomInt(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function setNextButtonLoading(loading) {
-  const btn = document.getElementById('wallpaper-next-btn');
-  if (!btn) return;
-  btn.disabled = loading;
-  btn.classList.toggle('is-loading', loading);
-  btn.textContent = loading ? '加载中…' : '下一张';
-}
-
-function shouldShowWallpaperNextButton() {
-  return normalizeSelectableWallpaperSource(loadSettings().wallpaperSource) === 'bing';
-}
-
-function updateWallpaperNextButton() {
-  const btn = document.getElementById('wallpaper-next-btn');
-  if (!btn) return;
-  btn.hidden = !shouldShowWallpaperNextButton();
-}
-
-const GENERIC_WALLPAPER_TITLES = new Set([
-  'NASA 每日一图',
-  'NASA 地球俯瞰',
-  'Bing 每日风景',
-  '国家地理每日',
-  '维基百科 · 每日一图',
-  'Google Earth View',
-  '每日风景',
-]);
-
-const NON_LINKABLE_SOURCES = new Set(['gradient', 'random', 'picsum']);
-
-const BUILTIN_POETIC_TITLES = new Set([
-  '山湖晨雾',
-  '河谷石桥',
-  '海岸公路',
-  '森林晨路',
-]);
-
-const KNOWN_PLACE_TITLES = new Set([
-  '赫兹桑德海岸',
-]);
-
-const TITLE_BLOCKLIST = /NASA|EPIC|DSCOVR|地球全彩|地球|卫星|随机|摄影|APOD|太空|orbit|每日一图|每日壁纸|Earth View|Earth Observatory|Astronomy/i;
-
-const PLACE_HINTS = /(?:[湾海岸山湖岛城堡塔公园]|National Park|Bay|Coast|Island|Tower|Cathedral|Temple|Palace|Volcano|Canyon|Desert|Falls|Lake|River)/i;
-
-const GENERIC_CN_SCENIC = /^(?:山湖|河谷|海岸|森林|随机|自然|风景|每日|壁纸|晨雾|石桥|公路|晨路)/;
-
-const CREDIT_NOISE = /©|Getty|Shutterstock|Alamy|iStock|Images|Adobe|摄/i;
-
-function getBaikeUrl(name) {
-  return `https://baike.baidu.com/item/${encodeURIComponent(name)}`;
-}
-
-function buildWikipediaPageUrl(title) {
-  if (!title?.trim()) return '';
-  const page = title.trim().replace(/ /g, '_');
-  return `https://en.wikipedia.org/wiki/${encodeURIComponent(page).replace(/%3A/g, ':')}`;
-}
-
-function getWallpaperExternalUrl(data) {
-  if (!data) return null;
-  if (data.pageUrl) return data.pageUrl;
-  if (data.linkUrl) return data.linkUrl;
-
-  const source = normalizeWallpaperSource(data.source);
-
-  switch (source) {
-    case 'wikimedia': {
-      const title = (data.title || '').trim();
-      if (!title || title === '维基百科 · 每日一图') return null;
-      return buildWikipediaPageUrl(title);
-    }
-    case 'local':
-    case 'library': {
-      const linkName = getWallpaperLinkName(data);
-      return linkName ? getBaikeUrl(linkName) : null;
-    }
-    default:
-      return null;
-  }
-}
-
-function extractPlaceFromBingCopyright(copyright) {
-  if (!copyright) return '';
-  const parenMatch = copyright.match(/[（(]([^）)]+)[）)]/);
-  if (parenMatch) {
-    const inner = parenMatch[1].trim();
-    if (inner.length >= 2 && !CREDIT_NOISE.test(inner)) {
-      const part = inner.split(/[,，/／]/)[0].trim();
-      if (part.length >= 2) return part;
-    }
-  }
-  for (const segment of copyright.split('/')) {
-    const cleaned = segment.replace(/^©\s*/i, '').trim();
-    if (cleaned.length < 3 || CREDIT_NOISE.test(cleaned) || !/[A-Za-z]/.test(cleaned)) continue;
-    const place = cleaned.split(',')[0].trim();
-    if (place.length >= 3) return place;
-  }
-  return '';
-}
-
-function looksLikePlaceName(title) {
-  const t = title.trim();
-  if (!t || GENERIC_WALLPAPER_TITLES.has(t) || BUILTIN_POETIC_TITLES.has(t)) return false;
-  if (TITLE_BLOCKLIST.test(t)) return false;
-  if (KNOWN_PLACE_TITLES.has(t)) return true;
-  if (GENERIC_CN_SCENIC.test(t)) return false;
-  if (PLACE_HINTS.test(t)) {
-    const prefix = t.replace(/(?:湾|海岸|海|山|岛|城|塔|湖|公园|瀑布|峡谷|沙漠|广场|寺|庙|宫|陵|古道).*$/u, '').trim();
-    if (prefix.length >= 2 && !GENERIC_CN_SCENIC.test(prefix)) return true;
-  }
-  if (/^[\u4e00-\u9fff]{2,}(?:国家森林公园|国家级|风景区|世界遗产|古城|古镇|斜塔)?$/.test(t)) return true;
-  if (/^[A-Za-z][A-Za-z\s,''-]{2,}$/.test(t) && t.split(/\s+/).length <= 8) {
-    if (/^(?:The\s+)?(?:Daily|Random|Photo|Picture|Image|View|Landscape|Nature|Scenic)/i.test(t)) return false;
-    return true;
-  }
-  return false;
-}
-
-function isFamousPlaceTitle(title, source, meta = {}) {
-  const name = title?.trim();
-  if (!name) return false;
-
-  source = normalizeWallpaperSource(source);
-  if (NON_LINKABLE_SOURCES.has(source)) return false;
-  if (source === 'gradient' || meta?.type === 'gradient') return false;
-  if (meta?.url && /picsum\.photos/i.test(meta.url)) return false;
-  if (GENERIC_WALLPAPER_TITLES.has(name) || BUILTIN_POETIC_TITLES.has(name)) return false;
-  if (TITLE_BLOCKLIST.test(name)) return false;
-
-  if (source === 'builtin') return false;
-
-  if (source === 'local' || source === 'library') {
-    return KNOWN_PLACE_TITLES.has(name) || looksLikePlaceName(name);
-  }
-
-  if (source === 'bing') {
-    return name.length >= 2 && !TITLE_BLOCKLIST.test(name) && name !== '每日风景';
-  }
-
-  if (source === 'natgeo' || source === 'wikimedia' || source === 'unsplash-curated' || source === 'pexels-scenic') {
-    return looksLikePlaceName(name);
-  }
-
-  return false;
-}
-
-function getWallpaperLinkName(data) {
-  const title = (data.title || '').trim();
-  const source = normalizeWallpaperSource(data.source);
-  if (isFamousPlaceTitle(title, source, data)) return title;
-  if (source === 'bing') {
-    const fromCredit = extractPlaceFromBingCopyright(data.credit);
-    if (fromCredit && isFamousPlaceTitle(fromCredit, source, data)) return fromCredit;
-  }
-  return null;
-}
-
-function renderWallpaperTitle(el, data) {
-  if (!el) return;
-  const displayName = (data.title || '').trim();
-  const externalUrl = getWallpaperExternalUrl(data);
-  el.replaceChildren();
-  if (externalUrl) {
-    const link = document.createElement('a');
-    link.href = externalUrl;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    link.textContent = displayName;
-    el.appendChild(link);
-    return;
-  }
-  el.textContent = displayName;
-}
-
-function syncWallpaperInfoLink(info, data) {
-  if (!info) return;
-  const externalUrl = getWallpaperExternalUrl(data);
-  const linkable = !!externalUrl;
-  info.classList.toggle('is-linkable', linkable);
-  if (linkable) {
-    info.dataset.linkUrl = externalUrl;
-  } else {
-    delete info.dataset.linkUrl;
-  }
+function renderWallpaperMetadata(data) {
+  const title = document.getElementById('wallpaper-title');
+  const desc = document.getElementById('wallpaper-desc');
+  const credit = document.getElementById('wallpaper-credit');
+  if (title) title.textContent = (data.title || '').trim();
+  if (desc) desc.textContent = data.description || '';
+  if (credit) credit.textContent = data.credit || '';
+  wallpaperInfoController?.render(data);
 }
 
 export function getCurrentWallpaper() {
@@ -458,6 +374,19 @@ function getWallpaperImgEl() {
 
 function getWallpaperContainerEl() {
   return document.getElementById('wallpaper');
+}
+
+function getDecodedWallpaperImageUrl(data = currentWallpaper) {
+  const img = getWallpaperImgEl();
+  if (!img || img.hidden || !img.complete || img.naturalWidth <= 0) return '';
+  const requestedUrl = img.getAttribute('src') || '';
+  const decodedUrl = img.currentSrc || img.src || '';
+  if (!requestedUrl || !decodedUrl) return '';
+  if (data && (
+    !isSameWallpaperAsset(data, { url: requestedUrl })
+    || !isSameWallpaperAsset(data, { url: decodedUrl })
+  )) return '';
+  return decodedUrl;
 }
 
 function revealWallpaperImg(img = getWallpaperImgEl()) {
@@ -480,17 +409,21 @@ function revealWallpaperImg(img = getWallpaperImgEl()) {
 function isBootWallpaperStable(cached) {
   const img = getWallpaperImgEl();
   if (!img || img.hidden) return isBootWallpaperDisplayed(cached);
-  const painted = img.currentSrc || img.src || '';
-  if (!painted) return false;
-  if (!cached) return !!painted;
-  return isSameWallpaperImage(cached, { ...cached, url: painted });
+  const painted = img.classList.contains('wallpaper-show')
+    ? getDecodedWallpaperImageUrl(cached)
+    : '';
+  if (painted) return !cached || isSameWallpaperAsset(cached, { url: painted });
+  const previewKey = window.__BOOT_WALLPAPER_PREVIEW_KEY || '';
+  return Boolean(cached && previewKey && previewKey === getWallpaperCacheKey(cached));
 }
 
 function getPaintedWallpaperUrl() {
   const img = getWallpaperImgEl();
-  if (img && !img.hidden && (img.currentSrc || img.src)) {
-    return img.currentSrc || img.src;
-  }
+  const painted = img?.classList.contains('wallpaper-show')
+    ? getDecodedWallpaperImageUrl()
+    : '';
+  if (painted) return painted;
+  if (window.__BOOT_WALLPAPER_PREVIEW) return window.__BOOT_WALLPAPER_PREVIEW;
   const container = getWallpaperContainerEl();
   if (container?.classList.contains('is-gradient')) {
     return container.style.backgroundImage || 'gradient';
@@ -505,9 +438,14 @@ function isBootWallpaperDisplayed(cached) {
   if (cached.type === 'gradient') {
     return !!container?.classList.contains('is-gradient') && !!container.style.backgroundImage;
   }
-  if (!img?.classList.contains('wallpaper-show')) return false;
-  const painted = img.currentSrc || img.src || '';
-  return !!(painted && isSameWallpaperImage(cached, { ...cached, url: painted }));
+  if (!img?.classList.contains('wallpaper-show') || !img.complete || img.naturalWidth <= 0) {
+    return Boolean(
+      window.__BOOT_WALLPAPER_PREVIEW
+      && window.__BOOT_WALLPAPER_PREVIEW_KEY === getWallpaperCacheKey(cached),
+    );
+  }
+  const painted = getDecodedWallpaperImageUrl(cached);
+  return !!(painted && isSameWallpaperAsset(cached, { url: painted }));
 }
 
 function setBackgroundImage(el, data, { instantReveal = false, force = false } = {}) {
@@ -516,6 +454,7 @@ function setBackgroundImage(el, data, { instantReveal = false, force = false } =
   if (!container) return;
 
   if (data.type === 'gradient' && data.css) {
+    wallpaperPaintRevision += 1;
     container.classList.add('is-gradient');
     container.style.backgroundImage = data.css;
     container.style.backgroundColor = '';
@@ -524,6 +463,7 @@ function setBackgroundImage(el, data, { instantReveal = false, force = false } =
       img.classList.remove('wallpaper-show');
       img.removeAttribute('src');
     }
+    document.getElementById('wallpaper-preview')?.classList.add('is-hidden');
     settleBootUiClasses();
     if (el && el !== container) setBackgroundImage(el, data);
     return;
@@ -542,14 +482,17 @@ function setBackgroundImage(el, data, { instantReveal = false, force = false } =
   img.hidden = false;
   const url = data.url || '';
   if (!url) {
+    wallpaperPaintRevision += 1;
     img.classList.remove('wallpaper-show');
     img.removeAttribute('src');
     return;
   }
 
-  const painted = img.currentSrc || img.src || '';
-  if (!force && painted && isSameWallpaperImage(data, { ...data, url: painted })) {
-    if (!img.classList.contains('wallpaper-show')) revealWallpaperImg(img);
+  const requestedUrl = img.getAttribute('src') || '';
+  if (!force && requestedUrl && isSameWallpaperAsset(data, { url: requestedUrl })) {
+    if (img.complete && img.naturalWidth > 0 && !img.classList.contains('wallpaper-show')) {
+      revealWallpaperImg(img);
+    }
     if (el && el !== container && el !== img && data.url) {
       el.style.backgroundImage = `url("${data.url}")`;
     }
@@ -557,14 +500,19 @@ function setBackgroundImage(el, data, { instantReveal = false, force = false } =
   }
 
   const finishSwap = () => {
+    if (paintRevision !== wallpaperPaintRevision) return;
     revealWallpaperImg(img);
+    document.getElementById('wallpaper-preview')?.classList.add('is-hidden');
+    document.body.classList.add('boot-wallpaper-full-ready');
     if (instantReveal) {
       requestAnimationFrame(() => img.classList.remove('wallpaper-instant'));
     }
   };
 
+  const paintRevision = ++wallpaperPaintRevision;
   img.addEventListener('load', finishSwap, { once: true });
   img.addEventListener('error', () => {
+    if (paintRevision !== wallpaperPaintRevision) return;
     if (instantReveal) img.classList.remove('wallpaper-instant');
     else img.classList.remove('wallpaper-show');
   }, { once: true });
@@ -576,7 +524,7 @@ function setBackgroundImage(el, data, { instantReveal = false, force = false } =
     img.classList.remove('wallpaper-show');
   }
 
-  if (img.src !== url) img.src = url;
+  if (img.getAttribute('src') !== url) img.src = url;
   else if (img.complete && img.naturalWidth > 0) finishSwap();
 
   if (el && el !== container && el !== img && data.url) {
@@ -586,11 +534,15 @@ function setBackgroundImage(el, data, { instantReveal = false, force = false } =
 }
 
 function getBlurWallpaperUrl(data) {
-  const img = getWallpaperImgEl();
-  const painted = img?.currentSrc || img?.src || '';
-  if (painted && data?.url && isSameWallpaperImage(data, { ...data, url: painted })) {
-    return painted;
+  if (
+    window.__BOOT_WALLPAPER_PREVIEW
+    && window.__BOOT_WALLPAPER_PREVIEW_KEY === getWallpaperCacheKey(data)
+  ) {
+    const img = getWallpaperImgEl();
+    if (!img?.complete || img.naturalWidth <= 0) return window.__BOOT_WALLPAPER_PREVIEW;
   }
+  const painted = getDecodedWallpaperImageUrl(data);
+  if (painted) return painted;
   return data?.url || '';
 }
 
@@ -599,10 +551,14 @@ function getWallpaperEffectPayload(data = currentWallpaper) {
   if (data.type === 'gradient' && data.css) {
     return { type: 'gradient', css: data.css };
   }
-  return { type: 'image', url: getBlurWallpaperUrl(data) };
+  return {
+    type: 'image',
+    url: getBlurWallpaperUrl(data),
+    effectKey: getWallpaperCacheKey(data) || getWallpaperId(data),
+  };
 }
 
-/** 搜索聚焦与应用页复用同一张预模糊图，切换时只做合成层淡入。 */
+/** 搜索聚焦使用轻量预模糊图，避免开场期间处理整张高清壁纸。 */
 function syncFocusWallpaperLayer(data = currentWallpaper) {
   if (!data) return Promise.resolve(false);
   return wallpaperEffects.sync(getWallpaperEffectPayload(data));
@@ -628,9 +584,9 @@ function trackWallpaperEffects(promise) {
 
 export function syncAppsBlurWallpaper() {
   const data = getCurrentWallpaper();
-  const paintedUrl = getPaintedWallpaperUrl();
+  const decodedUrl = getDecodedWallpaperImageUrl(data);
   wallpaperAppsReadyPromise = syncBlurWallpaperLayer(
-    paintedUrl && data?.type !== 'gradient' ? { ...data, url: paintedUrl } : data,
+    decodedUrl && data?.type !== 'gradient' ? { ...data, url: decodedUrl } : data,
   );
   return wallpaperAppsReadyPromise;
 }
@@ -658,23 +614,25 @@ export function prepareWallpaperEffects() {
 }
 
 export function prewarmWallpaperEffects() {
-  if (document.hidden || navigator.connection?.saveData) return Promise.resolve(false);
-  return syncAppsBlurWallpaper();
-}
-
-function revokeBlobUrl(cacheKey) {
-  const existing = blobUrlCache.get(cacheKey);
-  if (existing) {
-    URL.revokeObjectURL(existing);
-    blobUrlCache.delete(cacheKey);
-  }
+  if (document.hidden) return Promise.resolve(false);
+  const data = getCurrentWallpaper();
+  return data
+    ? wallpaperEffects.prewarmApps(getWallpaperEffectPayload(data))
+    : Promise.resolve(false);
 }
 
 function getBlobUrlForCacheKey(cacheKey, blob) {
-  revokeBlobUrl(cacheKey);
+  const existing = blobUrlCache.get(cacheKey);
+  if (existing) return existing;
   const objectUrl = URL.createObjectURL(blob);
   blobUrlCache.set(cacheKey, objectUrl);
   return objectUrl;
+}
+
+function dropBlobUrlForCacheKey(cacheKey) {
+  const objectUrl = blobUrlCache.get(cacheKey);
+  if (objectUrl) URL.revokeObjectURL(objectUrl);
+  blobUrlCache.delete(cacheKey);
 }
 
 async function persistWallpaperCache(data) {
@@ -682,25 +640,58 @@ async function persistWallpaperCache(data) {
   if (!meta || data.type === 'gradient' || !data.url || data.url.startsWith('blob:')) return meta;
 
   const cacheKey = meta.cacheKey;
-  try {
-    if (await getWallpaperBlobCache(cacheKey)) return meta;
-    const isLocal = data.url.startsWith('data:') || !/^https?:/i.test(data.url);
-    if (isLocal) return meta;
+  const pending = wallpaperCacheWrites.get(cacheKey);
+  if (pending) {
+    await pending;
+    return meta;
+  }
 
-    let fetchUrl = upgradeWallpaperUrl(data);
-    let res = await fetch(fetchUrl, { mode: 'cors', cache: 'force-cache' });
-    if (!res.ok && fetchUrl !== data.url) {
-      fetchUrl = data.url;
-      res = await fetch(fetchUrl, { mode: 'cors', cache: 'force-cache' });
+  const write = (async () => {
+    try {
+      const existing = await getWallpaperBlobCache(cacheKey);
+      if (existing) {
+        const existingWidth = await measureBlobWidth(existing);
+        if ((!existing.type || existing.type.startsWith('image/'))
+          && existingWidth >= MIN_CACHE_WIDTH) return;
+        if ((!existing.type || existing.type.startsWith('image/')) && existingWidth === 0) {
+          const objectUrl = URL.createObjectURL(existing);
+          try {
+            await loadImageElement(objectUrl, false, { minWidth: MIN_CACHE_WIDTH });
+            return;
+          } catch {
+            /* replace an undecodable cache entry */
+          } finally {
+            URL.revokeObjectURL(objectUrl);
+          }
+        }
+        await deleteWallpaperBlobCache(cacheKey);
+        dropBlobUrlForCacheKey(cacheKey);
+      }
+      const isLocal = data.url.startsWith('data:') || !isRemoteWallpaperUrl(data.url);
+      if (isLocal) return;
+
+      let fetchUrl = upgradeWallpaperUrl(data);
+      let res = await fetch(fetchUrl, { mode: 'cors', cache: 'force-cache' });
+      if (!res.ok && fetchUrl !== data.url) {
+        fetchUrl = data.url;
+        res = await fetch(fetchUrl, { mode: 'cors', cache: 'force-cache' });
+      }
+      if (res.ok) {
+        const blob = await res.blob();
+        if (!blob.size || (blob.type && !blob.type.startsWith('image/'))) return;
+        const width = await measureBlobWidth(blob);
+        if (width > 0 && width < MIN_CACHE_WIDTH) return;
+        await saveWallpaperBlobCache(cacheKey, blob);
+      }
+    } catch {
+      /* cache blob is best-effort */
     }
-    if (res.ok) {
-      const blob = await res.blob();
-      const width = await measureBlobWidth(blob);
-      if (width > 0 && width < MIN_CACHE_WIDTH) return meta;
-      if (blob.size) await saveWallpaperBlobCache(cacheKey, blob);
-    }
-  } catch {
-    /* cache blob is best-effort */
+  })();
+  wallpaperCacheWrites.set(cacheKey, write);
+  try {
+    await write;
+  } finally {
+    if (wallpaperCacheWrites.get(cacheKey) === write) wallpaperCacheWrites.delete(cacheKey);
   }
   return meta;
 }
@@ -737,6 +728,16 @@ export function shouldRefreshWallpaper(source, cached = loadLastWallpaperMeta())
 
 export function isWallpaperRevealComplete() {
   return initialWallpaperRevealed;
+}
+
+function verifyCachedWallpaperInBackground(meta, source, intent) {
+  if (!meta?.url || meta.type === 'gradient') return;
+  const wallpaperId = getWallpaperId(meta);
+  void isWallpaperUrlReachable(meta.url).then((ok) => {
+    if (ok || !isWallpaperIntentCurrent(intent)) return;
+    if (getWallpaperId(getCurrentWallpaper()) !== wallpaperId) return;
+    return loadWallpaper(source, { force: true });
+  }).catch(() => {});
 }
 
 export async function restoreWallpaperFromCache(
@@ -785,43 +786,30 @@ async function waitForBootFadeComplete() {
   if (!initialWallpaperRevealed) finishBootReveal();
 }
 
-async function upgradeWallpaperFromBlobCache(meta) {
-  if (!meta?.cacheKey || meta.type === 'gradient') return;
-  try {
-    const blob = await getWallpaperBlobCache(meta.cacheKey);
-    if (!blob) return;
-    const width = await measureBlobWidth(blob);
-    if (width > 0 && width < MIN_CACHE_WIDTH) return;
-    const objectUrl = getBlobUrlForCacheKey(meta.cacheKey, blob);
-    const current = getCurrentWallpaper();
-    if (getWallpaperCacheKey(current) !== meta.cacheKey) return;
-    applyWallpaper(
-      { ...meta, url: objectUrl },
-      { skipPersist: true, immediateBlur: false, adaptImmediate: true },
-    );
-  } catch {
-    /* keep HTTP url */
-  }
-}
-
 function onWallpaperChanged(data) {
   const prev = loadLastWallpaperMeta();
   const prevId = prev ? getWallpaperId(prev) : '';
   const nextId = getWallpaperId(data);
   if (prevId !== nextId) touchWallpaperRotation();
   recordRecentWallpaper(data);
-  persistWallpaperCache(data);
+  void persistWallpaperCache(data);
+  void persistBootWallpaperPreview(data);
   schedulePreloadNext(data);
 }
 
 function schedulePreloadNext(data) {
   const gen = ++preloadGeneration;
+  window.clearTimeout(preloadDelayTimer);
   if (preloadIdleHandle != null && 'cancelIdleCallback' in window) {
     cancelIdleCallback(preloadIdleHandle);
   } else if (preloadIdleHandle != null) {
     clearTimeout(preloadIdleHandle);
   }
   preloadIdleHandle = null;
+  if (preloadStartListener) {
+    document.removeEventListener('boot-glass-stable', preloadStartListener);
+    preloadStartListener = null;
+  }
   if (!canRunBackgroundImageWork()) return;
 
   const run = () => {
@@ -829,10 +817,22 @@ function schedulePreloadNext(data) {
     if (gen !== preloadGeneration || !canRunBackgroundImageWork()) return;
     void preloadNextBingWallpaper(data, gen);
   };
-  if ('requestIdleCallback' in window) {
-    preloadIdleHandle = requestIdleCallback(run, { timeout: 2500 });
-  } else {
-    preloadIdleHandle = setTimeout(run, 800);
+  const queue = () => {
+    preloadStartListener = null;
+    preloadDelayTimer = window.setTimeout(() => {
+      preloadDelayTimer = 0;
+      if (gen !== preloadGeneration || !canRunBackgroundImageWork()) return;
+      if ('requestIdleCallback' in window) {
+        preloadIdleHandle = requestIdleCallback(run, { timeout: 1800 });
+      } else {
+        preloadIdleHandle = setTimeout(run, 240);
+      }
+    }, 700);
+  };
+  if (document.body.classList.contains('boot-glass-stable')) queue();
+  else {
+    preloadStartListener = queue;
+    document.addEventListener('boot-glass-stable', queue, { once: true });
   }
 }
 
@@ -840,13 +840,14 @@ async function preloadNextBingWallpaper(current, gen = preloadGeneration) {
   try {
     if (gen !== preloadGeneration || !canRunBackgroundImageWork()) return;
     const recent = loadRecentWallpaperIds();
+    const { fetchNextBingWallpaper } = await loadWallpaperFetchModule();
     const next = await fetchNextBingWallpaper(recent);
     if (gen !== preloadGeneration || !canRunBackgroundImageWork()) return;
     if (!next?.url || isSameWallpaperImage(next, current)) return;
     const targetUrl = upgradeWallpaperUrl(next) || next.url;
     const displayUrl = resolveSwitchDisplayUrl({ ...next, source: 'bing' }, targetUrl);
     const preloadUrl = displayUrl || targetUrl;
-    await loadImageElement(preloadUrl, /^https?:/i.test(preloadUrl));
+    await loadImageElement(preloadUrl, isRemoteWallpaperUrl(preloadUrl));
     if (gen !== preloadGeneration || !canRunBackgroundImageWork()) return;
     if (targetUrl !== preloadUrl && canRunBackgroundImageWork()) {
       loadImageElement(targetUrl, true).catch(() => {});
@@ -864,20 +865,27 @@ function resolveSwitchDisplayUrl(data, targetUrl) {
   return targetUrl;
 }
 
-async function upgradeWallpaperToTargetUrl(payload) {
+async function upgradeWallpaperToTargetUrl(payload, fallbackPayload) {
   try {
-    await loadImageElement(payload.url, /^https?:/i.test(payload.url));
+    await loadImageElement(payload.url, isRemoteWallpaperUrl(payload.url));
     if (getWallpaperId(getCurrentWallpaper()) !== getWallpaperId(payload)) return;
     const painted = getPaintedWallpaperUrl();
     if (!painted || painted === payload.url) return;
     applyWallpaper(payload, {
       preserveUrl: true,
       forceRepaint: true,
-      skipPersist: true,
       immediateBlur: true,
       instantReveal: true,
     });
-  } catch { /* 保留当前已显示的预览/壁纸 */ }
+  } catch {
+    if (!fallbackPayload) return;
+    if (getWallpaperId(getCurrentWallpaper()) !== getWallpaperId(fallbackPayload)) return;
+    applyWallpaper(fallbackPayload, {
+      preserveUrl: true,
+      adaptImmediate: true,
+      immediateBlur: true,
+    });
+  }
 }
 
 async function applyWallpaperSwitch(data) {
@@ -885,8 +893,12 @@ async function applyWallpaperSwitch(data) {
   if (!targetUrl && data.type !== 'gradient') return currentWallpaper;
 
   const displayUrl = resolveSwitchDisplayUrl(data, targetUrl);
+  if (displayUrl && data.type !== 'gradient') {
+    await loadImageElement(displayUrl, isRemoteWallpaperUrl(displayUrl));
+  }
+  const displayPayload = { ...data, url: displayUrl, previewUrl: data.previewUrl };
   applyWallpaper(
-    { ...data, url: displayUrl, previewUrl: data.previewUrl },
+    displayPayload,
     {
       preserveUrl: true,
       forceRepaint: true,
@@ -897,7 +909,10 @@ async function applyWallpaperSwitch(data) {
   );
 
   if (displayUrl !== targetUrl) {
-    void upgradeWallpaperToTargetUrl({ ...data, url: targetUrl, previewUrl: data.previewUrl });
+    void upgradeWallpaperToTargetUrl(
+      { ...data, url: targetUrl, previewUrl: data.previewUrl },
+      displayPayload,
+    );
   }
   return currentWallpaper;
 }
@@ -1036,15 +1051,7 @@ export function applyWallpaper(data, {
     scheduleAdaptTextToWallpaper(currentWallpaper, { immediate: adaptImmediate });
   }
 
-  const title = document.getElementById('wallpaper-title');
-  const desc = document.getElementById('wallpaper-desc');
-  const credit = document.getElementById('wallpaper-credit');
-  const info = document.getElementById('wallpaper-info');
-  renderWallpaperTitle(title, payload);
-  syncWallpaperInfoLink(info, payload);
-  if (desc) desc.textContent = payload.description || '';
-  if (credit) credit.textContent = payload.credit || '';
-  updateWallpaperNextButton();
+  renderWallpaperMetadata(payload);
 
   if (!skipPersist) onWallpaperChanged(currentWallpaper);
 }
@@ -1081,17 +1088,31 @@ function isSameWallpaperImage(a, b) {
   return !!(aKey && bKey && aKey === bKey);
 }
 
+function normalizeWallpaperAssetUrl(url) {
+  if (!url) return '';
+  try {
+    return new URL(url, document.baseURI).href;
+  } catch {
+    return url;
+  }
+}
+
+function isSameWallpaperAsset(a, b) {
+  if (!a || !b) return false;
+  if (a.type === 'gradient' || b.type === 'gradient') {
+    return a.type === b.type && Boolean(a.css) && a.css === b.css;
+  }
+  const aUrl = normalizeWallpaperAssetUrl(a.url);
+  const bUrl = normalizeWallpaperAssetUrl(b.url);
+  return Boolean(aUrl && bUrl && aUrl === bUrl);
+}
+
 function shouldSkipWallpaperRepaint(payload, previous = currentWallpaper) {
   if (!initialWallpaperRevealed) return false;
   const paintedUrl = getPaintedWallpaperUrl();
   if (!paintedUrl || paintedUrl === 'none') return false;
-  if (isSameWallpaperImage(previous, payload)) return true;
-  if (isSameWallpaperImage({ ...payload, url: paintedUrl }, payload)) return true;
-  if (payload.type === 'gradient') return false;
-  const url = payload.url || '';
-  if (url && paintedUrl.includes(url.split('?')[0].slice(-48))) return true;
-  const identity = getWallpaperImageIdentity(payload);
-  if (identity && identity.startsWith('OHR.') && paintedUrl.includes(identity.slice(0, 24))) return true;
+  if (isSameWallpaperAsset(previous, payload)) return true;
+  if (isSameWallpaperAsset({ url: paintedUrl }, payload)) return true;
   return false;
 }
 
@@ -1125,6 +1146,7 @@ export async function loadNextWallpaper() {
   const intent = beginWallpaperIntent();
   const previous = { ...currentWallpaper };
   const recent = loadRecentWallpaperIds();
+  const { fetchNextBingWallpaper } = await loadWallpaperFetchModule();
 
   if (preloadedWallpaper?.url
     && !isSameWallpaperImage(preloadedWallpaper, previous)
@@ -1151,6 +1173,7 @@ export async function loadNextWallpaper() {
 }
 
 async function applyBingFallbackWallpaper(previous = null, intent = wallpaperIntentRevision) {
+  const { fetchBingWallpaper } = await loadWallpaperFetchModule();
   for (let idx = 0; idx < BING_WALLPAPER_DAYS; idx += 1) {
     try {
       const data = await fetchBingWallpaper(idx);
@@ -1247,10 +1270,13 @@ async function applyWallpaperProgressive(data, intent) {
   if (!initialWallpaperRevealed && isBootWallpaperDisplayed(data)) return currentWallpaper;
   const source = normalizeWallpaperSource(data.source);
   let payload = data;
-  try {
-    payload = await ensureReachableWallpaper(data, { sourceHint: data.source });
-  } catch {
-    /* keep original payload */
+  if (source !== 'bing') {
+    try {
+      const { ensureReachableWallpaper } = await loadWallpaperFetchModule();
+      payload = await ensureReachableWallpaper(data, { sourceHint: data.source });
+    } catch {
+      /* keep original payload */
+    }
   }
   if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
 
@@ -1258,17 +1284,28 @@ async function applyWallpaperProgressive(data, intent) {
   const previewUrl = payload.previewUrl
     || (source === 'bing' ? buildBingPreviewUrl(hiResUrl) : '');
 
+  let previewPayload = null;
   if (previewUrl && previewUrl !== hiResUrl) {
-    const previewPayload = { ...payload, url: previewUrl };
-    if (!isSameWallpaperImage(getCurrentWallpaper(), previewPayload)) {
+    previewPayload = { ...payload, url: previewUrl };
+    try {
+      await loadImageElement(previewUrl, isRemoteWallpaperUrl(previewUrl));
+    } catch {
+      previewPayload = null;
+    }
+    if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
+    if (previewPayload && !isSameWallpaperAsset(getCurrentWallpaper(), previewPayload)) {
       applyWallpaper(previewPayload, { skipPersist: true, immediateBlur: false, skipAdapt: true });
     }
     try {
-      await loadImageElement(hiResUrl, /^https?:/i.test(hiResUrl));
+      await loadImageElement(hiResUrl, isRemoteWallpaperUrl(hiResUrl));
     } catch {
       if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
-      if (!isSameWallpaperImage(getCurrentWallpaper(), { ...payload, url: hiResUrl })) {
-        applyWallpaper({ ...payload, url: hiResUrl }, { adaptImmediate: true });
+      if (previewPayload) {
+        applyWallpaper(previewPayload, {
+          preserveUrl: true,
+          adaptImmediate: true,
+          immediateBlur: true,
+        });
       }
       return currentWallpaper;
     }
@@ -1276,13 +1313,14 @@ async function applyWallpaperProgressive(data, intent) {
 
   if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
   const finalPayload = { ...payload, url: hiResUrl, previewUrl };
-  if (!isSameWallpaperImage(getCurrentWallpaper(), finalPayload)) {
+  if (!isSameWallpaperAsset(getCurrentWallpaper(), finalPayload)) {
     applyWallpaper(finalPayload, { adaptImmediate: true });
   }
   return currentWallpaper;
 }
 
 async function fetchWallpaperParallel(intent) {
+  const { fetchBingWallpaper } = await loadWallpaperFetchModule();
   let lastError = new Error('Bing wallpaper failed');
   for (let idx = 0; idx < BING_WALLPAPER_DAYS; idx += 1) {
     try {
@@ -1300,6 +1338,7 @@ async function fetchWallpaperParallel(intent) {
 }
 
 async function loadWallpaperForSource(source, intent) {
+  const { fetchWallpaperData } = await loadWallpaperFetchModule();
   const data = await fetchWallpaperData(source);
   if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
   if (source === 'local' || source === 'library' || source === 'builtin') {
@@ -1327,6 +1366,10 @@ export async function loadWallpaper(source = 'bing', { force = false } = {}) {
 
   if (!force && isBootWallpaperStable(cached)) {
     currentWallpaper = { ...reconcileCuratedWallpaper(cached), type: cached.type || 'image' };
+    const img = getWallpaperImgEl();
+    if (window.__BOOT_WALLPAPER_PREVIEW && (!img?.complete || img.naturalWidth <= 0)) {
+      verifyCachedWallpaperInBackground(cached, source, intent);
+    }
     schedulePreloadNext(currentWallpaper);
     return currentWallpaper;
   }
@@ -1347,7 +1390,7 @@ export async function loadWallpaper(source = 'bing', { force = false } = {}) {
   }
 
   if (source === 'bing' && needsRefresh && !force) {
-    void fetchBingAndApplyInBackground(hasCache ? cached : null, intent);
+    scheduleBingRefreshAfterBoot(hasCache ? cached : null, intent);
     schedulePreloadNext(getCurrentWallpaper());
     return currentWallpaper;
   }
@@ -1384,83 +1427,15 @@ export async function applySelectedWallpaper(data) {
   return currentWallpaper;
 }
 
-export function initWallpaperInfo() {
-  const trigger = document.getElementById('wallpaper-info-btn');
-  const info = document.getElementById('wallpaper-info');
-  const zone = trigger?.closest('.wallpaper-info-zone');
-  if (!trigger || !info || !zone) return;
-
-  let hideTimer = null;
-  let pinned = false;
-
-  const show = () => {
-    clearTimeout(hideTimer);
-    info.hidden = false;
-    requestAnimationFrame(() => info.classList.add('visible'));
-    if (!preloadedWallpaper) schedulePreloadNext(getCurrentWallpaper());
-  };
-
-  const hide = () => {
-    if (pinned) return;
-    info.classList.remove('visible');
-    hideTimer = setTimeout(() => {
-      if (!pinned) info.hidden = true;
-    }, 250);
-  };
-
-  const scheduleHide = () => {
-    clearTimeout(hideTimer);
-    hideTimer = setTimeout(hide, 120);
-  };
-
-  zone.addEventListener('mouseenter', show);
-  zone.addEventListener('mouseleave', scheduleHide);
-  info.addEventListener('mouseenter', show);
-  info.addEventListener('mouseleave', scheduleHide);
-
-  info.addEventListener('click', (e) => {
-    if (e.target.closest('#wallpaper-next-btn')) return;
-    const url = info.dataset.linkUrl;
-    if (!url || !info.classList.contains('is-linkable')) return;
-    if (e.target.closest('a')) return;
-    e.preventDefault();
-    window.open(url, '_blank', 'noopener,noreferrer');
+export async function initWallpaperInfo() {
+  if (wallpaperInfoController) return wallpaperInfoController;
+  wallpaperInfoModulePromise ||= import('./wallpaper-info.js');
+  const { createWallpaperInfoController } = await wallpaperInfoModulePromise;
+  wallpaperInfoController = createWallpaperInfoController({
+    getCurrentWallpaper,
+    loadNextWallpaper,
+    schedulePreloadNext,
   });
-
-  const nextBtn = document.getElementById('wallpaper-next-btn');
-  nextBtn?.addEventListener('click', async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!shouldShowWallpaperNextButton()) return;
-    setNextButtonLoading(true);
-    try {
-      await loadNextWallpaper();
-    } catch {
-      /* keep current wallpaper on failure */
-    } finally {
-      setNextButtonLoading(false);
-    }
-  });
-
-  info.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return;
-    pinned = true;
-    show();
-  }, { passive: true });
-
-  document.addEventListener('mousedown', (e) => {
-    if (!pinned) return;
-    if (zone.contains(e.target) || info.contains(e.target)) return;
-    pinned = false;
-    hide();
-  }, { passive: true });
-
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && pinned) {
-      pinned = false;
-      hide();
-    }
-  }, { passive: true });
-
-  updateWallpaperNextButton();
+  wallpaperInfoController?.render(getCurrentWallpaper());
+  return wallpaperInfoController;
 }

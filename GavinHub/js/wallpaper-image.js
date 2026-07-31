@@ -3,12 +3,20 @@
 export const MIN_CACHE_WIDTH = 1280;
 const IMAGE_PROBE_TIMEOUT_MS = 8000;
 const ANALYSIS_MAX_WIDTH = 512;
+const FOCUS_EFFECT_MIN_WIDTH = 640;
+const FOCUS_EFFECT_MAX_WIDTH = 960;
 const APPS_EFFECT_MIN_WIDTH = 1280;
 const APPS_EFFECT_MAX_WIDTH = 1920;
 const APPS_EFFECT_BLUR_PX = 18;
+const FOCUS_EFFECT_BLUR_PX = 14;
+const BOOT_PREVIEW_MAX_WIDTH = 720;
+
+export function isRemoteWallpaperUrl(url) {
+  return /^(?:https?:)?\/\//i.test(url || '');
+}
 
 export function isLocalWallpaperUrl(url) {
-  return !!url && !/^https?:/i.test(url) && !url.startsWith('blob:') && !url.startsWith('data:');
+  return !!url && !isRemoteWallpaperUrl(url) && !url.startsWith('blob:') && !url.startsWith('data:');
 }
 
 export async function measureBlobWidth(blob) {
@@ -50,7 +58,7 @@ export function loadImageElement(url, crossOrigin, { minWidth = 400 } = {}) {
 
 /** 文字自适应专用：低分辨率解码，减少 UHD 全图解码开销 */
 export async function loadAnalysisSource(url, { maxWidth = ANALYSIS_MAX_WIDTH } = {}) {
-  const isLocal = url.startsWith('blob:') || url.startsWith('data:') || !/^https?:/i.test(url);
+  const isLocal = url.startsWith('blob:') || url.startsWith('data:') || !isRemoteWallpaperUrl(url);
   if (isLocal) {
     const img = await loadImageElement(url, false);
     return {
@@ -115,14 +123,14 @@ export async function loadImageForAnalysis(url) {
   return img;
 }
 
-function canvasToObjectUrl(canvas, quality) {
+function canvasToBlob(canvas, quality) {
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (!blob) {
         reject(new Error('preview encode failed'));
         return;
       }
-      resolve(URL.createObjectURL(blob));
+      resolve(blob);
     }, 'image/jpeg', quality);
   });
 }
@@ -152,25 +160,78 @@ async function renderWallpaperEffect(url, {
       width + overscan * 2,
       height + overscan * 2,
     );
-    return canvasToObjectUrl(canvas, quality);
+    return canvasToBlob(canvas, quality);
   } finally {
     loaded.dispose?.();
   }
 }
 
 export async function createWallpaperAppsPreview(url) {
-  const viewportWidth = Math.max(APPS_EFFECT_MIN_WIDTH, Math.ceil(window.innerWidth * 1.05));
-  const targetWidth = Math.min(APPS_EFFECT_MAX_WIDTH, viewportWidth);
-  const apps = await renderWallpaperEffect(url, {
+  const viewportWidth = Math.ceil(window.innerWidth * 1.05);
+  const targetWidth = viewportWidth <= APPS_EFFECT_MIN_WIDTH
+    ? APPS_EFFECT_MIN_WIDTH
+    : (viewportWidth <= 1600 ? 1600 : APPS_EFFECT_MAX_WIDTH);
+  return renderWallpaperEffect(url, {
     targetWidth,
     quality: 0.86,
     filter: `blur(${APPS_EFFECT_BLUR_PX}px) brightness(84%) saturate(112%)`,
     overscan: APPS_EFFECT_BLUR_PX * 2,
   });
-  return {
-    apps,
-    dispose() { URL.revokeObjectURL(apps); },
-  };
+}
+
+export async function createWallpaperFocusPreview(url) {
+  const viewportWidth = Math.max(FOCUS_EFFECT_MIN_WIDTH, Math.ceil(window.innerWidth * 0.72));
+  const targetWidth = Math.min(FOCUS_EFFECT_MAX_WIDTH, viewportWidth);
+  return renderWallpaperEffect(url, {
+    targetWidth,
+    quality: 0.74,
+    filter: `blur(${FOCUS_EFFECT_BLUR_PX}px) brightness(82%) saturate(108%)`,
+    overscan: FOCUS_EFFECT_BLUR_PX * 2,
+  });
+}
+
+export function getWallpaperEffectVariant(kind) {
+  if (kind === 'focus') {
+    const width = Math.min(
+      FOCUS_EFFECT_MAX_WIDTH,
+      Math.max(FOCUS_EFFECT_MIN_WIDTH, Math.ceil(window.innerWidth * 0.72)),
+    );
+    return `focus-v2-${width}`;
+  }
+  const viewportWidth = Math.ceil(window.innerWidth * 1.05);
+  const width = viewportWidth <= APPS_EFFECT_MIN_WIDTH
+    ? APPS_EFFECT_MIN_WIDTH
+    : (viewportWidth <= 1600 ? 1600 : APPS_EFFECT_MAX_WIDTH);
+  return `apps-v2-${width}`;
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+    reader.onerror = () => reject(reader.error || new Error('preview read failed'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+export async function createWallpaperBootPreview(url) {
+  const loaded = await loadAnalysisSource(url, { maxWidth: BOOT_PREVIEW_MAX_WIDTH });
+  try {
+    const width = Math.min(BOOT_PREVIEW_MAX_WIDTH, loaded.width);
+    const height = Math.max(1, Math.round(width * loaded.height / loaded.width));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d', { alpha: false });
+    if (!ctx) return '';
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(loaded.source, 0, 0, width, height);
+    const blob = await canvasToBlob(canvas, 0.72);
+    return blobToDataUrl(blob);
+  } finally {
+    loaded.dispose?.();
+  }
 }
 
 export async function isWallpaperUrlReachable(url, timeoutMs = IMAGE_PROBE_TIMEOUT_MS) {
