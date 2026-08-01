@@ -75,6 +75,51 @@ async function sampleActionFrames(page, selector, duration = 760) {
   }), { actionSelector: selector, sampleDuration: duration });
 }
 
+async function sampleWallpaperSwapFrames(page, duration = 1100) {
+  return page.evaluate(async (sampleDuration) => {
+    const wallpaper = await import('./js/wallpaper.js');
+    const { loadImageElement } = await import('./js/wallpaper-image.js');
+    const swapUrl = `assets/default-wallpaper.jpg?perf-swap=${Date.now()}`;
+    await loadImageElement(swapUrl, false);
+    return new Promise((resolve) => {
+      const gaps = [];
+      let startedAt = 0;
+      let previous = 0;
+      const frame = (now) => {
+        if (!startedAt) {
+          startedAt = now;
+          previous = now;
+          wallpaper.applyWallpaper({
+            ...wallpaper.getCurrentWallpaper(),
+            id: `perf-wallpaper-${Date.now()}`,
+            source: 'local',
+            url: swapUrl,
+          }, {
+            forceRepaint: true,
+            preserveUrl: true,
+            skipPersist: true,
+          });
+        } else {
+          gaps.push(now - previous);
+          previous = now;
+        }
+        if (now - startedAt < sampleDuration) requestAnimationFrame(frame);
+        else {
+          const sorted = [...gaps].sort((a, b) => a - b);
+          resolve({
+            frames: gaps.length,
+            meanGapMs: Number((gaps.reduce((sum, gap) => sum + gap, 0) / Math.max(1, gaps.length)).toFixed(2)),
+            p95GapMs: Number((sorted[Math.floor(sorted.length * 0.95)] || 0).toFixed(2)),
+            maxGapMs: Number(Math.max(0, ...gaps).toFixed(2)),
+            slowFrames: gaps.filter((gap) => gap > 34).length,
+          });
+        }
+      };
+      requestAnimationFrame(frame);
+    });
+  }, duration);
+}
+
 const server = await startServer();
 const { port } = server.address();
 const browser = await chromium.launch({ headless: true });
@@ -134,15 +179,16 @@ try {
     await page.locator('#search-input').blur();
     await page.waitForTimeout(180);
     const focus = await sampleActionFrames(page, '#search-input', 1100);
+    const wallpaperSwap = await sampleWallpaperSwapFrames(page);
     const observer = await page.evaluate(() => ({
       cls: Number(window.__perfAudit.layoutShift.toFixed(4)),
       longTasks: window.__perfAudit.longTasks.length,
       maxLongTaskMs: Math.round(Math.max(0, ...window.__perfAudit.longTasks)),
     }));
 
-    console.log(`PERF PROFILE ${profile.name}: ${JSON.stringify({ startup, observer, frames: { toApps, toHome, focus } })}`);
+    console.log(`PERF PROFILE ${profile.name}: ${JSON.stringify({ startup, observer, frames: { toApps, toHome, focus, wallpaperSwap } })}`);
 
-    for (const [name, sample] of Object.entries({ toApps, toHome, focus })) {
+    for (const [name, sample] of Object.entries({ toApps, toHome, focus, wallpaperSwap })) {
       assert(sample.maxGapMs < 70, `${profile.name} ${name} animation stalled: ${JSON.stringify(sample)}`);
       assert(sample.p95GapMs < 55, `${profile.name} ${name} p95 frame gap is too high: ${JSON.stringify(sample)}`);
       assert(sample.slowFrames <= 8, `${profile.name} ${name} has too many slow frames: ${JSON.stringify(sample)}`);
@@ -152,7 +198,7 @@ try {
     assert(startup.appReadyMs > 0 && startup.appReadyMs < 800,
       `${profile.name} app-ready exceeded budget: ${startup.appReadyMs}ms`);
 
-    reports.push({ profile: profile.name, startup, observer, frames: { toApps, toHome, focus } });
+    reports.push({ profile: profile.name, startup, observer, frames: { toApps, toHome, focus, wallpaperSwap } });
     await page.close();
   }
 

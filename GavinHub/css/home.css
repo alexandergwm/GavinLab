@@ -364,6 +364,22 @@ body[data-text-theme='on-light'] .search-engine-badge.has-icon:hover .search-bad
   padding-right: 6px;
 }
 
+body.search-focused .search-input,
+.search-box:focus-within .search-input {
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+  caret-color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.34);
+  transition:
+    text-align 0.24s ease,
+    padding 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+body.search-focused .search-input::placeholder,
+.search-box:focus-within .search-input::placeholder {
+  color: rgba(255, 255, 255, 0.58);
+}
+
 .search-submit {
   flex-shrink: 0;
   display: inline-flex;

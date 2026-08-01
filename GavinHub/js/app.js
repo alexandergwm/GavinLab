@@ -272,27 +272,8 @@ function initContextMenu() {
 
 function prewarmSecondaryFeatures() {
   let modulesStarted = false;
-  let effectsStarted = false;
   let cancelModuleIdle = null;
-  let cancelEffectsIdle = null;
   let moduleTimer = 0;
-  let effectsTimer = 0;
-  const dock = document.getElementById('dock');
-
-  const prewarmEffects = () => {
-    if (document.hidden) return;
-    cancelEffectsIdle = runWhenIdle(
-      () => wallpaper?.prewarmWallpaperEffects?.(),
-      { timeout: 500, fallbackDelay: 60 },
-    );
-  };
-  const onDockIntent = (event) => {
-    if (!event.target.closest?.('.dock-tab[data-page="apps"]')) return;
-    window.clearTimeout(effectsTimer);
-    cancelEffectsIdle?.();
-    void wallpaper?.prewarmWallpaperEffects?.();
-    dock?.removeEventListener('pointerover', onDockIntent);
-  };
 
   const startModules = () => {
     if (modulesStarted) return;
@@ -304,30 +285,18 @@ function prewarmSecondaryFeatures() {
           preloadPageModule('apps', getPageContext()),
           wallpaper?.initWallpaperInfo?.(),
         ]),
-        { timeout: 500, fallbackDelay: 80 },
+        { timeout: 2400, fallbackDelay: 240 },
       );
-    }, 180);
+    }, 1400);
   };
-  const startEffects = () => {
-    if (effectsStarted) return;
-    effectsStarted = true;
-    effectsTimer = window.setTimeout(prewarmEffects, 80);
-  };
-  dock?.addEventListener('pointerover', onDockIntent, { passive: true });
 
-  if (document.body.classList.contains('boot-ui-settled')) startModules();
-  else document.addEventListener('boot-ui-settled', startModules, { once: true });
-  if (document.body.classList.contains('wallpaper-effects-ready')) startEffects();
-  else document.addEventListener('wallpaper-effects-ready', startEffects, { once: true });
+  if (document.body.classList.contains('boot-glass-stable')) startModules();
+  else document.addEventListener('boot-glass-stable', startModules, { once: true });
 
   window.addEventListener('pagehide', () => {
     window.clearTimeout(moduleTimer);
-    window.clearTimeout(effectsTimer);
-    dock?.removeEventListener('pointerover', onDockIntent);
-    document.removeEventListener('boot-ui-settled', startModules);
-    document.removeEventListener('wallpaper-effects-ready', startEffects);
+    document.removeEventListener('boot-glass-stable', startModules);
     cancelModuleIdle?.();
-    cancelEffectsIdle?.();
   }, { once: true });
 }
 

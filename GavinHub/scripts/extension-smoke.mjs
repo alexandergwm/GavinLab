@@ -34,6 +34,16 @@ const context = await chromium.launchPersistentContext(userDataDir, {
 });
 
 try {
+  await context.addInitScript(() => {
+    window.__extensionLongTasks = [];
+    try {
+      new PerformanceObserver((list) => {
+        window.__extensionLongTasks.push(...list.getEntries().map((entry) => entry.duration));
+      }).observe({ type: 'longtask', buffered: true });
+    } catch {
+      /* Long-task observation is optional on older Chromium builds. */
+    }
+  });
   await context.route('https://**/*', (route) => route.abort());
   const worker = context.serviceWorkers()[0]
     || await context.waitForEvent('serviceworker', { timeout: 8000 });
@@ -60,6 +70,32 @@ try {
     null,
     { timeout: 8000 },
   );
+  const searchInput = indexPage.locator('#search-input');
+  await searchInput.fill('中文输入可见');
+  const inputPaint = await searchInput.evaluate((input) => {
+    const style = getComputedStyle(input);
+    return {
+      value: input.value,
+      color: style.color,
+      textFillColor: style.webkitTextFillColor,
+      caretColor: style.caretColor,
+      opacity: style.opacity,
+      longTasks: window.__extensionLongTasks || [],
+    };
+  });
+  if (
+    inputPaint.value !== '中文输入可见'
+    || inputPaint.color !== 'rgb(255, 255, 255)'
+    || inputPaint.textFillColor !== 'rgb(255, 255, 255)'
+    || inputPaint.caretColor !== 'rgb(255, 255, 255)'
+    || inputPaint.opacity !== '1'
+  ) {
+    throw new Error(`extension search text is not visible: ${JSON.stringify(inputPaint)}`);
+  }
+  if (inputPaint.longTasks.some((duration) => duration >= 100)) {
+    throw new Error(`extension startup stalled: ${JSON.stringify(inputPaint.longTasks)}`);
+  }
+  await searchInput.fill('');
   const calculatorResults = await indexPage.evaluate(async () => {
     const { evaluateCalc } = await import('./js/smart-input.js');
     return ['1+2*3', '50%*200', '-2^2', '2^-2', '1/0']

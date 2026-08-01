@@ -180,12 +180,10 @@ body {
 
 .wallpaper-preview {
   position: absolute;
-  inset: -10px;
+  inset: 0;
   background-position: center;
   background-size: cover;
   opacity: 1;
-  transform: scale(1.015);
-  filter: blur(4px);
   transition: opacity 0.42s var(--boot-reveal-ease);
 }
 
@@ -224,6 +222,10 @@ body {
   contain: strict;
   image-rendering: auto;
   will-change: opacity;
+}
+
+.wallpaper-blur.wallpaper-effect-live-filter {
+  filter: blur(18px) brightness(84%) saturate(112%);
 }
 
 body.page-blur-active .wallpaper-blur,
@@ -328,6 +330,10 @@ body.search-focused:not(.page-blur-active) .scene-vignette {
   backface-visibility: hidden;
   contain: strict;
   will-change: opacity;
+}
+
+.search-focus-overlay.wallpaper-effect-live-filter {
+  filter: blur(14px) brightness(82%) saturate(108%);
 }
 
 body.search-focused:not(.page-apps-active) .search-focus-overlay {

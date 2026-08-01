@@ -1552,6 +1552,24 @@ try {
   const search = page.locator('#search-input');
   await search.focus();
   await search.fill('1+2*3');
+  const inputPaint = await search.evaluate((input) => {
+    const style = getComputedStyle(input);
+    return {
+      value: input.value,
+      color: style.color,
+      textFillColor: style.webkitTextFillColor,
+      caretColor: style.caretColor,
+      opacity: style.opacity,
+    };
+  });
+  assert(
+    inputPaint.value === '1+2*3'
+      && inputPaint.color === 'rgb(255, 255, 255)'
+      && inputPaint.textFillColor === 'rgb(255, 255, 255)'
+      && inputPaint.caretColor === 'rgb(255, 255, 255)'
+      && inputPaint.opacity === '1',
+    `typed search text must remain visible in Edge compositing: ${JSON.stringify(inputPaint)}`,
+  );
   await page.waitForTimeout(500);
   const suggestionState = await page.evaluate(() => {
     const list = document.querySelector('#search-suggestions');
@@ -1734,8 +1752,8 @@ try {
       && previewBoot.previewReady
       && !previewBoot.previewHidden
       && previewBoot.previewBackground.includes('data:image/jpeg')
-      && previewBoot.src.includes('slow-preview.jpg'),
-    `a cached startup frame should reveal immediately without switching images: ${JSON.stringify(previewBoot)}`,
+      && previewBoot.src === '',
+    `a cached preview should reveal immediately before the full image starts loading: ${JSON.stringify(previewBoot)}`,
   );
   await page.unroute('https://invalid.example.test/slow-preview.jpg', slowPreviewRoute);
   await page.evaluate(() => {

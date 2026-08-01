@@ -13,7 +13,36 @@ export function createWallpaperEffects({
   const previewCache = new Map();
   const previewRequests = new Map();
   const activeLayerKeys = new Map();
+  const deferredWork = new Map();
   let generation = 0;
+
+  function deferHeavyWork(workKey, callback, delayMs = 420) {
+    deferredWork.get(workKey)?.();
+    let timerId = 0;
+    let idleId = null;
+    let cancelled = false;
+    const cancel = () => {
+      cancelled = true;
+      window.clearTimeout(timerId);
+      if (idleId != null && 'cancelIdleCallback' in window) cancelIdleCallback(idleId);
+      if (deferredWork.get(workKey) === cancel) deferredWork.delete(workKey);
+    };
+    deferredWork.set(workKey, cancel);
+    timerId = window.setTimeout(() => {
+      timerId = 0;
+      const run = () => {
+        idleId = null;
+        if (deferredWork.get(workKey) === cancel) deferredWork.delete(workKey);
+        if (!cancelled) callback();
+      };
+      if ('requestIdleCallback' in window) {
+        idleId = requestIdleCallback(run, { timeout: 1600 });
+      } else {
+        timerId = window.setTimeout(run, 120);
+      }
+    }, delayMs);
+    return cancel;
+  }
 
   function rememberPreview(key, blob) {
     if (!blob?.size) return null;
@@ -100,10 +129,11 @@ export function createWallpaperEffects({
     return nextKey;
   }
 
-  function applyLayer(layer, value) {
+  function applyLayer(layer, value, { liveFilter = false } = {}) {
     if (!layer) return;
     layer.style.backgroundImage = value || '';
     layer.style.backgroundColor = '';
+    layer.classList.toggle('wallpaper-effect-live-filter', liveFilter);
   }
 
   async function syncLayer(layerId, kind, data = {}) {
@@ -128,22 +158,39 @@ export function createWallpaperEffects({
       return true;
     }
 
-    const request = requestPreview(kind, data);
     const fallbackPreview = kind === 'apps'
       ? previewCache.get(`focus:${identity}`)
       : null;
-    if (fallbackPreview) {
-      applyLayer(layer, `url("${fallbackPreview.url}")`);
-      void request.full.then((fullPreview) => {
-        if (!fullPreview || activeLayerKeys.get(layerId) !== expectedKey) return;
-        applyLayer(layer, `url("${fullPreview.url}")`);
+    if (kind === 'apps') {
+      applyLayer(layer, `url("${fallbackPreview?.url || url}")`, {
+        liveFilter: !fallbackPreview,
+      });
+      deferHeavyWork(`${layerId}:${kind}`, () => {
+        const request = requestPreview(kind, data);
+        void request.full.then((fullPreview) => {
+          if (!fullPreview || activeLayerKeys.get(layerId) !== expectedKey) return;
+          applyLayer(layer, `url("${fullPreview.url}")`);
+        });
       });
       return true;
     }
 
+    if (kind === 'focus' && data.defer) {
+      applyLayer(layer, `url("${url}")`, { liveFilter: true });
+      deferHeavyWork(`${layerId}:${kind}`, () => {
+        const request = requestPreview(kind, data);
+        void request.full.then((fullPreview) => {
+          if (!fullPreview || activeLayerKeys.get(layerId) !== expectedKey) return;
+          applyLayer(layer, `url("${fullPreview.url}")`);
+        });
+      });
+      return true;
+    }
+
+    const request = requestPreview(kind, data);
     const preview = await request.bounded;
     if (activeLayerKeys.get(layerId) !== expectedKey) return false;
-    applyLayer(layer, `url("${preview?.url || url}")`);
+    applyLayer(layer, `url("${preview?.url || url}")`, { liveFilter: !preview });
 
     if (!preview) {
       void request.full.then((latePreview) => {
@@ -169,6 +216,8 @@ export function createWallpaperEffects({
 
   function dispose() {
     generation += 1;
+    for (const cancel of deferredWork.values()) cancel();
+    deferredWork.clear();
     for (const preview of previewCache.values()) preview.dispose?.();
     previewCache.clear();
     previewRequests.clear();

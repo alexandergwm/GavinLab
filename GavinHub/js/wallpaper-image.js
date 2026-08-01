@@ -58,18 +58,12 @@ export function loadImageElement(url, crossOrigin, { minWidth = 400 } = {}) {
 
 /** 文字自适应专用：低分辨率解码，减少 UHD 全图解码开销 */
 export async function loadAnalysisSource(url, { maxWidth = ANALYSIS_MAX_WIDTH } = {}) {
-  const isLocal = url.startsWith('blob:') || url.startsWith('data:') || !isRemoteWallpaperUrl(url);
-  if (isLocal) {
-    const img = await loadImageElement(url, false);
-    return {
-      source: img,
-      width: img.naturalWidth || img.width,
-      height: img.naturalHeight || img.height,
-    };
-  }
-
   try {
-    const res = await fetch(url, { mode: 'cors', cache: 'force-cache' });
+    const remote = isRemoteWallpaperUrl(url);
+    const res = await fetch(url, {
+      mode: remote ? 'cors' : 'same-origin',
+      cache: 'force-cache',
+    });
     if (!res.ok) throw new Error('fetch failed');
     const blob = await res.blob();
     if (typeof createImageBitmap === 'function') {
@@ -96,7 +90,7 @@ export async function loadAnalysisSource(url, { maxWidth = ANALYSIS_MAX_WIDTH } 
       URL.revokeObjectURL(objectUrl);
     }
   } catch {
-    const img = await loadImageElement(url, true);
+    const img = await loadImageElement(url, isRemoteWallpaperUrl(url));
     return {
       source: img,
       width: img.naturalWidth || img.width,

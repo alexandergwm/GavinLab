@@ -192,11 +192,25 @@ try {
     ` });
 
     await capture(page, profile.name, 'home');
+    await page.locator('#search-input').fill('中文输入可见');
+    await capture(page, profile.name, 'typing');
+    await page.locator('#search-input').fill('');
 
     await page.locator('.dock-tab[data-page="apps"]').click();
     await page.waitForFunction(() => document.body.classList.contains('page-apps-active'));
     await page.waitForSelector('.page-apps.active .shortcut-item');
-    const blurWidth = await measureBackgroundWidth(page, 'wallpaper-blur');
+    const initialAppsBackground = await page.locator('#wallpaper-blur').evaluate(
+      (layer) => layer.style.backgroundImage,
+    );
+    let blurWidth = await measureBackgroundWidth(page, 'wallpaper-blur');
+    assert(blurWidth >= 640, `${profile.name} apps glass has no immediate fallback: ${blurWidth}px`);
+    if (blurWidth < 1280) {
+      await page.waitForFunction((initial) => {
+        const value = document.getElementById('wallpaper-blur')?.style.backgroundImage || '';
+        return value.includes('blob:') && value !== initial;
+      }, initialAppsBackground, { timeout: 3200 });
+      blurWidth = await measureBackgroundWidth(page, 'wallpaper-blur');
+    }
     assert(blurWidth >= 1280, `${profile.name} apps glass is low resolution: ${blurWidth}px`);
     await capture(page, profile.name, 'apps');
 

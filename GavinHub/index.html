@@ -32,8 +32,8 @@
     html, body { background: #323232 !important; }
     #wallpaper { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
     #wallpaper-preview {
-      position: absolute; inset: -10px; background-size: cover; background-position: center;
-      opacity: 1; transform: scale(1.015); filter: blur(4px);
+      position: absolute; inset: 0; background-size: cover; background-position: center;
+      opacity: 1;
       transition: opacity 0.42s cubic-bezier(0.25, 0.8, 0.25, 1);
     }
     #wallpaper-preview.is-hidden { opacity: 0; }
@@ -55,6 +55,7 @@
     var theme = 'on-dark';
     var tone = 'light';
     var preloadUrl = '';
+    var hasBootPreview = false;
     var hasUsableWallpaper = false;
     try {
       var raw = localStorage.getItem('startpage-wallpaper-last');
@@ -66,6 +67,18 @@
         }
         if (meta && meta.type !== 'gradient' && meta.url && !/^blob:/i.test(meta.url)) {
           preloadUrl = meta.url;
+          var bootKey = meta.cacheKey || meta.id || meta.dateKey || (meta.url || '').slice(-48) || 'cached';
+          var previewRaw = localStorage.getItem('startpage-wallpaper-boot-preview');
+          if (previewRaw) {
+            var previewMeta = JSON.parse(previewRaw);
+            hasBootPreview = !!(
+              previewMeta
+              && previewMeta.version === 2
+              && previewMeta.key === bootKey
+              && previewMeta.dataUrl
+            );
+          }
+          if (meta.url === 'assets/default-wallpaper.jpg') hasBootPreview = true;
         }
         hasUsableWallpaper = !!(
           (meta && meta.type === 'gradient' && meta.css)
@@ -74,7 +87,7 @@
       }
       window.__BOOT_WALLPAPER_READY = hasUsableWallpaper;
     } catch (e) { window.__BOOT_WALLPAPER_READY = false; }
-    if (preloadUrl) {
+    if (preloadUrl && !hasBootPreview) {
       try {
         window.__BOOT_WALLPAPER_URL = preloadUrl;
         var link = document.createElement('link');
@@ -98,7 +111,7 @@
 <body data-text-theme="on-dark" data-text-tone="light" class="boot-awakening">
   <div id="wallpaper" class="wallpaper" aria-hidden="true">
     <div id="wallpaper-preview" class="wallpaper-preview"></div>
-    <img id="wallpaper-img" class="wallpaper-img" alt="" decoding="async" fetchpriority="high" />
+    <img id="wallpaper-img" class="wallpaper-img" alt="" decoding="async" />
   </div>
   <script>
   (function () {
@@ -158,6 +171,7 @@
       var awakenScheduled = false;
       var fallbackStarted = url === DEFAULT;
       var fallbackTimer = 0;
+      var fullImageQueued = false;
       function settleBootUi() {
         if (settled) return;
         settled = true;
@@ -221,11 +235,29 @@
       }
       img.addEventListener('load', decodeAndAwaken);
       img.addEventListener('error', useFallback);
-      img.src = url;
-      if (img.complete && img.naturalWidth > 0) decodeAndAwaken();
+      function startFullImageLoad() {
+        if (img.getAttribute('src')) return;
+        img.src = url;
+        if (img.complete && img.naturalWidth > 0) decodeAndAwaken();
+      }
+      function queueFullImageLoad() {
+        if (fullImageQueued) return;
+        fullImageQueued = true;
+        window.setTimeout(function () {
+          if ('requestIdleCallback' in window) {
+            requestIdleCallback(startFullImageLoad, { timeout: 1400 });
+          } else {
+            window.setTimeout(startFullImageLoad, 120);
+          }
+        }, 260);
+      }
       if (previewData) {
         requestAnimationFrame(function () { requestAnimationFrame(settleBootUi); });
+        if (document.body.classList.contains('boot-glass-stable')) queueFullImageLoad();
+        else document.addEventListener('boot-glass-stable', queueFullImageLoad, { once: true });
+        window.setTimeout(queueFullImageLoad, 900);
       } else {
+        startFullImageLoad();
         fallbackTimer = window.setTimeout(useFallback, 520);
       }
     } catch (e2) {

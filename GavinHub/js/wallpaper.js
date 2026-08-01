@@ -91,6 +91,10 @@ let preloadIdleHandle = null;
 let preloadDelayTimer = 0;
 let preloadStartListener = null;
 let preloadGeneration = 0;
+let maintenanceTimer = 0;
+let maintenanceIdleHandle = null;
+let maintenanceStartListener = null;
+let maintenanceGeneration = 0;
 let wallpaperIntentRevision = 0;
 let wallpaperPaintRevision = 0;
 let bootPreviewGeneration = 0;
@@ -115,9 +119,16 @@ const wallpaperEffects = createWallpaperEffects({
 
 window.addEventListener('pagehide', () => {
   window.clearTimeout(preloadDelayTimer);
+  window.clearTimeout(maintenanceTimer);
+  window.clearTimeout(adaptDebounceTimer);
   if (preloadIdleHandle != null && 'cancelIdleCallback' in window) cancelIdleCallback(preloadIdleHandle);
   else if (preloadIdleHandle != null) window.clearTimeout(preloadIdleHandle);
+  if (maintenanceIdleHandle != null && 'cancelIdleCallback' in window) cancelIdleCallback(maintenanceIdleHandle);
+  else if (maintenanceIdleHandle != null) window.clearTimeout(maintenanceIdleHandle);
+  if (adaptIdleHandle != null && 'cancelIdleCallback' in window) cancelIdleCallback(adaptIdleHandle);
+  else if (adaptIdleHandle != null) window.clearTimeout(adaptIdleHandle);
   if (preloadStartListener) document.removeEventListener('boot-glass-stable', preloadStartListener);
+  if (maintenanceStartListener) document.removeEventListener('boot-glass-stable', maintenanceStartListener);
   wallpaperEffects.dispose();
   blobUrlCache.forEach((url) => URL.revokeObjectURL(url));
   blobUrlCache.clear();
@@ -316,11 +327,11 @@ function scheduleBingRefreshAfterBoot(fallbackMeta, intent) {
       }
       void fetchBingAndApplyInBackground(fallbackMeta, intent);
     };
-    if ('requestIdleCallback' in window) {
-      requestIdleCallback(run, { timeout: 900 });
-    } else {
-      window.setTimeout(run, 80);
-    }
+    window.setTimeout(() => {
+      if (!isWallpaperIntentCurrent(intent) || document.hidden) return;
+      if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 2400 });
+      else window.setTimeout(run, 160);
+    }, 1200);
   };
   if (document.body.classList.contains('boot-glass-stable')) start();
   else document.addEventListener('boot-glass-stable', start, { once: true });
@@ -546,22 +557,32 @@ function getBlurWallpaperUrl(data) {
   return data?.url || '';
 }
 
-function getWallpaperEffectPayload(data = currentWallpaper) {
+function getMatchingBootPreview(data) {
+  return window.__BOOT_WALLPAPER_PREVIEW
+    && window.__BOOT_WALLPAPER_PREVIEW_KEY === getWallpaperCacheKey(data)
+    ? window.__BOOT_WALLPAPER_PREVIEW
+    : '';
+}
+
+function getWallpaperEffectPayload(data = currentWallpaper, { preferBootPreview = false } = {}) {
   if (!data) return null;
   if (data.type === 'gradient' && data.css) {
     return { type: 'gradient', css: data.css };
   }
   return {
     type: 'image',
-    url: getBlurWallpaperUrl(data),
+    url: (preferBootPreview && getMatchingBootPreview(data)) || getBlurWallpaperUrl(data),
     effectKey: getWallpaperCacheKey(data) || getWallpaperId(data),
   };
 }
 
 /** 搜索聚焦使用轻量预模糊图，避免开场期间处理整张高清壁纸。 */
-function syncFocusWallpaperLayer(data = currentWallpaper) {
+function syncFocusWallpaperLayer(data = currentWallpaper, { defer = false } = {}) {
   if (!data) return Promise.resolve(false);
-  return wallpaperEffects.sync(getWallpaperEffectPayload(data));
+  return wallpaperEffects.sync({
+    ...getWallpaperEffectPayload(data, { preferBootPreview: true }),
+    defer,
+  });
 }
 
 /** 第二页高清毛玻璃可在空闲期预热，也可作为进入页面的前置条件。 */
@@ -601,8 +622,8 @@ export function syncSearchFocusWallpaper() {
   );
 }
 
-function scheduleBlurWallpaper(data) {
-  const focusReady = trackWallpaperEffects(syncFocusWallpaperLayer(data));
+function scheduleBlurWallpaper(data, { defer = false } = {}) {
+  const focusReady = trackWallpaperEffects(syncFocusWallpaperLayer(data, { defer }));
   if (document.body.classList.contains('page-apps-active')) {
     wallpaperAppsReadyPromise = syncBlurWallpaperLayer(data);
   }
@@ -635,8 +656,10 @@ function dropBlobUrlForCacheKey(cacheKey) {
   blobUrlCache.delete(cacheKey);
 }
 
-async function persistWallpaperCache(data) {
-  const meta = saveLastWallpaperMeta(data);
+async function persistWallpaperCache(data, { saveMeta = true } = {}) {
+  const meta = saveMeta
+    ? saveLastWallpaperMeta(data)
+    : { ...data, cacheKey: data.cacheKey || getWallpaperCacheKey(data) };
   if (!meta || data.type === 'gradient' || !data.url || data.url.startsWith('blob:')) return meta;
 
   const cacheKey = meta.cacheKey;
@@ -792,9 +815,51 @@ function onWallpaperChanged(data) {
   const nextId = getWallpaperId(data);
   if (prevId !== nextId) touchWallpaperRotation();
   recordRecentWallpaper(data);
-  void persistWallpaperCache(data);
-  void persistBootWallpaperPreview(data);
-  schedulePreloadNext(data);
+  const meta = saveLastWallpaperMeta(data);
+  if (meta && !data.url?.startsWith('blob:')) scheduleWallpaperMaintenance(meta);
+}
+
+function scheduleWallpaperMaintenance(data) {
+  const generation = ++maintenanceGeneration;
+  window.clearTimeout(maintenanceTimer);
+  if (maintenanceIdleHandle != null && 'cancelIdleCallback' in window) {
+    cancelIdleCallback(maintenanceIdleHandle);
+  } else if (maintenanceIdleHandle != null) {
+    window.clearTimeout(maintenanceIdleHandle);
+  }
+  maintenanceIdleHandle = null;
+  if (maintenanceStartListener) {
+    document.removeEventListener('boot-glass-stable', maintenanceStartListener);
+    maintenanceStartListener = null;
+  }
+  if (!canRunBackgroundImageWork()) return;
+
+  const run = async () => {
+    maintenanceIdleHandle = null;
+    if (generation !== maintenanceGeneration || !canRunBackgroundImageWork()) return;
+    await persistBootWallpaperPreview(data);
+    if (generation !== maintenanceGeneration || !canRunBackgroundImageWork()) return;
+    await persistWallpaperCache(data, { saveMeta: false });
+    if (generation !== maintenanceGeneration || !canRunBackgroundImageWork()) return;
+    schedulePreloadNext(data);
+  };
+  const queue = () => {
+    maintenanceStartListener = null;
+    maintenanceTimer = window.setTimeout(() => {
+      maintenanceTimer = 0;
+      if (generation !== maintenanceGeneration || !canRunBackgroundImageWork()) return;
+      if ('requestIdleCallback' in window) {
+        maintenanceIdleHandle = requestIdleCallback(run, { timeout: 5000 });
+      } else {
+        maintenanceIdleHandle = window.setTimeout(run, 240);
+      }
+    }, 2200);
+  };
+  if (document.body.classList.contains('boot-glass-stable')) queue();
+  else {
+    maintenanceStartListener = queue;
+    document.addEventListener('boot-glass-stable', queue, { once: true });
+  }
 }
 
 function schedulePreloadNext(data) {
@@ -827,7 +892,7 @@ function schedulePreloadNext(data) {
       } else {
         preloadIdleHandle = setTimeout(run, 240);
       }
-    }, 700);
+    }, 5000);
   };
   if (document.body.classList.contains('boot-glass-stable')) queue();
   else {
@@ -920,19 +985,30 @@ async function applyWallpaperSwitch(data) {
 
 let adaptGeneration = 0;
 let adaptDebounceTimer = null;
+let adaptIdleHandle = null;
 let lastAnalyzedWallpaperKey = '';
 
 function scheduleAdaptTextToWallpaper(data, { immediate = false } = {}) {
-  clearTimeout(adaptDebounceTimer);
+  window.clearTimeout(adaptDebounceTimer);
   adaptDebounceTimer = null;
-  if (immediate) {
-    adaptTextToWallpaper(data);
-    return;
+  if (adaptIdleHandle != null && 'cancelIdleCallback' in window) {
+    cancelIdleCallback(adaptIdleHandle);
+  } else if (adaptIdleHandle != null) {
+    window.clearTimeout(adaptIdleHandle);
   }
-  adaptDebounceTimer = setTimeout(() => {
+  adaptIdleHandle = null;
+  adaptDebounceTimer = window.setTimeout(() => {
     adaptDebounceTimer = null;
-    adaptTextToWallpaper(data);
-  }, 120);
+    const run = () => {
+      adaptIdleHandle = null;
+      void adaptTextToWallpaper(data);
+    };
+    if ('requestIdleCallback' in window) {
+      adaptIdleHandle = requestIdleCallback(run, { timeout: immediate ? 900 : 1600 });
+    } else {
+      adaptIdleHandle = window.setTimeout(run, immediate ? 80 : 160);
+    }
+  }, immediate ? 180 : 680);
 }
 
 function applyTextTheme(analysis) {
@@ -1041,12 +1117,17 @@ export function applyWallpaper(data, {
   const nextWallpaperId = getWallpaperId(currentWallpaper);
   if (nextWallpaperId && nextWallpaperId !== prevWallpaperId) {
     lastAnalyzedWallpaperKey = '';
+    if (!payload.textTheme && payload.type !== 'gradient') {
+      applyTextTheme({ theme: 'on-dark', min: 80 });
+    }
   }
   const wallpaper = document.getElementById('wallpaper');
   if (!skipRepaint) {
     setBackgroundImage(wallpaper, currentWallpaper, { instantReveal, force: forceRepaint });
   }
-  scheduleBlurWallpaper(currentWallpaper);
+  scheduleBlurWallpaper(currentWallpaper, {
+    defer: initialWallpaperRevealed && Boolean(nextWallpaperId && nextWallpaperId !== prevWallpaperId),
+  });
   if (!skipAdapt) {
     scheduleAdaptTextToWallpaper(currentWallpaper, { immediate: adaptImmediate });
   }
@@ -1422,6 +1503,13 @@ export async function loadWallpaper(source = 'bing', { force = false } = {}) {
 
 export async function applySelectedWallpaper(data) {
   beginWallpaperIntent();
+  if (data?.type !== 'gradient' && data?.url) {
+    try {
+      await loadImageElement(data.url, isRemoteWallpaperUrl(data.url));
+    } catch {
+      /* apply below so the existing image error fallback remains authoritative */
+    }
+  }
   applyWallpaper(data, { adaptImmediate: true });
   saveSettings({ wallpaperId: data.id || data.dateKey || '', wallpaperSource: 'library' });
   return currentWallpaper;
