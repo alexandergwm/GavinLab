@@ -385,6 +385,11 @@ body.page-apps-active .header-actions {
   padding: 7px;
 }
 
+.shortcut-icon--github img {
+  opacity: 0.94;
+  filter: brightness(0) invert(1) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.36));
+}
+
 .shortcut-icon--lowres img {
   object-fit: contain;
   padding: 6px;
@@ -396,13 +401,11 @@ body.page-apps-active .header-actions {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", sans-serif;
   font-weight: 600;
   letter-spacing: 0;
-  background:
-    linear-gradient(135deg, var(--shortcut-letter-tint, rgba(255, 255, 255, 0.1)), transparent 68%),
-    rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.14);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 10px 28px rgba(0, 0, 0, 0.1);
-  border: 1px solid var(--shortcut-letter-stroke, rgba(255, 255, 255, 0.14));
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 10px 28px rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .shortcut-icon-letter {

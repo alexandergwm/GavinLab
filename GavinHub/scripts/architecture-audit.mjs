@@ -27,6 +27,11 @@ for (const name of jsFiles) {
     if (!existsSync(dependency)) errors.push(`${name}: missing import ${match[1]}`);
     runtimeDependencies.add(basename(match[1]));
   }
+  for (const match of source.matchAll(/new\s+URL\(\s*['"](\.\/[^'"]+\.js)['"]\s*,\s*import\.meta\.url\s*\)/g)) {
+    const dependency = resolve(jsRoot, match[1]);
+    if (!existsSync(dependency)) errors.push(`${name}: missing worker module ${match[1]}`);
+    runtimeDependencies.add(basename(match[1]));
+  }
   const staticDependencies = new Set();
   for (const match of source.matchAll(/^import[\s\S]*?from\s+['"](\.\/[^'"]+\.js)['"];?/gm)) {
     staticDependencies.add(basename(match[1]));

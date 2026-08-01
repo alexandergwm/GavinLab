@@ -341,9 +341,10 @@ body[data-text-theme='on-light'] .search-engine-badge.has-icon:hover .search-bad
   border: none;
   border-radius: 22px;
   background: transparent;
-  color: var(--stage-color);
-  -webkit-text-fill-color: currentColor;
-  caret-color: var(--stage-color);
+  color: rgba(255, 255, 255, 0.96);
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.96);
+  caret-color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.42);
   font-family: inherit;
   font-size: 14px;
   font-weight: 400;
@@ -423,7 +424,8 @@ body.search-focused .search-input::placeholder,
 }
 
 .search-input::placeholder {
-  color: color-mix(in srgb, var(--meta-color) 42%, transparent);
+  color: rgba(255, 255, 255, 0.7);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.36);
   font-weight: 400;
   opacity: 1;
 }
@@ -435,8 +437,8 @@ body.search-focused .search-input::placeholder,
 
 .search-input:-webkit-autofill,
 .search-input:-webkit-autofill:focus {
-  -webkit-text-fill-color: var(--stage-color);
-  caret-color: var(--stage-color);
+  -webkit-text-fill-color: #fff;
+  caret-color: #fff;
   transition: background-color 9999s ease-out 0s;
 }
 
@@ -447,7 +449,8 @@ body.search-focused .search-input::placeholder,
   font-size: 14px;
   line-height: 1.55;
   text-align: center;
-  color: color-mix(in srgb, var(--meta-color) 65%, transparent);
+  color: rgba(255, 255, 255, 0.76);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.46);
   opacity: 0;
   transform: translateY(4px);
   transition:

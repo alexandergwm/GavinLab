@@ -3,12 +3,15 @@ import { corsProxyUrls, fetchWithTimeout } from './util.js';
 const MIN_ICON_PX = 16;
 const MIN_STORE_PX = 64;
 const PREFERRED_ICON_PX = 128;
+const GITHUB_ICON_URL = 'https://github.githubassets.com/favicons/favicon.svg';
 
 export const NETEASE_ICON_URL =
   'https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://music.163.com&size=128';
 
 /** Stable direct icon URLs keyed by hostname (bypass flaky HTML/proxy fetches). */
 const KNOWN_SITE_ICONS = {
+  'github.com': [GITHUB_ICON_URL],
+  'www.github.com': [GITHUB_ICON_URL],
   'music.163.com': [
     NETEASE_ICON_URL,
     'https://music.163.com/apple-touch-icon.png',
@@ -21,6 +24,7 @@ const KNOWN_SITE_ICONS = {
 };
 
 const KNOWN_ICON_URLS = new Set(Object.values(KNOWN_SITE_ICONS).flat());
+const LETTER_AVATAR_DOMAINS = new Set(['zhihu.com', 'flomoapp.com']);
 
 function isWhitelistedKnownIconUrl(url) {
   return !!url && KNOWN_ICON_URLS.has(url);
@@ -63,6 +67,25 @@ export function isStaleSiteIcon(url, pageUrl) {
   const domain = pageDomain(pageUrl).replace(/^www\./i, '');
   const stale = STALE_SITE_ICON_URLS[domain];
   return stale ? stale.has(url) : false;
+}
+
+export function prefersLetterAvatar(pageUrl) {
+  const domain = pageDomain(pageUrl).replace(/^www\./i, '').toLowerCase();
+  if (!domain) return false;
+  return [...LETTER_AVATAR_DOMAINS].some(
+    (base) => domain === base || domain.endsWith(`.${base}`),
+  );
+}
+
+function isLikelyIncompleteIconUrl(url) {
+  if (!url || isWhitelistedKnownIconUrl(url) || /^(?:data|blob):/i.test(url)) return false;
+  try {
+    const filename = new URL(url).pathname.split('/').pop()?.toLowerCase() || '';
+    if (!/^favicon(?:[-_.]|$)/.test(filename)) return false;
+    return !/(?:64|72|96|120|128|144|152|180|192|256|512)/.test(filename);
+  } catch {
+    return false;
+  }
 }
 
 /** CDN globe placeholder: mostly white canvas with small centered glyph. */
@@ -317,6 +340,8 @@ export function isLowResIconUrl(url) {
 
 export function isUnacceptableStoredIcon(url, pageUrl = '') {
   if (isGenericFaviconUrl(url) || isLowResIconUrl(url)) return true;
+  if (pageUrl && prefersLetterAvatar(pageUrl)) return true;
+  if (isLikelyIncompleteIconUrl(url)) return true;
   if (pageUrl && isStaleSiteIcon(url, pageUrl)) return true;
   return false;
 }
@@ -341,9 +366,10 @@ export async function fetchSiteIcon(url) {
   const origin = pageOrigin(normalized);
   const domain = pageDomain(normalized);
   if (!domain) return { type: 'letter' };
+  if (prefersLetterAvatar(normalized)) return { type: 'letter' };
 
   const known = knownSiteCandidates(domain);
-  let found = await firstAcceptable(known, MIN_STORE_PX);
+  let found = await firstAcceptable(known, MIN_ICON_PX);
   if (found) return { type: 'image', url: found };
 
   const html = await fetchHtml(normalized);
@@ -353,14 +379,11 @@ export async function fetchSiteIcon(url) {
   found = await firstAcceptable(siteCandidates, MIN_STORE_PX);
   if (found) return { type: 'image', url: found };
 
-  found = await firstAcceptable(siteCandidates, MIN_ICON_PX);
-  if (found) return { type: 'image', url: found };
-
   return { type: 'letter' };
 }
 
 /** Bind img load/error; on reject call onFallback (letter avatar). */
-export function bindIconWithFallback(img, src, onFallback, onAccept) {
+export function bindIconWithFallback(img, src, onFallback, onAccept, minPx = MIN_STORE_PX) {
   if (!src || isGenericFaviconUrl(src)) {
     onFallback();
     return;
@@ -379,7 +402,7 @@ export function bindIconWithFallback(img, src, onFallback, onAccept) {
   };
 
   const validate = () => {
-    if (!isAcceptableIcon(img, src, MIN_ICON_PX) || isGenericGlobeImage(img)) reject();
+    if (!isAcceptableIcon(img, src, minPx) || isGenericGlobeImage(img)) reject();
     else accept();
   };
 

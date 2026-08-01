@@ -1,6 +1,6 @@
 const DEFAULT_CACHE_SIZE = 6;
 const FOCUS_WAIT_MS = 420;
-const APPS_WAIT_MS = 1100;
+const APPS_WAIT_MS = 320;
 
 export function createWallpaperEffects({
   createFocusPreview,
@@ -136,6 +136,39 @@ export function createWallpaperEffects({
     layer.classList.toggle('wallpaper-effect-live-filter', liveFilter);
   }
 
+  function isLayerVisible(layerId) {
+    if (layerId === 'wallpaper-blur') {
+      return document.body.classList.contains('page-apps-active')
+        || document.body.classList.contains('page-blur-active');
+    }
+    if (layerId === 'search-focus-overlay') {
+      return document.body.classList.contains('search-focused')
+        && !document.body.classList.contains('page-apps-active');
+    }
+    return false;
+  }
+
+  function queueDeferredPreview(layerId, kind, data, expectedKey) {
+    const workKey = `${layerId}:${kind}`;
+    const start = () => {
+      if (isLayerVisible(layerId)) {
+        deferHeavyWork(workKey, start, 900);
+        return;
+      }
+      const request = requestPreview(kind, data);
+      void request.full.then((fullPreview) => {
+        if (
+          !fullPreview
+          || isLayerVisible(layerId)
+          || activeLayerKeys.get(layerId) !== expectedKey
+        ) return;
+        const layer = document.getElementById(layerId);
+        applyLayer(layer, `url("${fullPreview.url}")`);
+      });
+    };
+    deferHeavyWork(workKey, start);
+  }
+
   async function syncLayer(layerId, kind, data = {}) {
     const layer = document.getElementById(layerId);
     if (!layer) return false;
@@ -158,32 +191,32 @@ export function createWallpaperEffects({
       return true;
     }
 
-    const fallbackPreview = kind === 'apps'
-      ? previewCache.get(`focus:${identity}`)
-      : null;
     if (kind === 'apps') {
-      applyLayer(layer, `url("${fallbackPreview?.url || url}")`, {
-        liveFilter: !fallbackPreview,
-      });
-      deferHeavyWork(`${layerId}:${kind}`, () => {
-        const request = requestPreview(kind, data);
-        void request.full.then((fullPreview) => {
-          if (!fullPreview || activeLayerKeys.get(layerId) !== expectedKey) return;
-          applyLayer(layer, `url("${fullPreview.url}")`);
+      if (isLayerVisible(layerId)) {
+        applyLayer(layer, `url("${url}")`, { liveFilter: true });
+        queueDeferredPreview(layerId, kind, data, expectedKey);
+        return true;
+      }
+      const request = requestPreview(kind, data);
+      const preview = await request.bounded;
+      if (activeLayerKeys.get(layerId) !== expectedKey) return false;
+      applyLayer(layer, `url("${preview?.url || url}")`, { liveFilter: !preview });
+      if (!preview) {
+        void request.full.then((latePreview) => {
+          if (
+            !latePreview
+            || isLayerVisible(layerId)
+            || activeLayerKeys.get(layerId) !== expectedKey
+          ) return;
+          applyLayer(layer, `url("${latePreview.url}")`);
         });
-      });
-      return true;
+      }
+      return Boolean(preview);
     }
 
     if (kind === 'focus' && data.defer) {
       applyLayer(layer, `url("${url}")`, { liveFilter: true });
-      deferHeavyWork(`${layerId}:${kind}`, () => {
-        const request = requestPreview(kind, data);
-        void request.full.then((fullPreview) => {
-          if (!fullPreview || activeLayerKeys.get(layerId) !== expectedKey) return;
-          applyLayer(layer, `url("${fullPreview.url}")`);
-        });
-      });
+      queueDeferredPreview(layerId, kind, data, expectedKey);
       return true;
     }
 
@@ -194,7 +227,11 @@ export function createWallpaperEffects({
 
     if (!preview) {
       void request.full.then((latePreview) => {
-        if (!latePreview || activeLayerKeys.get(layerId) !== expectedKey) return;
+        if (
+          !latePreview
+          || isLayerVisible(layerId)
+          || activeLayerKeys.get(layerId) !== expectedKey
+        ) return;
         applyLayer(layer, `url("${latePreview.url}")`);
       });
     }

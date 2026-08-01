@@ -565,6 +565,91 @@ try {
     wallpaperThemes.join(',') === 'on-light,on-dark,on-mixed',
     `wallpaper text themes must cover light, dark, and mixed scenes: ${wallpaperThemes}`,
   );
+  const wallpaperTextContrast = await page.evaluate(() => {
+    const body = document.body;
+    const previousTheme = body.dataset.textTheme;
+    const previousTone = body.dataset.textTone;
+    const wasFocused = body.classList.contains('search-focused');
+    body.classList.remove('search-focused');
+    body.dataset.textTheme = 'on-light';
+    body.dataset.textTone = 'dark';
+    const bodyStyle = getComputedStyle(body);
+    const probe = document.createElement('input');
+    probe.className = 'search-input';
+    probe.placeholder = '搜索';
+    body.appendChild(probe);
+    const input = getComputedStyle(probe);
+    const placeholder = getComputedStyle(probe, '::placeholder');
+    const result = {
+      stageColor: bodyStyle.getPropertyValue('--stage-color').trim(),
+      stageShadow: bodyStyle.getPropertyValue('--stage-shadow').trim(),
+      inputColor: input.color,
+      placeholderColor: placeholder.color,
+    };
+    probe.remove();
+    body.dataset.textTheme = previousTheme;
+    body.dataset.textTone = previousTone;
+    body.classList.toggle('search-focused', wasFocused);
+    return result;
+  });
+  assert(
+    wallpaperTextContrast.stageColor === '#fff'
+      && wallpaperTextContrast.stageShadow.includes('rgba(0, 0, 0, 0.62)')
+      && wallpaperTextContrast.inputColor === 'rgba(255, 255, 255, 0.96)'
+      && wallpaperTextContrast.placeholderColor === 'rgba(255, 255, 255, 0.7)',
+    `wallpaper typography must stay legible on mixed light scenes: ${JSON.stringify(wallpaperTextContrast)}`,
+  );
+  const shortcutIconPolicy = await page.evaluate(async () => {
+    const [favicon, shortcuts] = await Promise.all([
+      import('./js/favicon.js'),
+      import('./js/shortcuts.js'),
+    ]);
+    const storedShortcuts = localStorage.getItem('startpage-shortcuts');
+    const storedDock = localStorage.getItem('startpage-dock');
+    localStorage.setItem('startpage-shortcuts', JSON.stringify([
+      {
+        id: 'zhihu-policy',
+        name: '知乎',
+        url: 'https://www.zhihu.com',
+        icon: 'https://static.zhihu.com/heifetz/favicon.ico',
+      },
+      {
+        id: 'flomo-policy',
+        name: 'flomo',
+        url: 'https://v.flomoapp.com/mine',
+        icon: 'https://flomoapp.com/favicon.ico',
+      },
+      {
+        id: 'netease-policy',
+        name: '网易云音乐',
+        url: 'https://music.163.com',
+        icon: favicon.NETEASE_ICON_URL,
+      },
+    ]));
+    const cleaned = shortcuts.loadShortcuts();
+    if (storedShortcuts == null) localStorage.removeItem('startpage-shortcuts');
+    else localStorage.setItem('startpage-shortcuts', storedShortcuts);
+    if (storedDock == null) localStorage.removeItem('startpage-dock');
+    else localStorage.setItem('startpage-dock', storedDock);
+    return {
+      zhihu: cleaned.find((item) => item.id === 'zhihu-policy'),
+      flomo: cleaned.find((item) => item.id === 'flomo-policy'),
+      netease: cleaned.find((item) => item.id === 'netease-policy'),
+      plainSvgRejected: favicon.isUnacceptableStoredIcon(
+        'https://alphaxiv.org/favicon.svg',
+        'https://alphaxiv.org',
+      ),
+    };
+  });
+  assert(
+    !shortcutIconPolicy.zhihu.icon
+      && shortcutIconPolicy.zhihu.letter === '知'
+      && !shortcutIconPolicy.flomo.icon
+      && shortcutIconPolicy.flomo.letter === 'F'
+      && shortcutIconPolicy.netease.icon
+      && shortcutIconPolicy.plainSvgRejected,
+    `incomplete favicons must fall back to glass avatars: ${JSON.stringify(shortcutIconPolicy)}`,
+  );
   const wallpaperUrlKinds = await page.evaluate(async () => {
     const [data, image] = await Promise.all([
       import('./js/wallpaper-data.js'),
@@ -1257,23 +1342,25 @@ try {
     document.querySelector('.page-panel.page-apps')?.getBoundingClientRect().height > 0);
   const appsBackdropState = await page.evaluate(async () => ({
     backdrop: document.getElementById('wallpaper-blur')?.style.backgroundImage || '',
+    liveFilter: document.getElementById('wallpaper-blur')
+      ?.classList.contains('wallpaper-effect-live-filter'),
     current: (await import('./js/wallpaper.js')).getCurrentWallpaper(),
     imageSrc: document.getElementById('wallpaper-img')?.getAttribute('src') || '',
   }));
   assert(
-    appsBackdropState.backdrop.includes('blob:'),
+    appsBackdropState.backdrop
+      && (appsBackdropState.backdrop.includes('blob:') || appsBackdropState.liveFilter),
     `apps navigation must have an immediate composited wallpaper fallback: ${JSON.stringify(appsBackdropState)}`,
   );
-  await page.waitForFunction((focusBackdrop) => {
-    const backdrop = document.getElementById('wallpaper-blur')?.style.backgroundImage || '';
-    return backdrop.includes('blob:') && backdrop !== focusBackdrop;
-  }, focusedBackdropState.preview, { timeout: 1800 });
-  const appsBackdrop = await page.locator('#wallpaper-blur').evaluate(
-    (layer) => layer.style.backgroundImage,
-  );
+  await page.waitForTimeout(1000);
+  const appsBackdrop = await page.locator('#wallpaper-blur').evaluate((layer) => ({
+    background: layer.style.backgroundImage,
+    liveFilter: layer.classList.contains('wallpaper-effect-live-filter'),
+  }));
   assert(
-    appsBackdrop.includes('blob:') && appsBackdrop !== focusedBackdropState.preview,
-    `apps navigation should use its independent high-resolution wallpaper preview: ${JSON.stringify({ ...appsBackdropState, focusBackdrop: focusedBackdropState.preview })}`,
+    appsBackdrop.background === appsBackdropState.backdrop
+      && appsBackdrop.liveFilter === appsBackdropState.liveFilter,
+    `apps navigation must not swap its wallpaper while visible: ${JSON.stringify({ ...appsBackdropState, after: appsBackdrop })}`,
   );
   assert(await page.locator('.page-panel[data-page="apps"]').evaluate((el) => el.classList.contains('active')),
     'apps page should activate');

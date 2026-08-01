@@ -179,13 +179,11 @@ body[data-text-theme='on-light'] .dock-tab.active {
 
 .dock-item .shortcut-icon--dock.shortcut-icon--letter {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", sans-serif;
-  background:
-    linear-gradient(135deg, var(--shortcut-letter-tint, rgba(255, 255, 255, 0.1)), transparent 68%),
-    rgba(255, 255, 255, 0.12);
-  border: 1px solid var(--shortcut-letter-stroke, rgba(255, 255, 255, 0.14));
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 10px 28px rgba(0, 0, 0, 0.1);
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 10px 28px rgba(0, 0, 0, 0.12);
 }
 
 .dock-item .shortcut-icon--dock .shortcut-icon-letter {
@@ -230,6 +228,11 @@ body[data-text-theme='on-light'] .dock-tab.active {
 .dock-item .shortcut-icon--transparent img {
   object-fit: contain;
   padding: 4px;
+}
+
+.dock-item .shortcut-icon--github img {
+  opacity: 0.94;
+  filter: brightness(0) invert(1) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.36));
 }
 
 .dock-item .shortcut-icon--lowres img {

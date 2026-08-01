@@ -64,10 +64,6 @@ function applyPageClasses(page) {
   document.body.classList.toggle('page-apps-active', isApps);
   document.body.classList.toggle('page-blur-active', isApps);
 
-  if (isApps) {
-    wallpaper?.syncAppsBlurWallpaper?.();
-  }
-
   const headerActions = document.getElementById('header-actions');
   if (headerActions) headerActions.hidden = !isApps;
 
@@ -100,10 +96,10 @@ const pageRouter = createPageRouter({
       nextPage === 'apps' ? wallpaper?.prepareWallpaperEffects?.() : null,
       nextPage === 'apps' ? wallpaper?.initWallpaperInfo?.() : null,
     ]);
+    if (nextPage === 'apps') await nextPaint();
   },
   async afterPaint({ fromPage, nextPage }) {
     if (nextPage === 'apps') {
-      wallpaper?.syncAppsBlurWallpaper?.();
       void wallpaper?.settleDeferredWallpaperTheme?.();
     }
     if (fromPage === 'apps' && nextPage === 'home') {

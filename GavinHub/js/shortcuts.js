@@ -1,4 +1,4 @@
-import { fetchSiteIcon, bindIconWithFallback, isUnacceptableStoredIcon, getKnownSiteIcon, NETEASE_ICON_URL, isFullBleedKnownIcon } from './favicon.js';
+import { fetchSiteIcon, bindIconWithFallback, isUnacceptableStoredIcon, getKnownSiteIcon, NETEASE_ICON_URL, isFullBleedKnownIcon, MIN_ICON_PX, MIN_STORE_PX } from './favicon.js';
 import { getIconObjectUrl, getIconBlobCache, saveIconBlobCache } from './media-store.js';
 import { writeJson } from './storage.js';
 
@@ -549,10 +549,13 @@ function classifyIconImage(container, img, iconSrc = '') {
   const { naturalWidth: w, naturalHeight: h } = img;
   if (!w || !h) return;
 
-  container.classList.remove('shortcut-icon--square', 'shortcut-icon--round', 'shortcut-icon--lowres', 'shortcut-icon--transparent');
+  container.classList.remove('shortcut-icon--square', 'shortcut-icon--round', 'shortcut-icon--lowres', 'shortcut-icon--transparent', 'shortcut-icon--github');
 
   if (Object.values(TRANSPARENT_SITE_ICONS).includes(iconSrc)) {
     container.classList.add('shortcut-icon--transparent');
+  }
+  if (iconSrc === TRANSPARENT_SITE_ICONS['github.com']) {
+    container.classList.add('shortcut-icon--github');
   }
 
   if (Math.min(w, h) < 64) {
@@ -574,10 +577,14 @@ function prepareImageIconContainer(container, iconSrc = '') {
     'shortcut-icon--round',
     'shortcut-icon--lowres',
     'shortcut-icon--transparent',
+    'shortcut-icon--github',
   );
   container.classList.add('shortcut-icon--image');
   if (Object.values(TRANSPARENT_SITE_ICONS).includes(iconSrc)) {
     container.classList.add('shortcut-icon--transparent');
+  }
+  if (iconSrc === TRANSPARENT_SITE_ICONS['github.com']) {
+    container.classList.add('shortcut-icon--github');
   }
   if (isFullBleedKnownIcon(iconSrc)) {
     container.classList.add('shortcut-icon--square');
@@ -595,10 +602,18 @@ function createIconImage() {
   return img;
 }
 
-function loadAcceptedIcon(src) {
+function loadAcceptedIcon(src, referenceSrc = src) {
   return new Promise((resolve) => {
     const img = createIconImage();
-    bindIconWithFallback(img, src, () => resolve(null), () => resolve(img));
+    const allowSmall = Object.values(TRANSPARENT_SITE_ICONS).includes(referenceSrc)
+      || isFullBleedKnownIcon(referenceSrc);
+    bindIconWithFallback(
+      img,
+      src,
+      () => resolve(null),
+      () => resolve(img),
+      allowSmall ? MIN_ICON_PX : MIN_STORE_PX,
+    );
   });
 }
 
@@ -611,6 +626,7 @@ function renderLetterAvatar(container, item) {
     'shortcut-icon--round',
     'shortcut-icon--lowres',
     'shortcut-icon--transparent',
+    'shortcut-icon--github',
   );
   container.style.backgroundColor = '';
   container.style.color = '';
@@ -643,6 +659,7 @@ export function renderIconInto(container, item, pageUrl = item.url) {
     'shortcut-icon--round',
     'shortcut-icon--lowres',
     'shortcut-icon--transparent',
+    'shortcut-icon--github',
   );
   container.style.backgroundColor = '';
   container.style.color = '';
@@ -660,13 +677,13 @@ export function renderIconInto(container, item, pageUrl = item.url) {
         const cachedUrl = await getIconObjectUrl(iconSrc);
         if (!isCurrentRender()) return;
         if (cachedUrl) {
-          img = await loadAcceptedIcon(cachedUrl);
+          img = await loadAcceptedIcon(cachedUrl, iconSrc);
         }
       } catch { /* ignore, fall to remote */ }
 
       if (!isCurrentRender()) return;
       if (!img) {
-        img = await loadAcceptedIcon(iconSrc);
+        img = await loadAcceptedIcon(iconSrc, iconSrc);
         loadedFromRemote = Boolean(img);
       }
       if (!img || !isCurrentRender()) return;

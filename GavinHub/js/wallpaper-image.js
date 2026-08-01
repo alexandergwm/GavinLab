@@ -11,6 +11,55 @@ const APPS_EFFECT_BLUR_PX = 18;
 const FOCUS_EFFECT_BLUR_PX = 14;
 const BOOT_PREVIEW_MAX_WIDTH = 720;
 
+let effectWorker = null;
+let effectWorkerSequence = 0;
+const effectWorkerRequests = new Map();
+
+function rejectEffectWorkerRequests(error) {
+  for (const request of effectWorkerRequests.values()) request.reject(error);
+  effectWorkerRequests.clear();
+}
+
+function getEffectWorker() {
+  if (effectWorker) return effectWorker;
+  effectWorker = new Worker(new URL('./wallpaper-render-worker.js', import.meta.url), {
+    type: 'module',
+  });
+  effectWorker.addEventListener('message', (event) => {
+    const { id, blob, error } = event.data || {};
+    const request = effectWorkerRequests.get(id);
+    if (!request) return;
+    effectWorkerRequests.delete(id);
+    if (error || !blob) request.reject(new Error(error || 'wallpaper render failed'));
+    else request.resolve(blob);
+  });
+  effectWorker.addEventListener('error', () => {
+    rejectEffectWorkerRequests(new Error('wallpaper render worker failed'));
+    effectWorker?.terminate();
+    effectWorker = null;
+  });
+  return effectWorker;
+}
+
+function renderWallpaperEffectInWorker(bitmap, options) {
+  const id = ++effectWorkerSequence;
+  return new Promise((resolve, reject) => {
+    effectWorkerRequests.set(id, { resolve, reject });
+    try {
+      getEffectWorker().postMessage({ id, bitmap, ...options }, [bitmap]);
+    } catch (error) {
+      effectWorkerRequests.delete(id);
+      reject(error);
+    }
+  });
+}
+
+window.addEventListener('pagehide', () => {
+  rejectEffectWorkerRequests(new Error('page hidden'));
+  effectWorker?.terminate();
+  effectWorker = null;
+}, { once: true });
+
 export function isRemoteWallpaperUrl(url) {
   return /^(?:https?:)?\/\//i.test(url || '');
 }
@@ -136,9 +185,25 @@ async function renderWallpaperEffect(url, {
   overscan = 0,
 }) {
   const loaded = await loadAnalysisSource(url, { maxWidth: targetWidth });
+  let sourceTransferred = false;
   try {
     const width = Math.min(targetWidth, loaded.width);
     const height = Math.max(1, Math.round(width * loaded.height / loaded.width));
+    if (
+      typeof Worker === 'function'
+      && typeof OffscreenCanvas === 'function'
+      && typeof ImageBitmap === 'function'
+      && loaded.source instanceof ImageBitmap
+    ) {
+      sourceTransferred = true;
+      return renderWallpaperEffectInWorker(loaded.source, {
+        width,
+        height,
+        quality,
+        filter,
+        overscan,
+      });
+    }
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
@@ -156,15 +221,16 @@ async function renderWallpaperEffect(url, {
     );
     return canvasToBlob(canvas, quality);
   } finally {
-    loaded.dispose?.();
+    if (!sourceTransferred) loaded.dispose?.();
   }
 }
 
 export async function createWallpaperAppsPreview(url) {
   const viewportWidth = Math.ceil(window.innerWidth * 1.05);
-  const targetWidth = viewportWidth <= APPS_EFFECT_MIN_WIDTH
-    ? APPS_EFFECT_MIN_WIDTH
-    : (viewportWidth <= 1600 ? 1600 : APPS_EFFECT_MAX_WIDTH);
+  const targetWidth = Math.min(
+    APPS_EFFECT_MAX_WIDTH,
+    Math.max(APPS_EFFECT_MIN_WIDTH, viewportWidth),
+  );
   return renderWallpaperEffect(url, {
     targetWidth,
     quality: 0.86,
@@ -193,9 +259,10 @@ export function getWallpaperEffectVariant(kind) {
     return `focus-v2-${width}`;
   }
   const viewportWidth = Math.ceil(window.innerWidth * 1.05);
-  const width = viewportWidth <= APPS_EFFECT_MIN_WIDTH
-    ? APPS_EFFECT_MIN_WIDTH
-    : (viewportWidth <= 1600 ? 1600 : APPS_EFFECT_MAX_WIDTH);
+  const width = Math.min(
+    APPS_EFFECT_MAX_WIDTH,
+    Math.max(APPS_EFFECT_MIN_WIDTH, viewportWidth),
+  );
   return `apps-v2-${width}`;
 }
 

@@ -35,6 +35,11 @@ const context = await chromium.launchPersistentContext(userDataDir, {
 
 try {
   await context.addInitScript(() => {
+    localStorage.setItem('startpage-github-sync-setup', JSON.stringify({
+      version: 1,
+      mode: 'local',
+      completedAt: 1,
+    }));
     window.__extensionLongTasks = [];
     try {
       new PerformanceObserver((list) => {
@@ -96,6 +101,37 @@ try {
     throw new Error(`extension startup stalled: ${JSON.stringify(inputPaint.longTasks)}`);
   }
   await searchInput.fill('');
+  await indexPage.locator('.dock-tab[data-page="apps"]').click();
+  await indexPage.waitForFunction(
+    () => document.body.classList.contains('page-apps-active'),
+    null,
+    { timeout: 4000 },
+  );
+  const appsWallpaper = await indexPage.locator('#wallpaper-blur').evaluate((layer) => ({
+    background: layer.style.backgroundImage,
+    liveFilter: layer.classList.contains('wallpaper-effect-live-filter'),
+  }));
+  await indexPage.waitForTimeout(600);
+  const appsWallpaperAfter = await indexPage.locator('#wallpaper-blur').evaluate((layer) => ({
+    background: layer.style.backgroundImage,
+    liveFilter: layer.classList.contains('wallpaper-effect-live-filter'),
+    longTasks: window.__extensionLongTasks || [],
+  }));
+  if (
+    !appsWallpaper.background.includes('blob:')
+    || appsWallpaper.liveFilter
+    || appsWallpaperAfter.background !== appsWallpaper.background
+    || appsWallpaperAfter.liveFilter
+    || appsWallpaperAfter.longTasks.some((duration) => duration >= 100)
+  ) {
+    throw new Error(`extension apps wallpaper is unstable: ${JSON.stringify({ appsWallpaper, appsWallpaperAfter })}`);
+  }
+  await indexPage.locator('.dock-tab[data-page="home"]').click();
+  await indexPage.waitForFunction(
+    () => !document.body.classList.contains('page-apps-active'),
+    null,
+    { timeout: 4000 },
+  );
   const calculatorResults = await indexPage.evaluate(async () => {
     const { evaluateCalc } = await import('./js/smart-input.js');
     return ['1+2*3', '50%*200', '-2^2', '2^-2', '1/0']

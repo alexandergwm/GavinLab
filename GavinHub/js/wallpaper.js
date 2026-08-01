@@ -564,14 +564,19 @@ function getMatchingBootPreview(data) {
     : '';
 }
 
-function getWallpaperEffectPayload(data = currentWallpaper, { preferBootPreview = false } = {}) {
+function getWallpaperEffectPayload(
+  data = currentWallpaper,
+  { preferBootPreview = false, preferSourceUrl = false } = {},
+) {
   if (!data) return null;
   if (data.type === 'gradient' && data.css) {
     return { type: 'gradient', css: data.css };
   }
   return {
     type: 'image',
-    url: (preferBootPreview && getMatchingBootPreview(data)) || getBlurWallpaperUrl(data),
+    url: (preferSourceUrl && data.url)
+      || (preferBootPreview && getMatchingBootPreview(data))
+      || getBlurWallpaperUrl(data),
     effectKey: getWallpaperCacheKey(data) || getWallpaperId(data),
   };
 }
@@ -588,7 +593,7 @@ function syncFocusWallpaperLayer(data = currentWallpaper, { defer = false } = {}
 /** 第二页高清毛玻璃可在空闲期预热，也可作为进入页面的前置条件。 */
 function syncBlurWallpaperLayer(data = currentWallpaper) {
   if (!data) return Promise.resolve(false);
-  return wallpaperEffects.prepareApps(getWallpaperEffectPayload(data));
+  return wallpaperEffects.prepareApps(getWallpaperEffectPayload(data, { preferSourceUrl: true }));
 }
 
 function markInitialWallpaperEffectsReady() {

@@ -12,13 +12,13 @@
   --glass-focus-ring: 0 0 0 4px rgba(255, 255, 255, 0.08);
 
   /* 搜索栏亮毛玻璃 — idle 更透、贴壁纸；聚焦时再抬起对比 */
-  --glass-search-bg: rgba(255, 255, 255, 0.1);
-  --glass-search-bg-hover: rgba(255, 255, 255, 0.16);
+  --glass-search-bg: rgba(30, 32, 40, 0.28);
+  --glass-search-bg-hover: rgba(30, 32, 40, 0.36);
   --glass-search-bg-focus: rgba(38, 34, 44, 0.5);
   --glass-search-blur: blur(22px) saturate(150%);
   --glass-search-blur-focus: var(--glass-search-blur);
-  --glass-search-border: rgba(255, 255, 255, 0.1);
-  --glass-search-border-hover: rgba(255, 255, 255, 0.18);
+  --glass-search-border: rgba(255, 255, 255, 0.18);
+  --glass-search-border-hover: rgba(255, 255, 255, 0.24);
   --glass-search-border-focus: rgba(255, 255, 255, 0.28);
 
   /* 统一面板毛玻璃 — Dock / 联想下拉 / 引擎菜单（保持可读，不跟搜索栏 idle 变淡） */
@@ -70,9 +70,9 @@
   --transition-fast: 0.18s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-theme: 0.28s cubic-bezier(0.4, 0, 0.2, 1); /* 文字主题颜色渐变 */
   --transition-wallpaper: 0.45s cubic-bezier(0.4, 0, 0.2, 1); /* 壁纸滤镜/缩放 */
-  --transition-page: 0.32s cubic-bezier(0.4, 0, 0.2, 1); /* 页面/毛玻璃切换 — 更平滑的跨页过渡 */
-  --transition-search-focus: 0.82s cubic-bezier(0.16, 1, 0.3, 1);
-  --transition-focus-backdrop: 0.56s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-page: 0.44s cubic-bezier(0.22, 1, 0.36, 1);
+  --transition-search-focus: 0.74s cubic-bezier(0.22, 1, 0.36, 1);
+  --transition-focus-backdrop: 0.64s cubic-bezier(0.22, 1, 0.36, 1);
   --dock-height: 68px;
   --dock-bottom: 24px;
   --dock-clearance: calc(var(--dock-height) + var(--dock-bottom) + 28px);
@@ -81,50 +81,50 @@
   --icon-shadow-hover: 0 6px 20px rgba(0, 0, 0, 0.15);
   --dock-icon-radius: var(--icon-squircle-radius);
   --stage-top: 13vh;
-  --boot-wallpaper-duration: 0.56s;
-  --boot-ui-duration: 0.56s;
-  --boot-vignette-duration: 0.56s;
+  --boot-wallpaper-duration: 0.72s;
+  --boot-ui-duration: 0.82s;
+  --boot-vignette-duration: 0.82s;
   --boot-ui-delay-stage: 0s;
   --boot-ui-delay-search: 0s;
   --boot-ui-delay-dock: 0s;
   --boot-vignette-delay: 0s;
-  --boot-reveal-ease: cubic-bezier(0.25, 0.8, 0.25, 1);
+  --boot-reveal-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --search-form-top: calc(
     var(--stage-top) + clamp(52px, 7.2vw, 68px) + 6px + clamp(12px, 1.6vw, 14px) * 1.5 + 18px
   );
   --stage-color: #fff;
-  --stage-shadow: 0 1px 2px rgba(0, 0, 0, 0.68), 0 0 1px rgba(0, 0, 0, 0.32);
-  --meta-color: rgba(255, 255, 255, 0.78);
-  --meta-shadow: 0 1px 2px rgba(0, 0, 0, 0.72);
+  --stage-shadow: 0 2px 4px rgba(0, 0, 0, 0.62);
+  --meta-color: rgba(255, 255, 255, 0.9);
+  --meta-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
   --meta-sep-opacity: 0.42;
   --label-shadow: none;
 }
 
 body[data-text-theme='on-light'],
 body[data-text-tone='dark']:not([data-text-theme='on-mixed']) {
-  --text-primary: #2d3748;
-  --stage-color: rgba(45, 55, 72, 0.92);
-  --stage-shadow: 0 1px 1px rgba(255, 255, 255, 0.82), 0 0 1px rgba(255, 255, 255, 0.46);
-  --meta-color: rgba(45, 55, 72, 0.76);
-  --meta-shadow: 0 1px 1px rgba(255, 255, 255, 0.86);
-  --meta-sep-opacity: 0.34;
+  --text-primary: #fff;
+  --stage-color: #fff;
+  --stage-shadow: 0 2px 4px rgba(0, 0, 0, 0.62);
+  --meta-color: rgba(255, 255, 255, 0.9);
+  --meta-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+  --meta-sep-opacity: 0.46;
 }
 
 body[data-text-theme='on-dark'] {
   --text-primary: #fff;
   --stage-color: #fff;
-  --stage-shadow: 0 1px 2px rgba(0, 0, 0, 0.68), 0 0 1px rgba(0, 0, 0, 0.32);
-  --meta-color: rgba(255, 255, 255, 0.78);
-  --meta-shadow: 0 1px 2px rgba(0, 0, 0, 0.72);
+  --stage-shadow: 0 2px 4px rgba(0, 0, 0, 0.62);
+  --meta-color: rgba(255, 255, 255, 0.9);
+  --meta-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
   --meta-sep-opacity: 0.42;
 }
 
 body[data-text-theme='on-mixed'] {
   --text-primary: rgba(255, 255, 255, 0.98);
   --stage-color: #fff;
-  --stage-shadow: 0 1px 2px rgba(0, 0, 0, 0.82), 0 0 1px rgba(0, 0, 0, 0.48);
-  --meta-color: rgba(255, 255, 255, 0.78);
-  --meta-shadow: 0 1px 2px rgba(0, 0, 0, 0.84);
+  --stage-shadow: 0 2px 4px rgba(0, 0, 0, 0.68);
+  --meta-color: rgba(255, 255, 255, 0.92);
+  --meta-shadow: 0 1px 3px rgba(0, 0, 0, 0.74);
   --meta-sep-opacity: 0.42;
 }
 
@@ -214,7 +214,7 @@ body {
 .wallpaper-blur {
   z-index: 1;
   opacity: 0;
-  transform: translateZ(0) scale(1.025);
+  transform: translateZ(0);
   transition: none;
   pointer-events: none;
   background-color: transparent;
@@ -226,12 +226,13 @@ body {
 
 .wallpaper-blur.wallpaper-effect-live-filter {
   filter: blur(18px) brightness(84%) saturate(112%);
+  transform: translateZ(0) scale(1.025);
 }
 
 body.page-blur-active .wallpaper-blur,
 body.page-apps-active .wallpaper-blur {
   opacity: 1;
-  transition: opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity var(--transition-page);
 }
 
 /* 回主页：模糊层瞬时撤掉，避免搜索栏毛玻璃采到模糊壁纸那一帧 */
@@ -320,7 +321,7 @@ body.search-focused:not(.page-blur-active) .scene-vignette {
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
-  transform: translateZ(0) scale(1.025);
+  transform: translateZ(0);
   opacity: 0;
   visibility: hidden;
   transition:
@@ -334,6 +335,7 @@ body.search-focused:not(.page-blur-active) .scene-vignette {
 
 .search-focus-overlay.wallpaper-effect-live-filter {
   filter: blur(14px) brightness(82%) saturate(108%);
+  transform: translateZ(0) scale(1.025);
 }
 
 body.search-focused:not(.page-apps-active) .search-focus-overlay {
