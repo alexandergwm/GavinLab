@@ -234,7 +234,7 @@ async function initSearchModule() {
   try {
     const search = await import('./search.js');
     handleSearchEscape = search.handleSearchEscape;
-    search.initSearch({
+    await search.initSearch({
       getSettings: settingsStore.get,
       onSettingsChange: (partial) => {
         settingsStore.set(partial);
@@ -370,8 +370,7 @@ async function initCore() {
     () => wallpaper?.syncSearchFocusWallpaper?.(),
     { timeout: 140, fallbackDelay: 20 },
   );
-  if (document.body.classList.contains('boot-ui-settled')) prepareInitialFocusEffect();
-  else document.addEventListener('boot-ui-settled', prepareInitialFocusEffect, { once: true });
+  prepareInitialFocusEffect();
   modules.metaBar?.initMetaBar(async () => {
     const [cal] = await Promise.all([
       pageModules.calendar(),
@@ -386,7 +385,7 @@ async function initCore() {
   initFavorite();
   initDialogController();
   initSyncExperience();
-  modules.weatherUi?.initWeather?.();
+  await modules.weatherUi?.initWeather?.();
   initGlobalKeyboard();
   initLazyFeatureActions();
   initSearchFocusHooks(() => pageRouter.getCurrentPage());
@@ -441,8 +440,11 @@ async function init() {
     await Promise.all([initCore(), searchReady]);
     document.body.classList.add('app-ready');
     performance.mark?.('gavinhub:app-ready');
+    document.dispatchEvent(new CustomEvent('gavinhub:app-ready'));
   } catch (err) {
     console.error('[GavinHub] core init failed', err);
+    document.body.classList.add('app-ready', 'app-degraded');
+    document.dispatchEvent(new CustomEvent('gavinhub:app-ready'));
   }
 }
 

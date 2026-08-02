@@ -930,7 +930,7 @@ export function handleSearchEscape() {
   return false;
 }
 
-export function initSearch({ getSettings: settingsGetter, onSettingsChange: settingsChangeHandler }) {
+export async function initSearch({ getSettings: settingsGetter, onSettingsChange: settingsChangeHandler }) {
   getSettings = settingsGetter;
   onSettingsChange = (partial) => {
     settingsChangeHandler(partial);
@@ -960,9 +960,9 @@ export function initSearch({ getSettings: settingsGetter, onSettingsChange: sett
   }
 
   searchQuote = initLazySearchQuote(document.getElementById('search-quote'));
-  if (document.body.classList.contains('boot-focus-entering') && !inputEl.value.trim()) {
-    searchQuote.show(getSettings().searchMode);
-  }
+  const quoteReady = document.body.classList.contains('boot-focus-primed') && !inputEl.value.trim()
+    ? searchQuote.prepare(getSettings().searchMode)
+    : Promise.resolve();
 
   listEl.addEventListener('mouseleave', () => {
     if (areSuggestionsVisible()) resetActiveSuggestion();
@@ -1171,4 +1171,5 @@ export function initSearch({ getSettings: settingsGetter, onSettingsChange: sett
     void submitSearchFromInput();
   });
 
+  await quoteReady;
 }

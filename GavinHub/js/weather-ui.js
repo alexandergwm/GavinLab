@@ -51,24 +51,33 @@ function hydrateWeather() {
       const data = await module.loadWeather();
       renderWeatherBarWith(module, data);
     } catch {
-      if (!cached && summary) summary.textContent = '天气不可用';
+      if (!cached && summary && !summary.textContent.trim()) summary.textContent = '天气';
     }
   });
   return weatherHydrationPromise;
 }
 
+function hydrateCachedWeather() {
+  return loadWeatherModule().then((module) => {
+    const cached = module.getCachedWeather();
+    if (cached) renderWeatherBarWith(module, cached);
+  });
+}
+
 function scheduleWeatherHydration() {
   const queue = () => {
-    const run = () => void hydrateWeather();
-    if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 1200 });
-    else window.setTimeout(run, 120);
+    window.setTimeout(() => {
+      const run = () => void hydrateWeather();
+      if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 1200 });
+      else window.setTimeout(run, 120);
+    }, 1400);
   };
   if (document.body.classList.contains('boot-glass-stable')) queue();
   else document.addEventListener('boot-glass-stable', queue, { once: true });
 }
 
 export function initWeather() {
-  if (weatherUiInitialized) return;
+  if (weatherUiInitialized) return Promise.resolve();
   weatherUiInitialized = true;
 
   const trigger = document.getElementById('weather-trigger');
@@ -78,4 +87,5 @@ export function initWeather() {
   trigger?.addEventListener('pointerenter', () => void loadWeatherModule(), { once: true, passive: true });
   if (summary && !summary.textContent.trim()) summary.textContent = '天气';
   scheduleWeatherHydration();
+  return hydrateCachedWeather();
 }

@@ -5,7 +5,9 @@ import { runWhenIdle } from './lifecycle.js';
  * the quote controller API so the search module stays unaware of load timing.
  */
 export function initLazySearchQuote(quoteElement, { delay = 220 } = {}) {
-  if (!quoteElement) return { show() {}, hide() {}, hideImmediate() {} };
+  if (!quoteElement) {
+    return { prepare: () => Promise.resolve(), show() {}, hide() {}, hideImmediate() {} };
+  }
 
   let controller = null;
   let loadPromise = null;
@@ -50,6 +52,13 @@ export function initLazySearchQuote(quoteElement, { delay = 220 } = {}) {
     }, delay);
   };
 
+  const prepare = async (mode = 'normal') => {
+    const token = ++generation;
+    cancelPending();
+    const loaded = await load();
+    if (token === generation) loaded.show(mode);
+  };
+
   const hide = () => {
     generation += 1;
     cancelPending();
@@ -63,5 +72,5 @@ export function initLazySearchQuote(quoteElement, { delay = 220 } = {}) {
     if (!controller) quoteElement.hidden = true;
   };
 
-  return { show, hide, hideImmediate };
+  return { prepare, show, hide, hideImmediate };
 }

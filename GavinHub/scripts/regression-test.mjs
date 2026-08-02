@@ -113,6 +113,7 @@ await page.addInitScript(() => {
     const clock = document.getElementById('clock');
     const dateText = document.getElementById('date-text');
     const weatherText = document.getElementById('weather-summary');
+    const quote = document.getElementById('search-quote');
     const dockLetter = document.querySelector('.dock-link[data-dock-id="sci-hub"] .shortcut-icon--dock');
     if (searchBox && dock) {
       const searchFormStyle = getComputedStyle(document.getElementById('search-form'));
@@ -131,6 +132,11 @@ await page.addInitScript(() => {
         clockFont: clockStyle ? `${clockStyle.fontFamily}|${clockStyle.fontSize}|${clockStyle.fontWeight}` : '',
         dateText: dateText?.textContent || '',
         weatherText: weatherText?.textContent || '',
+        quoteText: quote?.textContent || '',
+        quoteOpacity: quote ? Number(getComputedStyle(quote).opacity) : 0,
+        dockIcons: [...document.querySelectorAll('.dock-link .shortcut-icon')]
+          .map((icon) => `${icon.className}|${icon.querySelector('img')?.getAttribute('src') || icon.textContent || ''}`)
+          .join('||'),
         dockLetterStyle: dockLetterStyle
           ? `${dockLetterStyle.width}|${dockLetterStyle.height}|${dockLetterStyle.display}|${dockLetterStyle.backdropFilter}|${dockLetterStyle.borderRadius}`
           : '',
@@ -224,6 +230,9 @@ try {
       clockFont: unique('clockFont'),
       dateText: unique('dateText'),
       weatherText: unique('weatherText'),
+      quoteText: unique('quoteText'),
+      quoteOpacity: visibleFrames.map((frame) => frame.quoteOpacity),
+      dockIcons: unique('dockIcons'),
       dockLetterStyle: unique('dockLetterStyle'),
     };
   });
@@ -249,12 +258,16 @@ try {
     bootVisualState.clockColor.length === 1
       && bootVisualState.clockFont.length === 1
       && bootVisualState.dateText.every(Boolean)
-      && !bootVisualState.weatherText.includes('加载中…'),
+      && bootVisualState.weatherText.length === 1
+      && !bootVisualState.weatherText.includes('加载中…')
+      && bootVisualState.quoteText.length === 1
+      && bootVisualState.quoteText.every(Boolean)
+      && bootVisualState.quoteOpacity.every((opacity) => opacity === 1),
     `visible startup typography must stay stable: ${JSON.stringify(bootVisualState)}`,
   );
   assert(
-    bootVisualState.dockLetterStyle.length === 1,
-    `dock icons must not change geometry or material when apps CSS arrives: ${JSON.stringify(bootVisualState.dockLetterStyle)}`,
+    bootVisualState.dockLetterStyle.length === 1 && bootVisualState.dockIcons.length === 1,
+    `dock icons must stay visually stable after reveal: ${JSON.stringify(bootVisualState)}`,
   );
   const settingsLoadedAtStartup = await page.evaluate(() => performance.getEntriesByType('resource')
     .some((entry) => entry.name.endsWith('/js/settings-ui.js')));

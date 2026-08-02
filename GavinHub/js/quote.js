@@ -387,11 +387,16 @@ export function initSearchQuote(quoteEl) {
   if (!quoteEl) return { show: () => {}, hide: () => {}, hideImmediate: () => {} };
 
   let stateGen = 0;
+  let visibleMode = null;
 
   function show(searchMode = 'normal') {
+    if (visibleMode === searchMode && !quoteEl.hidden && quoteEl.classList.contains('visible')) {
+      return;
+    }
     stateGen += 1;
     const gen = stateGen;
     const { text, greetingOnly } = resolveQuoteDisplay(searchMode);
+    visibleMode = searchMode;
     quoteEl.textContent = text;
     quoteEl.classList.toggle('search-quote--greeting-only', greetingOnly);
     quoteEl.hidden = false;
@@ -403,12 +408,14 @@ export function initSearchQuote(quoteEl) {
 
   function hideImmediate() {
     stateGen += 1;
+    visibleMode = null;
     quoteEl.classList.remove('visible', 'search-quote--greeting-only');
     quoteEl.hidden = true;
   }
 
   function hide() {
     stateGen += 1;
+    visibleMode = null;
     const gen = stateGen;
     quoteEl.classList.remove('visible', 'search-quote--greeting-only');
     const finishHide = () => {

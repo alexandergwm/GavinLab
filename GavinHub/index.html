@@ -34,20 +34,20 @@
     #wallpaper-preview {
       position: absolute; inset: 0; background-size: cover; background-position: center;
       opacity: 1;
-      transition: opacity 0.56s cubic-bezier(0.22, 1, 0.36, 1);
+      transition: opacity 0.56s cubic-bezier(0.4, 0, 0.2, 1);
     }
     #wallpaper-preview.is-hidden { opacity: 0; }
     #wallpaper-img {
       position: absolute; inset: 0; width: 100%; height: 100%;
       object-fit: cover; object-position: center;
       opacity: 0; backface-visibility: hidden;
-      transition: opacity 0.72s cubic-bezier(0.22, 1, 0.36, 1);
+      transition: opacity 0.72s cubic-bezier(0.4, 0, 0.2, 1);
     }
     #wallpaper-img.wallpaper-show { opacity: 1; }
     body.boot-awakening .scene-vignette { opacity: 0; }
     body.boot-awakening.boot-vignette-visible .scene-vignette {
       opacity: 0.88;
-      transition: opacity 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0s;
+      transition: opacity 0.72s cubic-bezier(0.4, 0, 0.2, 1) 0s;
     }
   </style>
   <script>
@@ -161,8 +161,7 @@
         if (preview) preview.classList.add('is-hidden');
         requestAnimationFrame(function () {
           requestAnimationFrame(function () {
-            document.body.classList.add('boot-vignette-visible', 'boot-ui-settled', 'boot-done');
-            document.dispatchEvent(new CustomEvent('boot-ui-settled'));
+            settleBootUi();
           });
         });
         return;
@@ -177,8 +176,8 @@
         if (settled) return;
         settled = true;
         window.clearTimeout(fallbackTimer);
-        document.body.classList.add('boot-vignette-visible', 'boot-ui-settled', 'boot-done');
-        document.dispatchEvent(new CustomEvent('boot-ui-settled'));
+        document.body.classList.add('boot-ui-reveal-requested');
+        document.dispatchEvent(new CustomEvent('boot-ui-reveal-requested'));
       }
       function scheduleBootUiReveal() {
         settleBootUi();
@@ -263,8 +262,8 @@
       }
     } catch (e2) {
       window.__BOOT_WALLPAPER_READY = false;
-      document.body.classList.add('boot-vignette-visible', 'boot-ui-settled', 'boot-done');
-      document.dispatchEvent(new CustomEvent('boot-ui-settled'));
+      document.body.classList.add('boot-ui-reveal-requested');
+      document.dispatchEvent(new CustomEvent('boot-ui-reveal-requested'));
     }
   })();
   </script>

@@ -71,8 +71,8 @@
   --transition-theme: 0.28s cubic-bezier(0.4, 0, 0.2, 1); /* 文字主题颜色渐变 */
   --transition-wallpaper: 0.45s cubic-bezier(0.4, 0, 0.2, 1); /* 壁纸滤镜/缩放 */
   --transition-page: 0.44s cubic-bezier(0.22, 1, 0.36, 1);
-  --transition-search-focus: 0.9s cubic-bezier(0.22, 1, 0.36, 1);
-  --transition-focus-backdrop: 0.92s cubic-bezier(0.22, 1, 0.36, 1);
+  --transition-search-focus: 0.68s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-focus-backdrop: 0.72s cubic-bezier(0.4, 0, 0.2, 1);
   --dock-height: 68px;
   --dock-bottom: 24px;
   --dock-clearance: calc(var(--dock-height) + var(--dock-bottom) + 28px);
@@ -82,13 +82,13 @@
   --dock-icon-radius: var(--icon-squircle-radius);
   --stage-top: 13vh;
   --boot-wallpaper-duration: 0.72s;
-  --boot-ui-duration: 0.9s;
-  --boot-vignette-duration: 0.9s;
+  --boot-ui-duration: 0.72s;
+  --boot-vignette-duration: 0.72s;
   --boot-ui-delay-stage: 0s;
   --boot-ui-delay-search: 0s;
   --boot-ui-delay-dock: 0s;
   --boot-vignette-delay: 0s;
-  --boot-reveal-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --boot-reveal-ease: cubic-bezier(0.4, 0, 0.2, 1);
   --search-form-top: calc(
     var(--stage-top) + clamp(52px, 7.2vw, 68px) + 6px + clamp(12px, 1.6vw, 14px) * 1.5 + 18px
   );
@@ -348,7 +348,7 @@ body.search-focused:not(.page-apps-active) .search-focus-overlay {
 /* 苏醒动画：同帧一起浮现，位移尽量小，避免错落造成「一顿一顿」 */
 body.boot-awakening:not(.boot-ui-settled) .stage {
   opacity: 0;
-  transform: translate3d(0, 6px, 0);
+  transform: translate3d(0, 0, 0);
 }
 
 body.boot-awakening:not(.boot-ui-settled) .search-form,
@@ -358,12 +358,12 @@ body.boot-awakening:not(.boot-ui-settled) .dock {
 }
 
 body.boot-awakening:not(.boot-ui-settled) .search-form {
-  transform: translate3d(0, 3px, 0);
+  transform: translate3d(0, 0, 0);
 }
 
 body.boot-awakening:not(.boot-ui-settled) .dock {
   /* 禁止在 keyframes 里用 CSS 变量：部分浏览器会丢掉 translateX(-50%)，Dock 从右侧飞入 */
-  transform: translateX(-50%) translate3d(0, 5px, 0);
+  transform: translateX(-50%) translate3d(0, 0, 0);
 }
 
 body.boot-awakening.boot-ui-settled .search-form,
@@ -387,8 +387,13 @@ body.boot-awakening .search-box {
 body.boot-awakening .clock,
 body.boot-awakening .clock-trigger,
 body.boot-awakening .meta-line,
-body.boot-awakening .meta-part {
+body.boot-awakening .meta-part,
+body.boot-awakening .search-quote {
   transition: none !important;
+}
+
+body.boot-awakening .search-quote {
+  transform: none;
 }
 
 body.boot-awakening.boot-ui-settled .stage {
@@ -405,8 +410,8 @@ body.boot-awakening.boot-ui-settled .dock {
 
 @keyframes boot-awaken-stage {
   from {
-    opacity: 0;
-    transform: translate3d(0, 6px, 0);
+    opacity: 0.88;
+    transform: translate3d(0, 0, 0);
   }
   to {
     opacity: 1;
@@ -417,7 +422,7 @@ body.boot-awakening.boot-ui-settled .dock {
 @keyframes boot-awaken-ui-move {
   from {
     opacity: 0.88;
-    transform: translate3d(0, 3px, 0);
+    transform: translate3d(0, 0, 0);
   }
   to {
     opacity: 1;
@@ -427,28 +432,28 @@ body.boot-awakening.boot-ui-settled .dock {
 
 @keyframes boot-awaken-dock {
   from {
-    opacity: 0;
-    transform: translateX(-50%) translate3d(0, 5px, 0);
+    opacity: calc(var(--boot-dock-opacity, 1) - 0.08);
+    transform: translateX(-50%) translate3d(0, 0, 0);
   }
   to {
-    opacity: 1;
+    opacity: var(--boot-dock-opacity, 1);
     transform: translateX(-50%) translate3d(0, 0, 0);
   }
 }
 
 @keyframes boot-awaken-dock-sidebar {
   from {
-    opacity: 0;
-    transform: translateY(-50%) translate3d(0, 5px, 0);
+    opacity: calc(var(--boot-dock-opacity, 1) - 0.08);
+    transform: translateY(-50%) translate3d(0, 0, 0);
   }
   to {
-    opacity: 1;
+    opacity: var(--boot-dock-opacity, 1);
     transform: translateY(-50%) translate3d(0, 0, 0);
   }
 }
 
 :is(body.layout-sidebar, html.layout-sidebar body).boot-awakening:not(.boot-ui-settled) .dock {
-  transform: translateY(-50%) translate3d(0, 5px, 0);
+  transform: translateY(-50%) translate3d(0, 0, 0);
 }
 
 :is(body.layout-sidebar, html.layout-sidebar body).boot-awakening.boot-ui-settled .dock {
@@ -485,8 +490,9 @@ body.boot-awakening.boot-ui-settled .dock {
 }
 
 body:is(.boot-focus-entering, .search-focused) .dock {
+  --boot-dock-opacity: 0.84;
   --meta-color: rgba(255, 255, 255, 0.9);
-  opacity: 0.84;
+  opacity: var(--boot-dock-opacity);
   background: rgba(38, 34, 44, 0.46);
   border-color: rgba(255, 255, 255, 0.26);
   box-shadow:
