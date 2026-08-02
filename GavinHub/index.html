@@ -47,7 +47,7 @@
     body.boot-awakening .scene-vignette { opacity: 0; }
     body.boot-awakening.boot-vignette-visible .scene-vignette {
       opacity: 0.88;
-      transition: opacity 0.82s cubic-bezier(0.22, 1, 0.36, 1) 0s;
+      transition: opacity 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0s;
     }
   </style>
   <script>
@@ -149,6 +149,7 @@
       window.__BOOT_WALLPAPER_KEY = wpKey;
       window.__BOOT_WALLPAPER_PREVIEW = previewData;
       window.__BOOT_WALLPAPER_PREVIEW_KEY = previewData ? wpKey : '';
+      window.__BOOT_WALLPAPER_GRADIENT = isGradient ? gradientCss : '';
       var wp = document.getElementById('wallpaper');
       var img = document.getElementById('wallpaper-img');
       var preview = document.getElementById('wallpaper-preview');
@@ -270,6 +271,24 @@
   <script>(function(){try{document.body.setAttribute('data-text-theme',document.documentElement.getAttribute('data-text-theme')||'on-dark');document.body.setAttribute('data-text-tone',document.documentElement.getAttribute('data-text-tone')||'light');document.getElementById('boot-critical-hide')?.remove();}catch(e){}})();</script>
   <div id="wallpaper-blur" class="wallpaper-blur" aria-hidden="true"></div>
   <div id="search-focus-overlay" class="search-focus-overlay" aria-hidden="true"></div>
+  <script>
+  (function () {
+    try {
+      var gradient = window.__BOOT_WALLPAPER_GRADIENT;
+      var preview = window.__BOOT_WALLPAPER_PREVIEW || window.__BOOT_WALLPAPER_URL;
+      var overlay = document.getElementById('search-focus-overlay');
+      if ((!preview && !gradient) || !overlay) return;
+      overlay.style.backgroundImage = gradient || 'url("' + preview + '")';
+      overlay.classList.add('wallpaper-effect-live-filter');
+      document.body.classList.add('boot-focus-primed');
+      var enterFocus = function () {
+        document.body.classList.add('boot-focus-entering');
+      };
+      if (document.body.classList.contains('boot-ui-settled')) enterFocus();
+      else document.addEventListener('boot-ui-settled', enterFocus, { once: true });
+    } catch (e) { /* 聚焦层由运行时补齐 */ }
+  })();
+  </script>
   <div class="scene-vignette" aria-hidden="true"></div>
 
   <main class="app">

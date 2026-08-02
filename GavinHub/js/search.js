@@ -960,6 +960,9 @@ export function initSearch({ getSettings: settingsGetter, onSettingsChange: sett
   }
 
   searchQuote = initLazySearchQuote(document.getElementById('search-quote'));
+  if (document.body.classList.contains('boot-focus-entering') && !inputEl.value.trim()) {
+    searchQuote.show(getSettings().searchMode);
+  }
 
   listEl.addEventListener('mouseleave', () => {
     if (areSuggestionsVisible()) resetActiveSuggestion();
@@ -980,6 +983,7 @@ export function initSearch({ getSettings: settingsGetter, onSettingsChange: sett
   const applySearchFocusAmbience = () => {
     const wasFocused = document.body.classList.contains('search-focused');
     document.body.classList.add('search-focused');
+    document.body.classList.remove('boot-focus-entering', 'boot-focus-primed');
     if (!wasFocused) document.dispatchEvent(new CustomEvent('gavinhub:search-focused'));
     refreshSearchSuggestions();
     if (!inputEl.value.trim()) searchQuote.show(getSettings().searchMode);
@@ -1016,6 +1020,7 @@ export function initSearch({ getSettings: settingsGetter, onSettingsChange: sett
     suggestionGen += 1;
     cancelPendingCompletions();
     document.body.classList.remove('search-focused');
+    document.body.classList.remove('boot-focus-entering', 'boot-focus-primed');
     boxEl.classList.remove('focused');
     updateModeLabel();
     searchQuote.hide();

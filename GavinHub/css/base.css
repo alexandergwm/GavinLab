@@ -12,9 +12,9 @@
   --glass-focus-ring: 0 0 0 4px rgba(255, 255, 255, 0.08);
 
   /* 搜索栏亮毛玻璃 — idle 更透、贴壁纸；聚焦时再抬起对比 */
-  --glass-search-bg: rgba(30, 32, 40, 0.28);
-  --glass-search-bg-hover: rgba(30, 32, 40, 0.36);
-  --glass-search-bg-focus: rgba(38, 34, 44, 0.5);
+  --glass-search-bg: rgba(30, 32, 40, 0.4);
+  --glass-search-bg-hover: rgba(34, 34, 42, 0.43);
+  --glass-search-bg-focus: rgba(38, 34, 44, 0.46);
   --glass-search-blur: blur(22px) saturate(150%);
   --glass-search-blur-focus: var(--glass-search-blur);
   --glass-search-border: rgba(255, 255, 255, 0.18);
@@ -71,8 +71,8 @@
   --transition-theme: 0.28s cubic-bezier(0.4, 0, 0.2, 1); /* 文字主题颜色渐变 */
   --transition-wallpaper: 0.45s cubic-bezier(0.4, 0, 0.2, 1); /* 壁纸滤镜/缩放 */
   --transition-page: 0.44s cubic-bezier(0.22, 1, 0.36, 1);
-  --transition-search-focus: 0.74s cubic-bezier(0.22, 1, 0.36, 1);
-  --transition-focus-backdrop: 0.64s cubic-bezier(0.22, 1, 0.36, 1);
+  --transition-search-focus: 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+  --transition-focus-backdrop: 0.92s cubic-bezier(0.22, 1, 0.36, 1);
   --dock-height: 68px;
   --dock-bottom: 24px;
   --dock-clearance: calc(var(--dock-height) + var(--dock-bottom) + 28px);
@@ -82,8 +82,8 @@
   --dock-icon-radius: var(--icon-squircle-radius);
   --stage-top: 13vh;
   --boot-wallpaper-duration: 0.72s;
-  --boot-ui-duration: 0.82s;
-  --boot-vignette-duration: 0.82s;
+  --boot-ui-duration: 0.9s;
+  --boot-vignette-duration: 0.9s;
   --boot-ui-delay-stage: 0s;
   --boot-ui-delay-search: 0s;
   --boot-ui-delay-dock: 0s;
@@ -309,8 +309,9 @@ body.page-apps-active .scene-vignette {
   opacity: 0.55;
 }
 
+body.boot-focus-entering:not(.page-blur-active) .scene-vignette,
 body.search-focused:not(.page-blur-active) .scene-vignette {
-  opacity: 0.55;
+  opacity: 0.62;
 }
 
 .search-focus-overlay {
@@ -338,8 +339,9 @@ body.search-focused:not(.page-blur-active) .scene-vignette {
   transform: translateZ(0) scale(1.025);
 }
 
+body.boot-focus-entering:not(.page-apps-active) .search-focus-overlay,
 body.search-focused:not(.page-apps-active) .search-focus-overlay {
-  opacity: 1;
+  opacity: 0.82;
   visibility: visible;
 }
 
@@ -356,7 +358,7 @@ body.boot-awakening:not(.boot-ui-settled) .dock {
 }
 
 body.boot-awakening:not(.boot-ui-settled) .search-form {
-  transform: translate3d(0, 5px, 0);
+  transform: translate3d(0, 3px, 0);
 }
 
 body.boot-awakening:not(.boot-ui-settled) .dock {
@@ -389,12 +391,6 @@ body.boot-awakening .meta-part {
   transition: none !important;
 }
 
-body.boot-awakening .search-box:focus-within .search-engine-badge,
-body.boot-awakening .search-box:focus-within .search-input,
-body.boot-awakening .search-box:focus-within .search-submit {
-  transition: none !important;
-}
-
 body.boot-awakening.boot-ui-settled .stage {
   animation: boot-awaken-stage var(--boot-ui-duration) var(--boot-reveal-ease) var(--boot-ui-delay-stage) both;
 }
@@ -420,8 +416,8 @@ body.boot-awakening.boot-ui-settled .dock {
 
 @keyframes boot-awaken-ui-move {
   from {
-    opacity: 0;
-    transform: translate3d(0, 5px, 0);
+    opacity: 0.88;
+    transform: translate3d(0, 3px, 0);
   }
   to {
     opacity: 1;
@@ -488,13 +484,7 @@ body.boot-awakening.boot-ui-settled .dock {
   }
 }
 
-body.search-focused .clock-trigger,
-body.search-focused .meta-line {
-  opacity: 0.82;
-  transition: opacity var(--transition-search-focus);
-}
-
-body.search-focused .dock {
+body:is(.boot-focus-entering, .search-focused) .dock {
   --meta-color: rgba(255, 255, 255, 0.9);
   opacity: 0.84;
   background: rgba(38, 34, 44, 0.46);
@@ -509,11 +499,11 @@ body.search-focused .dock {
     opacity var(--transition-search-focus);
 }
 
-body.search-focused .search-form {
+body:is(.boot-focus-entering, .search-focused) .search-form {
   z-index: 16;
 }
 
-body.search-focused .search-box {
+body:is(.boot-focus-entering, .search-focused) .search-box {
   background: var(--glass-search-bg-focus);
   border-color: var(--glass-search-border-focus);
   backdrop-filter: var(--glass-search-blur-focus);
@@ -522,7 +512,7 @@ body.search-focused .search-box {
     inset 0 1px 0 rgba(255, 255, 255, 0.34),
     0 0 0 4px rgba(255, 255, 255, 0.06),
     0 16px 44px rgba(0, 0, 0, 0.24);
-  transform: translate3d(0, -2px, 0);
+  transform: translate3d(0, 0, 0);
 }
 
 /* 应用页：清晰壁纸垫底，模糊层淡入/淡出 */
@@ -532,6 +522,7 @@ body.page-apps-active .wallpaper-blur {
 }
 
 /* 应用页的预览层固定偏暗，统一亮色文字，避免壁纸分析完成时黑白跳变。 */
+body.boot-focus-entering,
 body.search-focused,
 body.page-blur-active,
 body.page-apps-active {

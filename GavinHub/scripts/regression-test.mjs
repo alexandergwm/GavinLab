@@ -115,11 +115,15 @@ await page.addInitScript(() => {
     const weatherText = document.getElementById('weather-summary');
     const dockLetter = document.querySelector('.dock-link[data-dock-id="sci-hub"] .shortcut-icon--dock');
     if (searchBox && dock) {
+      const searchFormStyle = getComputedStyle(document.getElementById('search-form'));
+      const searchBoxStyle = getComputedStyle(searchBox);
       const clockStyle = clock ? getComputedStyle(clock) : null;
       const dockLetterStyle = dockLetter ? getComputedStyle(dockLetter) : null;
       window.__bootVisualFrames.push({
-        searchVisible: getComputedStyle(document.getElementById('search-form')).visibility !== 'hidden',
-        searchGlass: getComputedStyle(searchBox).backdropFilter,
+        searchVisible: searchFormStyle.visibility !== 'hidden',
+        searchOpacity: Number(searchFormStyle.opacity),
+        searchBackground: searchBoxStyle.backgroundColor,
+        searchGlass: searchBoxStyle.backdropFilter,
         dockGlass: getComputedStyle(dock).backdropFilter,
         appsBackground: appsLayer?.style.backgroundImage || '',
         focusBackground: focusLayer?.style.backgroundImage || '',
@@ -155,17 +159,20 @@ try {
   });
   const bootEffectState = await page.evaluate(() => {
     const appsLayer = document.getElementById('wallpaper-blur')?.style.backgroundImage || '';
-    const focusLayer = document.getElementById('search-focus-overlay')?.style.backgroundImage || '';
+    const focusOverlay = document.getElementById('search-focus-overlay');
+    const focusLayer = focusOverlay?.style.backgroundImage || '';
     return {
       effectsReady: document.body.classList.contains('wallpaper-effects-ready'),
       appsLayer,
       focusLayer,
+      focusLiveFilter: focusOverlay?.classList.contains('wallpaper-effect-live-filter'),
     };
   });
   assert(
     bootEffectState.effectsReady
-      && bootEffectState.focusLayer.includes('blob:'),
-    `search focus must wait for its final wallpaper effect: ${JSON.stringify(bootEffectState)}`,
+      && bootEffectState.focusLayer
+      && (bootEffectState.focusLayer.includes('blob:') || bootEffectState.focusLiveFilter),
+    `search focus must start with a complete wallpaper effect: ${JSON.stringify(bootEffectState)}`,
   );
   const focusedBackdropState = await page.evaluate(() => {
     const overlay = document.getElementById('search-focus-overlay');
@@ -178,9 +185,9 @@ try {
     };
   });
   assert(
-    focusedBackdropState.preview.includes('blob:')
+    focusedBackdropState.preview
       && focusedBackdropState.previewScale !== 'none'
-      && focusedBackdropState.searchBackgroundToken === 'rgba(38, 34, 44, 0.5)'
+      && focusedBackdropState.searchBackgroundToken === 'rgba(38, 34, 44, 0.46)'
       && focusedBackdropState.stageColorToken === '#fff',
     `focused search must use a legible composited glass state: ${JSON.stringify(focusedBackdropState)}`,
   );
@@ -202,10 +209,14 @@ try {
       && document.activeElement?.id === 'search-input'),
   'keyboard provider selection should close the menu and restore search focus');
   const bootVisualState = await page.evaluate(() => {
-    const visibleFrames = window.__bootVisualFrames.filter((frame) => frame.searchVisible);
+    const visibleFrames = window.__bootVisualFrames.filter(
+      (frame) => frame.searchVisible && frame.searchOpacity > 0.05,
+    );
     const unique = (key) => [...new Set(visibleFrames.map((frame) => frame[key]).filter(Boolean))];
     return {
       searchGlass: unique('searchGlass'),
+      searchOpacity: visibleFrames.map((frame) => frame.searchOpacity),
+      searchBackground: unique('searchBackground'),
       dockGlass: unique('dockGlass'),
       appsBackground: unique('appsBackground'),
       focusBackground: unique('focusBackground'),
@@ -221,8 +232,18 @@ try {
     `visible glass quality must remain constant during startup: ${JSON.stringify(bootVisualState)}`,
   );
   assert(
-    bootVisualState.appsBackground.length <= 1 && bootVisualState.focusBackground.length <= 1,
-    `effect layers must not expose provisional backgrounds: ${JSON.stringify(bootVisualState)}`,
+    Math.min(...bootVisualState.searchOpacity) >= 0.86
+      && bootVisualState.searchBackground.every((color) => {
+        const alpha = Number(color.match(/[\d.]+(?=\)$)/)?.[0] || 0);
+        return alpha >= 0.4;
+      }),
+    `search glass must be substantial from its first visible frame: ${JSON.stringify(bootVisualState)}`,
+  );
+  assert(
+    bootVisualState.appsBackground.length <= 1
+      && bootVisualState.focusBackground.length <= 2
+      && !bootVisualState.focusBackground.includes('none'),
+    `effect layers must not expose a blank intermediate background: ${JSON.stringify(bootVisualState)}`,
   );
   assert(
     bootVisualState.clockColor.length === 1
@@ -422,6 +443,8 @@ try {
       persistentEffectKey,
       persistentBlob,
     );
+    const focusWasActive = document.body.classList.contains('search-focused');
+    document.body.classList.remove('search-focused');
     let persistentPreviewCreates = 0;
     const persistentEffects = createWallpaperEffects({
       createFocusPreview: async () => {
@@ -457,6 +480,7 @@ try {
     });
     await damagedEffects.sync({ url: 'assets/default-wallpaper-preview.jpg', effectKey: 'damaged' });
     damagedEffects.dispose();
+    if (focusWasActive) document.body.classList.add('search-focused');
 
     const enqueue = lifecycle.createAsyncQueue();
     let activeTasks = 0;

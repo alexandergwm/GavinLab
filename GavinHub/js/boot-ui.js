@@ -2,8 +2,8 @@
 
 export const BOOT_WALLPAPER_FADE_MS = 720;
 export const BOOT_UI_REVEAL_DELAY_MS = 0;
-export const BOOT_UI_FADE_MS = 820;
-export const BOOT_VIGNETTE_FADE_MS = 820;
+export const BOOT_UI_FADE_MS = 900;
+export const BOOT_VIGNETTE_FADE_MS = 900;
 export const BOOT_VIGNETTE_DELAY_MS = 0;
 export const BOOT_SEARCH_FOCUS_DELAY_MS = 0;
 export const BOOT_REVEAL_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
@@ -98,6 +98,10 @@ export function waitForBootGlassReady(callback) {
     && !document.body.classList.contains('boot-glass-stable');
   if (!isBooting) {
     afterPaint();
+    return;
+  }
+  if (document.body.classList.contains('boot-focus-primed')) {
+    onBootUiSettled(() => afterPaint(prefersReducedMotion() ? 0 : BOOT_SEARCH_FOCUS_DELAY_MS));
     return;
   }
   onBootGlassStable(() => {

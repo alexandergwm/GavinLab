@@ -217,8 +217,8 @@ assert(read('js/media-store.js').includes('wallpaper-effect-cache'),
 
 const bootUi = read('js/boot-ui.js');
 assert(bootUi.includes('BOOT_WALLPAPER_FADE_MS = 720'), 'wallpaper reveal should keep the calm boot timeline');
-assert(bootUi.includes('BOOT_UI_FADE_MS = 820'), 'UI reveal should keep the calm boot timeline');
-assert(bootUi.includes('BOOT_VIGNETTE_FADE_MS = 820'), 'vignette reveal should keep the calm boot timeline');
+assert(bootUi.includes('BOOT_UI_FADE_MS = 900'), 'UI reveal should keep the calm boot timeline');
+assert(bootUi.includes('BOOT_VIGNETTE_FADE_MS = 900'), 'vignette reveal should keep the calm boot timeline');
 assert(read('js/boot.js').includes("'wallpaper-effects-ready'"), 'search focus should wait for wallpaper effects');
 assert(read('js/boot.js').includes("'boot-opening-stable'"), 'expensive wallpaper effects should wait until opening motion settles');
 

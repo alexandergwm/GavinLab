@@ -142,10 +142,26 @@ export function createWallpaperEffects({
         || document.body.classList.contains('page-blur-active');
     }
     if (layerId === 'search-focus-overlay') {
-      return document.body.classList.contains('search-focused')
+      return (
+        document.body.classList.contains('boot-focus-entering')
+        || document.body.classList.contains('search-focused')
+      )
         && !document.body.classList.contains('page-apps-active');
     }
     return false;
+  }
+
+  function promoteFocusPreviewAfterOpening(layer, preview, expectedKey) {
+    if (!layer || !preview) return;
+    const promote = () => {
+      if (
+        activeLayerKeys.get('search-focus-overlay') !== expectedKey
+        || !isLayerVisible('search-focus-overlay')
+      ) return;
+      applyLayer(layer, `url("${preview.url}")`);
+    };
+    if (document.body.classList.contains('boot-opening-stable')) promote();
+    else document.addEventListener('boot-opening-stable', promote, { once: true });
   }
 
   function queueDeferredPreview(layerId, kind, data, expectedKey) {
@@ -187,7 +203,11 @@ export function createWallpaperEffects({
     const identity = data.effectKey || data.url;
     const readyPreview = previewCache.get(`${kind}:${identity}`);
     if (readyPreview) {
-      applyLayer(layer, `url("${readyPreview.url}")`);
+      if (!isLayerVisible(layerId) || !layer.style.backgroundImage) {
+        applyLayer(layer, `url("${readyPreview.url}")`);
+      } else if (kind === 'focus') {
+        promoteFocusPreviewAfterOpening(layer, readyPreview, expectedKey);
+      }
       return true;
     }
 
@@ -215,7 +235,9 @@ export function createWallpaperEffects({
     }
 
     if (kind === 'focus' && data.defer) {
-      applyLayer(layer, `url("${url}")`, { liveFilter: true });
+      if (!isLayerVisible(layerId) || !layer.style.backgroundImage) {
+        applyLayer(layer, `url("${url}")`, { liveFilter: true });
+      }
       queueDeferredPreview(layerId, kind, data, expectedKey);
       return true;
     }
@@ -223,7 +245,11 @@ export function createWallpaperEffects({
     const request = requestPreview(kind, data);
     const preview = await request.bounded;
     if (activeLayerKeys.get(layerId) !== expectedKey) return false;
-    applyLayer(layer, `url("${preview?.url || url}")`, { liveFilter: !preview });
+    if (!isLayerVisible(layerId) || !layer.style.backgroundImage) {
+      applyLayer(layer, `url("${preview?.url || url}")`, { liveFilter: !preview });
+    } else if (kind === 'focus' && preview) {
+      promoteFocusPreviewAfterOpening(layer, preview, expectedKey);
+    }
 
     if (!preview) {
       void request.full.then((latePreview) => {
