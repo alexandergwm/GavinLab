@@ -644,11 +644,11 @@ function pickDailyItem(list, prefix) {
 
 async function resolveLibraryWallpaper(wallpaperId) {
   if (wallpaperId) {
-    const favorite = getWallpaperFavorites().find((item) => item.id === wallpaperId);
-    if (favorite) return { ...favorite, type: favorite.type || 'image' };
-
     const entry = await getLibraryWallpaper(wallpaperId);
     if (entry) return libraryEntryToWallpaper(entry);
+
+    const favorite = getWallpaperFavorites().find((item) => item.id === wallpaperId);
+    if (favorite) return { ...favorite, type: favorite.type || 'image' };
   }
 
   const favorites = getWallpaperFavorites();

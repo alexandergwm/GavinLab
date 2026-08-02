@@ -1,4 +1,9 @@
 import { loadAnalysisSource } from './wallpaper-image.js';
+import {
+  getWallpaperId,
+  loadLastWallpaperMeta,
+  saveLastWallpaperMeta,
+} from './storage.js';
 
 export const LIGHT_TEXT_LUMINANCE = 138;
 const UI_CLOCK_VIEWPORT = { x: 0.22, y: 0.10, w: 0.56, h: 0.20 };
@@ -95,4 +100,151 @@ export async function analyzeWallpaperTheme(url) {
   } finally {
     analysisSource.dispose?.();
   }
+}
+
+export function createWallpaperThemeController({
+  getCurrentWallpaper,
+  getPaintedWallpaperUrl,
+}) {
+  let generation = 0;
+  let debounceTimer = null;
+  let idleHandle = null;
+  let lastAnalyzedKey = '';
+
+  function cancelScheduledAnalysis() {
+    window.clearTimeout(debounceTimer);
+    debounceTimer = null;
+    if (idleHandle != null && 'cancelIdleCallback' in window) {
+      cancelIdleCallback(idleHandle);
+    } else if (idleHandle != null) {
+      window.clearTimeout(idleHandle);
+    }
+    idleHandle = null;
+  }
+
+  function apply(analysis) {
+    const { theme } = typeof analysis === 'number'
+      ? { theme: analysis >= LIGHT_TEXT_LUMINANCE ? 'on-light' : 'on-dark' }
+      : analysis;
+    if (document.body.dataset.textTheme === theme) return;
+    document.body.dataset.textTheme = theme;
+    document.body.dataset.textTone = theme === 'on-light' || theme === 'on-mixed'
+      ? 'dark'
+      : 'light';
+  }
+
+  function matchesCurrent(data) {
+    const dataKey = getWallpaperId(data);
+    const currentKey = getWallpaperId(getCurrentWallpaper());
+    return !dataKey || !currentKey || dataKey === currentKey;
+  }
+
+  function fallback(data) {
+    if (!matchesCurrent(data)) return false;
+    const current = getCurrentWallpaper();
+    const min = data?.type === 'gradient' ? (data.luminance ?? 120) : 80;
+    const analysis = {
+      theme: data?.type === 'gradient' && min >= LIGHT_TEXT_LUMINANCE
+        ? 'on-light'
+        : 'on-dark',
+      min,
+    };
+    apply(analysis);
+    current.textTheme = analysis.theme;
+    current.luminance = analysis.min;
+    return true;
+  }
+
+  function persist(data) {
+    if (!matchesCurrent(data)) return false;
+    const current = getCurrentWallpaper();
+    const stored = loadLastWallpaperMeta();
+    if (stored && getWallpaperId(stored) === getWallpaperId(current)) {
+      saveLastWallpaperMeta(current);
+    }
+    return true;
+  }
+
+  async function adapt(data) {
+    const runGeneration = ++generation;
+    const key = data?.id || data?.url || '';
+    if (!matchesCurrent(data) || (key && key === lastAnalyzedKey)) return;
+
+    if (data?.type === 'gradient') {
+      if (!fallback(data)) return;
+      persist(data);
+      lastAnalyzedKey = key;
+      return;
+    }
+
+    const url = data?.url;
+    if (!url) {
+      fallback(data);
+      lastAnalyzedKey = key;
+      return;
+    }
+
+    try {
+      const analysis = await analyzeWallpaperTheme(url);
+      if (runGeneration !== generation || !matchesCurrent(data)) return;
+      const current = getCurrentWallpaper();
+      apply(analysis);
+      if (current && (current.url === url || current.id === data.id)) {
+        current.textTheme = analysis.theme;
+        current.luminance = analysis.min;
+      }
+      persist(data);
+      lastAnalyzedKey = key;
+    } catch {
+      if (runGeneration !== generation || !fallback(data)) return;
+      persist(data);
+      lastAnalyzedKey = key;
+    }
+  }
+
+  function schedule(data, { immediate = false } = {}) {
+    generation += 1;
+    cancelScheduledAnalysis();
+    debounceTimer = window.setTimeout(() => {
+      debounceTimer = null;
+      const run = () => {
+        idleHandle = null;
+        void adapt(data);
+      };
+      if ('requestIdleCallback' in window) {
+        idleHandle = requestIdleCallback(run, { timeout: immediate ? 900 : 1600 });
+      } else {
+        idleHandle = window.setTimeout(run, immediate ? 80 : 160);
+      }
+    }, immediate ? 180 : 680);
+  }
+
+  async function prepareInitial() {
+    const data = getCurrentWallpaper();
+    if (!data || data.textTheme) return Boolean(data?.textTheme);
+    const paintedUrl = getPaintedWallpaperUrl();
+    await adapt(
+      paintedUrl && data.type !== 'gradient' ? { ...data, url: paintedUrl } : data,
+    );
+    return Boolean(getCurrentWallpaper()?.textTheme);
+  }
+
+  function reset() {
+    generation += 1;
+    lastAnalyzedKey = '';
+  }
+
+  function dispose() {
+    generation += 1;
+    cancelScheduledAnalysis();
+  }
+
+  return {
+    adapt,
+    apply,
+    dispose,
+    prepareInitial,
+    reset,
+    schedule,
+  };
 }

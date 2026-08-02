@@ -458,8 +458,8 @@ body.boot-focus-entering .search-submit,
   opacity: 0;
   transform: translateY(4px);
   transition:
-    opacity 0.56s ease 0.12s,
-    transform 0.56s cubic-bezier(0.16, 1, 0.3, 1) 0.12s,
+    opacity 0.24s ease,
+    transform 0.24s cubic-bezier(0.4, 0, 0.2, 1),
     color 0.24s ease;
 }
 
@@ -483,6 +483,10 @@ body.boot-focus-entering .search-submit,
 .search-quote.visible {
   opacity: 1;
   transform: translateY(0);
+  transition:
+    opacity 0.56s ease 0.12s,
+    transform 0.56s cubic-bezier(0.16, 1, 0.3, 1) 0.12s,
+    color 0.24s ease;
 }
 
 .search-quote[hidden] {

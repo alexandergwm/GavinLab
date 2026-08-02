@@ -142,7 +142,12 @@ await page.addInitScript(() => {
           : '',
       });
     }
-    if (performance.now() - startedAt < 1600) requestAnimationFrame(sampleBootVisuals);
+    if (
+      !document.body.classList.contains('boot-glass-stable')
+      && performance.now() - startedAt < 1600
+    ) {
+      requestAnimationFrame(sampleBootVisuals);
+    }
   };
   requestAnimationFrame(sampleBootVisuals);
 });
@@ -319,6 +324,83 @@ try {
     `a delayed wallpaper refresh must not overwrite the latest user selection: ${wallpaperRace}`,
   );
 
+  const selectedWallpaperRoute = async (route) => {
+    if (route.request().url().includes('/slow.jpg')) {
+      await new Promise((resolve) => setTimeout(resolve, 140));
+    }
+    await route.fulfill({
+      contentType: 'image/jpeg',
+      headers: { 'access-control-allow-origin': '*' },
+      body: defaultWallpaperBytes,
+    });
+  };
+  await page.route('https://selection-race.example.test/**', selectedWallpaperRoute);
+  const selectedWallpaperRace = await page.evaluate(async () => {
+    const wallpaper = await import('./js/wallpaper.js');
+    const before = { ...wallpaper.getCurrentWallpaper() };
+    const storedSettings = localStorage.getItem('startpage-settings');
+    const storedWallpaper = localStorage.getItem('startpage-wallpaper-last');
+    const slow = wallpaper.applySelectedWallpaper({
+      id: 'slow-library-selection',
+      source: 'library',
+      type: 'image',
+      url: 'https://selection-race.example.test/slow.jpg',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const fast = wallpaper.applySelectedWallpaper({
+      id: 'latest-library-selection',
+      source: 'library',
+      type: 'image',
+      url: 'https://selection-race.example.test/fast.jpg',
+    });
+    await Promise.allSettled([slow, fast]);
+    const winner = wallpaper.getCurrentWallpaper().id;
+    wallpaper.applyWallpaper(before, { skipPersist: true, adaptImmediate: true });
+    if (storedSettings == null) localStorage.removeItem('startpage-settings');
+    else localStorage.setItem('startpage-settings', storedSettings);
+    if (storedWallpaper == null) localStorage.removeItem('startpage-wallpaper-last');
+    else localStorage.setItem('startpage-wallpaper-last', storedWallpaper);
+    return winner;
+  });
+  await page.unroute('https://selection-race.example.test/**', selectedWallpaperRoute);
+  assert(
+    selectedWallpaperRace === 'latest-library-selection',
+    `only the latest explicit wallpaper selection may commit: ${selectedWallpaperRace}`,
+  );
+
+  const wallpaperThemePersistence = await page.evaluate(async () => {
+    const wallpaper = await import('./js/wallpaper.js');
+    const before = { ...wallpaper.getCurrentWallpaper() };
+    const storedSettings = localStorage.getItem('startpage-settings');
+    const storedWallpaper = localStorage.getItem('startpage-wallpaper-last');
+    await wallpaper.applySelectedWallpaper({
+      id: 'theme-persistence-gradient',
+      source: 'library',
+      type: 'gradient',
+      css: 'linear-gradient(135deg, #eef2f5, #d9e0e8)',
+      luminance: 232,
+    });
+    await wallpaper.adaptTextToWallpaper(wallpaper.getCurrentWallpaper());
+    const persisted = JSON.parse(localStorage.getItem('startpage-wallpaper-last') || 'null');
+    const bodyTheme = document.body.dataset.textTheme;
+    wallpaper.applyWallpaper(before, { skipPersist: true, adaptImmediate: true });
+    if (storedSettings == null) localStorage.removeItem('startpage-settings');
+    else localStorage.setItem('startpage-settings', storedSettings);
+    if (storedWallpaper == null) localStorage.removeItem('startpage-wallpaper-last');
+    else localStorage.setItem('startpage-wallpaper-last', storedWallpaper);
+    return {
+      theme: persisted?.textTheme,
+      luminance: persisted?.luminance,
+      bodyTheme,
+    };
+  });
+  assert(
+    wallpaperThemePersistence.theme === 'on-light'
+      && wallpaperThemePersistence.luminance === 232
+      && wallpaperThemePersistence.bodyTheme === 'on-light',
+    `wallpaper theme analysis must persist before the next startup: ${JSON.stringify(wallpaperThemePersistence)}`,
+  );
+
   let nextWallpaperCase = 'success';
   const nextWallpaperApiRoute = (route) => route.fulfill({
     contentType: 'application/json',
@@ -400,12 +482,13 @@ try {
   await page.unroute('https://bing.biturl.top/**', nextWallpaperApiRoute);
 
   const lifecycleSafety = await page.evaluate(async () => {
-    const [{ createFeatureRegistry }, dialogs, { createWallpaperEffects }, lifecycle, wallpaperLibrary] = await Promise.all([
+    const [{ createFeatureRegistry }, dialogs, { createWallpaperEffects }, lifecycle, wallpaperLibrary, wallpaperFetch] = await Promise.all([
       import('./js/feature-registry.js'),
       import('./js/dialog-ui.js'),
       import('./js/wallpaper-effects.js'),
       import('./js/lifecycle.js'),
       import('./js/wallpaper-library.js'),
+      import('./js/wallpaper-fetch.js'),
     ]);
     let attempts = 0;
     const registry = createFeatureRegistry({
@@ -523,6 +606,36 @@ try {
       wallpaperLibrary.getIconObjectUrl(iconKey),
     ]);
 
+    const favoriteKey = 'startpage-wallpaper-favorites';
+    const settingsKey = 'startpage-settings';
+    const previousFavorites = localStorage.getItem(favoriteKey);
+    const previousSettings = localStorage.getItem(settingsKey);
+    const recoveredId = 'library-favorite-recovery-test';
+    await wallpaperLibrary.saveWallpaperToLibrary({
+      id: recoveredId,
+      blob: persistentBlob,
+      type: 'image',
+      title: 'Recovered local favorite',
+      savedAt: Date.now(),
+    });
+    localStorage.setItem(favoriteKey, JSON.stringify([{
+      id: recoveredId,
+      source: 'library',
+      type: 'image',
+      url: 'blob:expired-session-url',
+    }]));
+    localStorage.setItem(settingsKey, JSON.stringify({
+      ...(previousSettings ? JSON.parse(previousSettings) : {}),
+      wallpaperSource: 'library',
+      wallpaperId: recoveredId,
+    }));
+    const recoveredFavorite = await wallpaperFetch.fetchWallpaperData('library');
+    await wallpaperLibrary.removeLibraryWallpaper(recoveredId);
+    if (previousFavorites == null) localStorage.removeItem(favoriteKey);
+    else localStorage.setItem(favoriteKey, previousFavorites);
+    if (previousSettings == null) localStorage.removeItem(settingsKey);
+    else localStorage.setItem(settingsKey, previousSettings);
+
     return {
       attempts,
       retryValue: retryValue.value,
@@ -537,6 +650,9 @@ try {
       queueOrder,
       stableLibraryUrl: firstLibraryUrl === secondLibraryUrl && firstLibraryUrl.startsWith('blob:'),
       stableIconUrl: firstIconUrl === secondIconUrl && firstIconUrl.startsWith('blob:'),
+      recoveredLibraryFavorite: recoveredFavorite?.id === recoveredId
+        && recoveredFavorite.url.startsWith('blob:')
+        && recoveredFavorite.url !== 'blob:expired-session-url',
     };
   });
   assert(
@@ -567,6 +683,44 @@ try {
     'the selected library wallpaper should not reuse a disposable thumbnail URL');
   assert(lifecycleSafety.stableIconUrl,
     'cached shortcut icons should reuse one session-scoped object URL');
+  assert(lifecycleSafety.recoveredLibraryFavorite,
+    'local-library favorites must recover their IndexedDB image instead of a stale blob URL');
+  await page.evaluate(async () => {
+    const library = await import('./js/wallpaper-library.js');
+    await library.saveWallpaperToLibrary({
+      id: 'library-ui-selection-test',
+      blob: await fetch('assets/default-wallpaper-preview.jpg').then((response) => response.blob()),
+      type: 'image',
+      title: 'Regression local wallpaper',
+      savedAt: Date.now(),
+    });
+    window.__libraryUiSelected = null;
+    const controller = library.initWallpaperLibrary({
+      getCurrentWallpaper: () => ({}),
+      applySelectedWallpaper: async (payload) => {
+        window.__libraryUiSelected = { id: payload.id, url: payload.url };
+      },
+    });
+    controller.open();
+  });
+  await page.locator('[data-wallpaper-tab="library"]').click();
+  const localLibraryThumb = page.locator(
+    '#wallpaper-library-dialog[open] .wallpaper-thumb[title="Regression local wallpaper"]',
+  );
+  await localLibraryThumb.waitFor({ timeout: 3000 });
+  await localLibraryThumb.click();
+  await page.waitForFunction(() => window.__libraryUiSelected?.id === 'library-ui-selection-test');
+  const libraryUiSelection = await page.evaluate(async () => {
+    const selected = window.__libraryUiSelected;
+    delete window.__libraryUiSelected;
+    const library = await import('./js/wallpaper-library.js');
+    await library.removeLibraryWallpaper('library-ui-selection-test');
+    return selected;
+  });
+  assert(
+    libraryUiSelection.url.startsWith('blob:'),
+    `library UI must resolve the original IndexedDB image before applying it: ${JSON.stringify(libraryUiSelection)}`,
+  );
   const wallpaperThemes = await page.evaluate(async () => {
     const { analyzeWallpaperTheme } = await import('./js/wallpaper-theme.js');
     const makeWallpaper = (paint) => {

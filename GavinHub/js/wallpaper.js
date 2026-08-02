@@ -48,7 +48,7 @@ import {
   MIN_CACHE_WIDTH,
 } from './wallpaper-image.js';
 import { createWallpaperEffects } from './wallpaper-effects.js';
-import { analyzeWallpaperTheme, LIGHT_TEXT_LUMINANCE } from './wallpaper-theme.js';
+import { createWallpaperThemeController } from './wallpaper-theme.js';
 
 export { isOnlineWallpaperSource };
 
@@ -100,9 +100,20 @@ let wallpaperPaintRevision = 0;
 let bootPreviewGeneration = 0;
 const wallpaperCacheWrites = new Map();
 const storedBootWallpaper = loadLastWallpaperMeta();
-let currentWallpaper = isValidCachedWallpaperMeta(storedBootWallpaper)
-  ? { ...storedBootWallpaper, type: storedBootWallpaper.type || 'image' }
+const storedBootPreview = loadStoredBootPreview();
+const storedBootWallpaperPayload = storedBootWallpaper
+  && storedBootWallpaper.source === 'library'
+  && !storedBootWallpaper.url
+  && storedBootPreview?.key === getWallpaperCacheKey(storedBootWallpaper)
+  ? { ...storedBootWallpaper, url: storedBootPreview.dataUrl }
+  : storedBootWallpaper;
+let currentWallpaper = isValidCachedWallpaperMeta(storedBootWallpaperPayload)
+  ? { ...storedBootWallpaperPayload, type: storedBootWallpaperPayload.type || 'image' }
   : { ...DEFAULT_WALLPAPER };
+const wallpaperTheme = createWallpaperThemeController({
+  getCurrentWallpaper,
+  getPaintedWallpaperUrl,
+});
 let initialWallpaperRevealed = document.body.classList.contains('boot-done');
 let wallpaperFocusReadyPromise = Promise.resolve(false);
 let wallpaperAppsReadyPromise = Promise.resolve(false);
@@ -120,13 +131,11 @@ const wallpaperEffects = createWallpaperEffects({
 window.addEventListener('pagehide', () => {
   window.clearTimeout(preloadDelayTimer);
   window.clearTimeout(maintenanceTimer);
-  window.clearTimeout(adaptDebounceTimer);
   if (preloadIdleHandle != null && 'cancelIdleCallback' in window) cancelIdleCallback(preloadIdleHandle);
   else if (preloadIdleHandle != null) window.clearTimeout(preloadIdleHandle);
   if (maintenanceIdleHandle != null && 'cancelIdleCallback' in window) cancelIdleCallback(maintenanceIdleHandle);
   else if (maintenanceIdleHandle != null) window.clearTimeout(maintenanceIdleHandle);
-  if (adaptIdleHandle != null && 'cancelIdleCallback' in window) cancelIdleCallback(adaptIdleHandle);
-  else if (adaptIdleHandle != null) window.clearTimeout(adaptIdleHandle);
+  wallpaperTheme.dispose();
   if (preloadStartListener) document.removeEventListener('boot-glass-stable', preloadStartListener);
   if (maintenanceStartListener) document.removeEventListener('boot-glass-stable', maintenanceStartListener);
   wallpaperEffects.dispose();
@@ -778,7 +787,7 @@ export async function restoreWallpaperFromCache(
   if (!isWallpaperIntentCurrent(intent)) return false;
 
   if (meta.textTheme) {
-    applyTextTheme({ theme: meta.textTheme, min: meta.luminance ?? 120 });
+    wallpaperTheme.apply({ theme: meta.textTheme, min: meta.luminance ?? 120 });
   }
 
   if (initialWallpaperRevealed) {
@@ -821,7 +830,12 @@ function onWallpaperChanged(data) {
   if (prevId !== nextId) touchWallpaperRotation();
   recordRecentWallpaper(data);
   const meta = saveLastWallpaperMeta(data);
-  if (meta && !data.url?.startsWith('blob:')) scheduleWallpaperMaintenance(meta);
+  if (!meta) return;
+  if (data.url?.startsWith('blob:')) {
+    void persistBootWallpaperPreview(data);
+    return;
+  }
+  scheduleWallpaperMaintenance(meta);
 }
 
 function scheduleWallpaperMaintenance(data) {
@@ -935,9 +949,10 @@ function resolveSwitchDisplayUrl(data, targetUrl) {
   return targetUrl;
 }
 
-async function upgradeWallpaperToTargetUrl(payload, fallbackPayload) {
+async function upgradeWallpaperToTargetUrl(payload, fallbackPayload, intent = wallpaperIntentRevision) {
   try {
     await loadImageElement(payload.url, isRemoteWallpaperUrl(payload.url));
+    if (!isWallpaperIntentCurrent(intent)) return;
     if (getWallpaperId(getCurrentWallpaper()) !== getWallpaperId(payload)) return;
     const painted = getPaintedWallpaperUrl();
     if (!painted || painted === payload.url) return;
@@ -948,6 +963,7 @@ async function upgradeWallpaperToTargetUrl(payload, fallbackPayload) {
       instantReveal: true,
     });
   } catch {
+    if (!isWallpaperIntentCurrent(intent)) return;
     if (!fallbackPayload) return;
     if (getWallpaperId(getCurrentWallpaper()) !== getWallpaperId(fallbackPayload)) return;
     applyWallpaper(fallbackPayload, {
@@ -958,7 +974,8 @@ async function upgradeWallpaperToTargetUrl(payload, fallbackPayload) {
   }
 }
 
-async function applyWallpaperSwitch(data) {
+async function applyWallpaperSwitch(data, intent = wallpaperIntentRevision) {
+  if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
   const targetUrl = upgradeWallpaperUrl(data) || data.url;
   if (!targetUrl && data.type !== 'gradient') return currentWallpaper;
 
@@ -966,6 +983,7 @@ async function applyWallpaperSwitch(data) {
   if (displayUrl && data.type !== 'gradient') {
     await loadImageElement(displayUrl, isRemoteWallpaperUrl(displayUrl));
   }
+  if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
   const displayPayload = { ...data, url: displayUrl, previewUrl: data.previewUrl };
   applyWallpaper(
     displayPayload,
@@ -982,102 +1000,19 @@ async function applyWallpaperSwitch(data) {
     void upgradeWallpaperToTargetUrl(
       { ...data, url: targetUrl, previewUrl: data.previewUrl },
       displayPayload,
+      intent,
     );
   }
   return currentWallpaper;
 }
 
 
-let adaptGeneration = 0;
-let adaptDebounceTimer = null;
-let adaptIdleHandle = null;
-let lastAnalyzedWallpaperKey = '';
-
-function scheduleAdaptTextToWallpaper(data, { immediate = false } = {}) {
-  window.clearTimeout(adaptDebounceTimer);
-  adaptDebounceTimer = null;
-  if (adaptIdleHandle != null && 'cancelIdleCallback' in window) {
-    cancelIdleCallback(adaptIdleHandle);
-  } else if (adaptIdleHandle != null) {
-    window.clearTimeout(adaptIdleHandle);
-  }
-  adaptIdleHandle = null;
-  adaptDebounceTimer = window.setTimeout(() => {
-    adaptDebounceTimer = null;
-    const run = () => {
-      adaptIdleHandle = null;
-      void adaptTextToWallpaper(data);
-    };
-    if ('requestIdleCallback' in window) {
-      adaptIdleHandle = requestIdleCallback(run, { timeout: immediate ? 900 : 1600 });
-    } else {
-      adaptIdleHandle = window.setTimeout(run, immediate ? 80 : 160);
-    }
-  }, immediate ? 180 : 680);
-}
-
-function applyTextTheme(analysis) {
-  const { theme } = typeof analysis === 'number'
-    ? { theme: analysis >= LIGHT_TEXT_LUMINANCE ? 'on-light' : 'on-dark' }
-    : analysis;
-  if (document.body.dataset.textTheme === theme) return;
-  document.body.dataset.textTheme = theme;
-  document.body.dataset.textTone = theme === 'on-light' || theme === 'on-mixed' ? 'dark' : 'light';
-}
-
-function fallbackTextTheme(data) {
-  if (data?.type === 'gradient') {
-    applyTextTheme({ theme: (data.luminance ?? 120) >= LIGHT_TEXT_LUMINANCE ? 'on-light' : 'on-dark', min: data.luminance ?? 120 });
-    return;
-  }
-  applyTextTheme({ theme: 'on-dark', min: 80 });
-  const k = data?.id || data?.url || '';
-  if (k) lastAnalyzedWallpaperKey = k;
-}
-
-
 export async function adaptTextToWallpaper(data) {
-  const gen = ++adaptGeneration;
-  const key = data?.id || data?.url || '';
-  const cur = getCurrentWallpaper();
-  const curKey = getWallpaperId(cur);
-  const dataKey = getWallpaperId(data);
+  return wallpaperTheme.adapt(data);
+}
 
-  if (dataKey && curKey && dataKey !== curKey) return;
-  if (key && key === lastAnalyzedWallpaperKey) {
-    return;
-  }
-
-  if (data.type === 'gradient') {
-    const lum = data.luminance ?? 120;
-    applyTextTheme({ theme: lum >= LIGHT_TEXT_LUMINANCE ? 'on-light' : 'on-dark', min: lum });
-    lastAnalyzedWallpaperKey = key;
-    return;
-  }
-
-  const url = data.url;
-  if (!url) {
-    fallbackTextTheme(data);
-    lastAnalyzedWallpaperKey = key;
-    return;
-  }
-
-  try {
-    const analysis = await analyzeWallpaperTheme(url);
-    if (gen !== adaptGeneration) return;
-    applyTextTheme(analysis);
-    const current = getCurrentWallpaper();
-    if (current && dataKey && getWallpaperId(current) !== dataKey) return;
-    if (current && (current.url === url || current.id === data.id)) {
-      current.textTheme = analysis.theme;
-      current.luminance = analysis.min;
-    }
-    lastAnalyzedWallpaperKey = key;
-  } catch {
-    if (gen !== adaptGeneration) return;
-    fallbackTextTheme(data);
-    lastAnalyzedWallpaperKey = key;
-  }
+export async function prepareInitialWallpaperTheme() {
+  return wallpaperTheme.prepareInitial();
 }
 
 /** 首屏解析最终 URL 后，与 UI 共用一次显现时间轴。 */
@@ -1121,9 +1056,9 @@ export function applyWallpaper(data, {
   }
   const nextWallpaperId = getWallpaperId(currentWallpaper);
   if (nextWallpaperId && nextWallpaperId !== prevWallpaperId) {
-    lastAnalyzedWallpaperKey = '';
+    wallpaperTheme.reset();
     if (!payload.textTheme && payload.type !== 'gradient') {
-      applyTextTheme({ theme: 'on-dark', min: 80 });
+      wallpaperTheme.apply({ theme: 'on-dark', min: 80 });
     }
   }
   const wallpaper = document.getElementById('wallpaper');
@@ -1134,7 +1069,7 @@ export function applyWallpaper(data, {
     defer: initialWallpaperRevealed && Boolean(nextWallpaperId && nextWallpaperId !== prevWallpaperId),
   });
   if (!skipAdapt) {
-    scheduleAdaptTextToWallpaper(currentWallpaper, { immediate: adaptImmediate });
+    wallpaperTheme.schedule(currentWallpaper, { immediate: adaptImmediate });
   }
 
   renderWallpaperMetadata(payload);
@@ -1218,8 +1153,8 @@ function ensureWallpaperDomPainted() {
 
 async function commitNextWallpaper(data, intent) {
   if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
-  lastAnalyzedWallpaperKey = '';
-  await applyWallpaperSwitch(data);
+  wallpaperTheme.reset();
+  await applyWallpaperSwitch(data, intent);
   if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
   saveSettings({
     wallpaperId: data.id || data.dateKey || '',
@@ -1266,7 +1201,7 @@ async function applyBingFallbackWallpaper(previous = null, intent = wallpaperInt
       if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
       if (previous && isSameWallpaperImage(data, previous)) continue;
       if (data?.url) {
-        await applyWallpaperSwitch({ ...data, source: 'bing' });
+        await applyWallpaperSwitch({ ...data, source: 'bing' }, intent);
         return currentWallpaper;
       }
     } catch {
@@ -1507,7 +1442,7 @@ export async function loadWallpaper(source = 'bing', { force = false } = {}) {
 }
 
 export async function applySelectedWallpaper(data) {
-  beginWallpaperIntent();
+  const intent = beginWallpaperIntent();
   if (data?.type !== 'gradient' && data?.url) {
     try {
       await loadImageElement(data.url, isRemoteWallpaperUrl(data.url));
@@ -1515,6 +1450,7 @@ export async function applySelectedWallpaper(data) {
       /* apply below so the existing image error fallback remains authoritative */
     }
   }
+  if (!isWallpaperIntentCurrent(intent)) return currentWallpaper;
   applyWallpaper(data, { adaptImmediate: true });
   saveSettings({ wallpaperId: data.id || data.dateKey || '', wallpaperSource: 'library' });
   return currentWallpaper;
@@ -1532,3 +1468,18 @@ export async function initWallpaperInfo() {
   wallpaperInfoController?.render(getCurrentWallpaper());
   return wallpaperInfoController;
 }
+
+function reconcileInlineBootFallback(url = '') {
+  const paintedUrl = url || getDecodedWallpaperImageUrl(null);
+  const current = getCurrentWallpaper();
+  if (!paintedUrl || current?.type === 'gradient') return false;
+  if (isSameWallpaperAsset(current, { url: paintedUrl })) return false;
+  if (!isSameWallpaperAsset(DEFAULT_WALLPAPER, { url: paintedUrl })) return false;
+  applyWallpaper({ ...DEFAULT_WALLPAPER }, { adaptImmediate: true });
+  return true;
+}
+
+document.addEventListener('boot-wallpaper-loaded', (event) => {
+  reconcileInlineBootFallback(event.detail?.url || '');
+}, { once: true });
+reconcileInlineBootFallback();

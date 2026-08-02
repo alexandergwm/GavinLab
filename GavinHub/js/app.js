@@ -4,7 +4,7 @@ import { initKeyboard } from './keyboard.js';
 import { onPageEnter, pageModules, preloadPageModule, preparePage } from './runtime.js';
 import { focusSearchInput, scheduleInitialSearchFocus, initSearchFocusHooks, dismissSearchForPageLeave } from './search-focus.js';
 import { initDialogController, prepareDialogStyles } from './dialog-ui.js';
-import { loadOptionalModules, nextPaint, runWhenIdle } from './lifecycle.js';
+import { loadOptionalModules, nextPaint, runWhenIdle, settleWithin } from './lifecycle.js';
 import { createPageRouter } from './page-router.js';
 import { motionController } from './motion-controller.js';
 import { getPageDefinition, listPageIds } from './page-registry.js';
@@ -366,6 +366,10 @@ async function initCore() {
 
   wallpaper = modules.wallpaper;
   shortcuts = modules.shortcuts;
+  const initialThemeReady = settleWithin(
+    wallpaper?.prepareInitialWallpaperTheme?.(),
+    320,
+  );
   const prepareInitialFocusEffect = () => runWhenIdle(
     () => wallpaper?.syncSearchFocusWallpaper?.(),
     { timeout: 140, fallbackDelay: 20 },
@@ -385,7 +389,10 @@ async function initCore() {
   initFavorite();
   initDialogController();
   initSyncExperience();
-  await modules.weatherUi?.initWeather?.();
+  await Promise.all([
+    modules.weatherUi?.initWeather?.(),
+    initialThemeReady,
+  ]);
   initGlobalKeyboard();
   initLazyFeatureActions();
   initSearchFocusHooks(() => pageRouter.getCurrentPage());

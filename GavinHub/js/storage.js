@@ -415,6 +415,7 @@ export function loadLastWallpaperMeta() {
     const parsed = JSON.parse(raw);
     if (parsed?.type === 'gradient' && parsed?.css) return parsed;
     if (parsed?.url) return parsed;
+    if (parsed?.source === 'library' && parsed?.id) return parsed;
     return null;
   } catch {
     return null;
@@ -449,12 +450,15 @@ export function isRecentlyShown(wallpaper, recent = loadRecentWallpaperIds()) {
 
 export function saveLastWallpaperMeta(wallpaper) {
   if (!wallpaper?.url && wallpaper?.type !== 'gradient') return null;
-  // blob: URLs are session-only; never persist them or they break the next visit.
-  if (wallpaper.url?.startsWith('blob:')) return loadLastWallpaperMeta();
+  // blob: URLs are session-only. Keep the library identity while the boot
+  // preview provides the next tab's synchronous first frame.
+  const transientUrl = wallpaper.url?.startsWith('blob:')
+    || (wallpaper.source === 'library' && wallpaper.url?.startsWith('data:'));
+  if (transientUrl && wallpaper.source !== 'library') return loadLastWallpaperMeta();
   const cacheKey = getWallpaperCacheKey(wallpaper);
   const meta = {
     id: wallpaper.id || '',
-    url: wallpaper.url || '',
+    url: transientUrl ? '' : (wallpaper.url || ''),
     css: wallpaper.css || '',
     type: wallpaper.type || 'image',
     title: wallpaper.title || '',

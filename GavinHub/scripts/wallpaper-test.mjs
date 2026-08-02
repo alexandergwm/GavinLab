@@ -59,6 +59,9 @@ async function runScenario(name, setup) {
   await page.route('https://**/*', (route) => route.abort());
 
   await page.goto(`${baseUrl}/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => document.body.classList.contains('app-ready'), null, {
+    timeout: 5000,
+  }).catch(() => {});
   await page.evaluate(() => localStorage.clear());
   if (setup) await page.evaluate(setup);
   await page.reload({ waitUntil: 'domcontentloaded' });
@@ -104,9 +107,10 @@ async function runScenario(name, setup) {
   } catch {
     /* reflected in hasImage below */
   }
-  state = await page.evaluate(() => {
+  state = await page.evaluate(async () => {
     const wallpaper = document.getElementById('wallpaper');
     const image = document.getElementById('wallpaper-img');
+    const wallpaperModule = await import('./js/wallpaper.js');
     return {
       gradient: wallpaper.classList.contains('is-gradient'),
       image: !image.hidden
@@ -114,6 +118,9 @@ async function runScenario(name, setup) {
         && image.naturalWidth > 0
         && image.classList.contains('wallpaper-show'),
       src: image.getAttribute('src') || '',
+      current: wallpaperModule.getCurrentWallpaper(),
+      meta: JSON.parse(localStorage.getItem('startpage-wallpaper-last') || 'null'),
+      classes: document.body.className,
     };
   });
   const hasImage = Boolean(
@@ -150,7 +157,7 @@ results.push(await runScenario('poisoned-blob', () => {
     wallpaperRotation: 'manual',
   }));
 }));
-results.push(await runScenario('dead-cache', () => {
+const deadCacheResult = await runScenario('dead-cache', () => {
   localStorage.setItem('startpage-wallpaper-last', JSON.stringify({
     id: 'bing-dead',
     url: 'https://www.bing.com/th?id=INVALID_DEAD_URL_UHD.jpg',
@@ -164,10 +171,42 @@ results.push(await runScenario('dead-cache', () => {
     wallpaperSource: 'bing',
     wallpaperRotation: 'manual',
   }));
-}));
+});
+deadCacheResult.cacheRecovered = deadCacheResult.settledState?.current?.id === 'local-default'
+  && deadCacheResult.settledState?.meta?.id === 'local-default';
+results.push(deadCacheResult);
+const libraryPreviewResult = await runScenario('library-preview', async () => {
+  const media = await import('./js/media-store.js');
+  const wallpaper = await import('./js/wallpaper.js');
+  const id = 'wallpaper-test-local-library';
+  const blob = await fetch('assets/default-wallpaper-preview.jpg').then((response) => response.blob());
+  await media.saveWallpaperToLibrary({
+    id,
+    blob,
+    type: 'image',
+    title: 'Local library startup',
+    savedAt: Date.now(),
+  });
+  const selected = media.libraryEntryToWallpaper(await media.getLibraryWallpaper(id));
+  await wallpaper.applySelectedWallpaper(selected);
+  const started = Date.now();
+  while (Date.now() - started < 3000) {
+    const preview = JSON.parse(localStorage.getItem('startpage-wallpaper-boot-preview') || 'null');
+    if (preview?.key === id && preview.dataUrl) break;
+    await new Promise((resolve) => setTimeout(resolve, 40));
+  }
+});
+libraryPreviewResult.libraryRecovered = Boolean(
+  libraryPreviewResult.initialState?.preview
+  && libraryPreviewResult.settledState?.src?.startsWith('blob:')
+  && libraryPreviewResult.settledState?.meta?.url === '',
+);
+results.push(libraryPreviewResult);
 
 writeFileSync(join(outDir, 'wallpaper-check.json'), JSON.stringify(results, null, 2));
 console.log(JSON.stringify(results, null, 2));
 await browser.close();
 await new Promise((resolve) => server.close(resolve));
-process.exit(results.every((r) => r.hasImage) ? 0 : 1);
+process.exit(results.every((r) => r.hasImage
+  && (r.name !== 'dead-cache' || r.cacheRecovered)
+  && (r.name !== 'library-preview' || r.libraryRecovered)) ? 0 : 1);

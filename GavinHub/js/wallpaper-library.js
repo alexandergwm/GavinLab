@@ -1,6 +1,7 @@
 import { closeDialog, openDialog } from './dialog-ui.js';
 import {
   getLibraryWallpapers,
+  getLibraryWallpaper,
   saveWallpaperToLibrary,
   removeLibraryWallpaper,
   libraryEntryToWallpaper,
@@ -108,10 +109,17 @@ async function loadGridItems(tab) {
   const { getWallpaperFavorites } = await import('./storage.js');
 
   if (tab === 'favorites') {
-    return getWallpaperFavorites().map((item) => ({
-      ...item,
-      thumbUrl: item.url,
-      origin: 'favorite',
+    return Promise.all(getWallpaperFavorites().map(async (item) => {
+      if (item.source === 'library') {
+        try {
+          const resolved = libraryEntryToWallpaper(await getLibraryWallpaper(item.id));
+          if (resolved) {
+            return { ...item, ...resolved, thumbUrl: resolved.url, origin: 'favorite' };
+          }
+        } catch { /* keep the favorite metadata as a fallback */ }
+      }
+      const thumbUrl = item.url?.startsWith('blob:') ? '' : item.url;
+      return { ...item, thumbUrl, origin: 'favorite' };
     }));
   }
 

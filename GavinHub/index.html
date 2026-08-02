@@ -65,8 +65,7 @@
           theme = meta.textTheme;
           tone = (meta.textTheme === 'on-light' || meta.textTheme === 'on-mixed') ? 'dark' : 'light';
         }
-        if (meta && meta.type !== 'gradient' && meta.url && !/^blob:/i.test(meta.url)) {
-          preloadUrl = meta.url;
+        if (meta) {
           var bootKey = meta.cacheKey || meta.id || meta.dateKey || (meta.url || '').slice(-48) || 'cached';
           var previewRaw = localStorage.getItem('startpage-wallpaper-boot-preview');
           if (previewRaw) {
@@ -78,11 +77,15 @@
               && previewMeta.dataUrl
             );
           }
+        }
+        if (meta && meta.type !== 'gradient' && meta.url && !/^blob:/i.test(meta.url)) {
+          preloadUrl = meta.url;
           if (meta.url === 'assets/default-wallpaper.jpg') hasBootPreview = true;
         }
         hasUsableWallpaper = !!(
           (meta && meta.type === 'gradient' && meta.css)
           || (meta && meta.url && !/^blob:/i.test(meta.url))
+          || hasBootPreview
         );
       }
       window.__BOOT_WALLPAPER_READY = hasUsableWallpaper;
@@ -123,6 +126,7 @@
     var gradientCss = '';
     var wpKey = DEFAULT_KEY;
     var previewData = '';
+    var previewOnly = false;
     try {
       var raw = localStorage.getItem('startpage-wallpaper-last');
       if (raw) {
@@ -141,6 +145,12 @@
             previewData = previewMeta.dataUrl;
           }
         }
+        previewOnly = !!(
+          previewData
+          && meta
+          && meta.source === 'library'
+          && !meta.url
+        );
       }
     } catch (e) { /* 默认壁纸 */ }
     if (!previewData && url === DEFAULT) previewData = DEFAULT_PREVIEW;
@@ -237,6 +247,7 @@
       img.addEventListener('error', useFallback);
       function startFullImageLoad() {
         if (img.getAttribute('src')) return;
+        if (previewOnly) return;
         img.src = url;
         if (img.complete && img.naturalWidth > 0) decodeAndAwaken();
       }
